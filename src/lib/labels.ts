@@ -8,7 +8,7 @@ import type { ChildAnswer } from "@/types/api";
 export const CHILD_ANSWER_LABELS: Record<ChildAnswer, string> = {
   1: "できた",
   0: "できなかった",
-  [-1]: "わからない",
+  [-1]: "分からない",
 };
 
 /**
@@ -18,4 +18,13 @@ export const CHILD_ANSWER_LABELS: Record<ChildAnswer, string> = {
  */
 export function childAnswerLabel(value: ChildAnswer): string {
   return CHILD_ANSWER_LABELS[value];
+}
+
+/**
+ * 保護者採点（actualDone）のラベルを返す
+ * @param {boolean} value - 実際にできたか
+ * @returns {string} 表示文言
+ */
+export function actualDoneLabel(value: boolean): string {
+  return value ? "できた" : "できなかった";
 }

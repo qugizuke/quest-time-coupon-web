@@ -12,10 +12,10 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 
 const STATUS_LABEL = {
-  unanswered: "きょうはまだ お答えしていません",
-  answered_ungraded: "お答え済み・採点まち",
-  pending_ack: "けっかの かくにんが ひつようです",
-  completed: "きょうは ぜんぶ おわり！",
+  unanswered: "今日はまだ答えていません",
+  answered_ungraded: "回答済み・採点待ち",
+  pending_ack: "結果の確認が必要です",
+  completed: "今日は全部終わり！",
 } as const;
 
 /**
@@ -44,18 +44,18 @@ export function HomePage() {
     <AppLayout>
       <div className="flex flex-1 flex-col gap-6">
         <Card className="flex min-h-[40vh] flex-col items-center justify-center text-center">
-          <p className="text-lg text-muted">のこり じかん</p>
+          <p className="text-lg text-muted">残り時間</p>
           <p className="text-app-xl font-bold text-primary">
             {data.displayBalance}
-            <span className="ml-2 text-2xl">ふん</span>
+            <span className="ml-2 text-2xl">分</span>
           </p>
           <p className="mt-4 text-base">{STATUS_LABEL[data.todayStatus]}</p>
         </Card>
 
         {data.unacknowledgedCount > 0 && (
           <Banner onClick={() => navigate("/results")}>
-            採点けっかが {data.unacknowledgedCount} にち まっています。タップして
-            かくにんしてね
+            採点結果が {data.unacknowledgedCount} 日 待っています。タップして
+            確認してね
           </Banner>
         )}
 
@@ -71,7 +71,7 @@ export function HomePage() {
             </Button>
           )}
           <Button fullWidth variant="secondary" onClick={() => navigate("/results")}>
-            採点けっか
+            採点結果
           </Button>
           <Button fullWidth variant="secondary" onClick={() => navigate("/timer")}>
             タイマー

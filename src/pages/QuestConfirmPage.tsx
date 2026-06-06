@@ -50,7 +50,7 @@ export function QuestConfirmPage() {
       <AppLayout>
         <p className="text-danger">下書きが見つかりません。</p>
         <Button className="mt-4" onClick={() => navigate("/quest")}>
-          クエストにもどる
+          クエストに戻る
         </Button>
       </AppLayout>
     );
@@ -59,7 +59,7 @@ export function QuestConfirmPage() {
   return (
     <AppLayout>
       <h1 className="mb-4 text-app-lg font-bold">
-        さいごの かくにん
+        最後の確認
       </h1>
       <ul className="mb-6 flex flex-col gap-2">
         {daily.quests.map((q) => {
@@ -86,10 +86,10 @@ export function QuestConfirmPage() {
       )}
       <div className="flex flex-col gap-3">
         <Button fullWidth onClick={() => mutation.mutate()} disabled={mutation.isPending}>
-          とうろくする
+          登録する
         </Button>
         <Button fullWidth variant="secondary" onClick={() => navigate("/quest")}>
-          しゅうせいする
+          修正する
         </Button>
       </div>
     </AppLayout>

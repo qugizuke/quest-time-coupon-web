@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useDailyQuests } from "@/hooks/useDailyQuests";
 import { formatDateJa } from "@/lib/date";
-import { childAnswerLabel } from "@/lib/labels";
+import { actualDoneLabel, childAnswerLabel } from "@/lib/labels";
 
 /**
  * 採点結果画面
@@ -30,10 +30,22 @@ export function ResultsPage() {
 
   const ackMutation = useMutation({
     mutationFn: (date: string) => postResultsAck(date),
-    onSuccess: () => {
+    onSuccess: (_data, date) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.home });
       void queryClient.invalidateQueries({ queryKey: queryKeys.results });
-      setSelectedDate(null);
+
+      const current = queryClient.getQueryData<{
+        items: Array<{ date: string; acknowledged: boolean }>;
+      }>(queryKeys.results);
+      const hasOtherUnacked = (current?.items ?? []).some(
+        (item) => !item.acknowledged && item.date !== date,
+      );
+
+      if (hasOtherUnacked) {
+        setSelectedDate(null);
+      } else {
+        navigate("/");
+      }
     },
   });
 
@@ -56,7 +68,7 @@ export function ResultsPage() {
   return (
     <AppLayout>
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-app-lg font-bold">採点けっか</h1>
+        <h1 className="text-app-lg font-bold">採点結果</h1>
         <Button variant="secondary" onClick={() => navigate("/")}>
           ホーム
         </Button>
@@ -65,7 +77,7 @@ export function ResultsPage() {
       {!selected && (
         <div className="flex flex-col gap-2">
           {unacked.length === 0 && acked.length === 0 && (
-            <p className="text-muted">まだ けっかは ありません。</p>
+            <p className="text-muted">まだ結果はありません。</p>
           )}
           {[...unacked, ...acked].map((item) => (
             <button
@@ -77,7 +89,7 @@ export function ResultsPage() {
               <span>{formatDateJa(item.date)}</span>
               <span className={item.totalPoints >= 0 ? "text-success" : "text-danger"}>
                 {item.totalPoints >= 0 ? "+" : ""}
-                {item.totalPoints}ふん
+                {item.totalPoints}分
                 {!item.acknowledged && "（未確認）"}
               </span>
             </button>
@@ -97,7 +109,7 @@ export function ResultsPage() {
             <p className="text-lg font-bold">{formatDateJa(selected.date)}</p>
             <p className="text-app-lg font-bold">
               {selected.totalPoints >= 0 ? "+" : ""}
-              {selected.totalPoints} ふん
+              {selected.totalPoints} 分
             </p>
           </Card>
 
@@ -114,8 +126,12 @@ export function ResultsPage() {
                 >
                   <p className="font-medium">{title}</p>
                   <p className="text-sm text-muted">
-                    こたえ: {childAnswerLabel(d.childAnswer)} / {d.finalPoints}ふん
+                    自分の回答: {childAnswerLabel(d.childAnswer)}
                   </p>
+                  <p className="text-sm text-muted">
+                    ママの採点: {actualDoneLabel(d.actualDone)}
+                  </p>
+                  <p className="text-sm text-muted">{d.finalPoints}分</p>
                 </li>
               );
             })}
@@ -131,7 +147,7 @@ export function ResultsPage() {
             </Button>
           )}
           <Button variant="secondary" fullWidth onClick={() => setSelectedDate(null)}>
-            いちらんにもどる
+            一覧に戻る
           </Button>
         </div>
       )}

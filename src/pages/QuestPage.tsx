@@ -14,7 +14,7 @@ import { todayLocal } from "@/lib/date";
 const CHOICES: { value: ChildAnswer; label: string }[] = [
   { value: 1, label: "できた" },
   { value: 0, label: "できなかった" },
-  { value: -1, label: "わからない" },
+  { value: -1, label: "分からない" },
 ];
 
 /**
@@ -72,7 +72,7 @@ export function QuestPage() {
             disabled={draft.index === 0}
             onClick={goPrev}
           >
-            もどる
+            戻る
           </Button>
           {draft.index < daily.quests.length - 1 ? (
             <Button
@@ -80,7 +80,7 @@ export function QuestPage() {
               disabled={currentAnswer === undefined}
               onClick={goNext}
             >
-              つぎへ
+              次へ
             </Button>
           ) : (
             <Button
@@ -88,7 +88,7 @@ export function QuestPage() {
               disabled={!isComplete}
               onClick={() => navigate("/quest/confirm")}
             >
-              かくにんへ
+              確認へ
             </Button>
           )}
         </div>

@@ -61,14 +61,14 @@ export function TimerPage() {
       >
         {display.phase === "idle" && (
           <>
-            <p className="text-muted">のこり {displayBalance} ふん</p>
+            <p className="text-muted">残り {displayBalance} 分</p>
             <p className="mt-4 text-app-xl font-bold">00:00</p>
           </>
         )}
         {display.phase !== "idle" && (
           <>
             <p className="text-lg">
-              {display.isPenalty ? "ちょうか じかん" : "のこり じかん"}
+              {display.isPenalty ? "超過時間" : "残り時間"}
             </p>
             <p className="mt-4 text-app-xl font-bold text-primary">
               {display.isPenalty ? "+" : ""}
@@ -80,7 +80,7 @@ export function TimerPage() {
 
       {!canStart && !isRunning && displayBalance <= 0 && (
         <p className="mt-4 text-center text-muted">
-          ざんこうが ないので スタートできません
+          残高がないので スタートできません
         </p>
       )}
 

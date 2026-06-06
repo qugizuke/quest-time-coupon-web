@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "quests": [
+    { "id": "brush-teeth-am", "order": 1, "title": "朝の歯みがきをした", "hint": "起床後15分以内" },
+    { "id": "make-bed", "order": 2, "title": "ベッドを整えた" },
+    { "id": "homework", "order": 3, "title": "宿題をやった" },
+    { "id": "read-book", "order": 4, "title": "読書をした", "hint": "15分以上" },
+    { "id": "tidy-room", "order": 5, "title": "自分の部屋を片づけた" },
+    { "id": "laundry-basket", "order": 6, "title": "脱いだ服を洗濯かごに入れた" },
+    { "id": "greeting", "order": 7, "title": "挨拶ができた", "hint": "おはよう・こんにちは・ありがとう" },
+    { "id": "no-snack-before-meal", "order": 8, "title": "食事の前にお菓子を我慢した" },
+    { "id": "brush-teeth-pm", "order": 9, "title": "夜の歯みがきをした" },
+    { "id": "prepare-next-day", "order": 10, "title": "翌日の準備をした", "hint": "服・道具の準備" }
+  ]
+}

@@ -10,6 +10,7 @@ alwaysApply: true
 1. `README.md`
 2. 兄弟リポジトリ `../docs/requirements.md`
 3. 兄弟リポジトリ `../docs/screen-design.md`
+4. API 実装は兄弟 `../gas/`（本リポジトリはフロントのみ）
 
 ## 記録
 

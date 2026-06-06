@@ -1,0 +1,38 @@
+@import "tailwindcss";
+
+/**
+ * Quest Time Coupon デザイントークン
+ * screen-design.md / detail-design.md §7.2.1 に準拠
+ */
+@theme {
+  --color-bg: #f7f4ef;
+  --color-primary: #4a90a4;
+  --color-success: #5a9a6e;
+  --color-warning: #d4a03c;
+  --color-danger: #c45c5c;
+  --color-muted: #9a9a9a;
+  --radius-default: 12px;
+  --font-size-base: 18px;
+  --font-size-lg: 24px;
+  --font-size-xl: 48px;
+  --min-height-touch: 48px;
+}
+
+@layer base {
+  html {
+    font-size: var(--font-size-base);
+    font-family:
+      "Hiragino Sans",
+      "Hiragino Kaku Gothic ProN",
+      Meiryo,
+      sans-serif;
+  }
+
+  body {
+    @apply m-0 min-h-screen bg-bg text-gray-900 antialiased;
+  }
+
+  #root {
+    @apply min-h-screen;
+  }
+}

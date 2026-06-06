@@ -1,8 +1,45 @@
-pages:
-  stage: deploy
-  image: alpine:latest
+image: node:22-alpine
+
+stages:
+  - test
+  - build
+  - deploy
+
+variables:
+  npm_config_cache: "$CI_PROJECT_DIR/.npm"
+
+cache:
+  key: "${CI_COMMIT_REF_SLUG}"
+  paths:
+    - .npm/
+
+test:
+  stage: test
   script:
-    - echo "Pages deploy placeholder — フロント実装後に dist を artifact として設定"
+    - npm ci
+    - npm run test
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
-  when: manual
+
+build:
+  stage: build
+  script:
+    - npm ci
+    - npm run build
+    - cp dist/index.html dist/404.html
+  artifacts:
+    paths:
+      - dist/
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
+pages:
+  stage: deploy
+  needs: [build]
+  script:
+    - mv dist public
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"

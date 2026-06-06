@@ -37,6 +37,8 @@ pages:
   stage: deploy
   needs: [build]
   script:
+    # リポジトリの public/（quests 用）があると mv dist public が public/dist/ になるため削除する
+    - rm -rf public
     - mv dist public
   artifacts:
     paths:

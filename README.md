@@ -24,6 +24,9 @@ npm run dev
 
 GitLab CI から GitLab Pages へデプロイ（`.gitlab-ci.yml`）。
 
+- Pages URL: https://src-b67872.gitlab.io/
+- 設定: プロジェクト → Settings → General → Pages → Everyone（公開）
+
 ## Cursor 初回プロンプト
 
 ```

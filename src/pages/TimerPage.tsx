@@ -48,7 +48,7 @@ export function TimerPage() {
   return (
     <AppLayout>
       <div className="mb-4 flex justify-between">
-        <h1 className="text-[length:var(--font-size-lg)] font-bold">タイマー</h1>
+        <h1 className="text-app-lg font-bold">タイマー</h1>
         <Button variant="secondary" onClick={() => navigate("/")}>
           ホーム
         </Button>
@@ -62,7 +62,7 @@ export function TimerPage() {
         {display.phase === "idle" && (
           <>
             <p className="text-muted">のこり {displayBalance} ふん</p>
-            <p className="mt-4 text-[length:var(--font-size-xl)] font-bold">00:00</p>
+            <p className="mt-4 text-app-xl font-bold">00:00</p>
           </>
         )}
         {display.phase !== "idle" && (
@@ -70,7 +70,7 @@ export function TimerPage() {
             <p className="text-lg">
               {display.isPenalty ? "ちょうか じかん" : "のこり じかん"}
             </p>
-            <p className="mt-4 text-[length:var(--font-size-xl)] font-bold text-primary">
+            <p className="mt-4 text-app-xl font-bold text-primary">
               {display.isPenalty ? "+" : ""}
               {formatMinutesSeconds(display.seconds)}
             </p>

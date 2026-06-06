@@ -8,8 +8,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { cpSync, mkdirSync } from "node:fs";
-import { resolve } from "node:path";
-import path from "node:path";
+import path, { resolve } from "node:path";
 
 /** quests 定義を public 配下へ同期するプラグイン */
 function copyQuestsPlugin() {

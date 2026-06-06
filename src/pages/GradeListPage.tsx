@@ -38,7 +38,7 @@ export function GradeListPage() {
 
   return (
     <AppLayout>
-      <h1 className="mb-4 text-[length:var(--font-size-lg)] font-bold">採点日一覧</h1>
+      <h1 className="mb-4 text-app-lg font-bold">採点日一覧</h1>
       <ul className="flex flex-col gap-2">
         {(data?.dates ?? []).map((d) => {
           const clickable = d.status === "ungraded";

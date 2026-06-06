@@ -45,7 +45,7 @@ export function HomePage() {
       <div className="flex flex-1 flex-col gap-6">
         <Card className="flex min-h-[40vh] flex-col items-center justify-center text-center">
           <p className="text-lg text-muted">のこり じかん</p>
-          <p className="text-[length:var(--font-size-xl)] font-bold text-primary">
+          <p className="text-app-xl font-bold text-primary">
             {data.displayBalance}
             <span className="ml-2 text-2xl">ふん</span>
           </p>

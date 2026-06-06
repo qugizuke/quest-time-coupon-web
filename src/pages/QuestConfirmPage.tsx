@@ -58,7 +58,7 @@ export function QuestConfirmPage() {
 
   return (
     <AppLayout>
-      <h1 className="mb-4 text-[length:var(--font-size-lg)] font-bold">
+      <h1 className="mb-4 text-app-lg font-bold">
         さいごの かくにん
       </h1>
       <ul className="mb-6 flex flex-col gap-2">

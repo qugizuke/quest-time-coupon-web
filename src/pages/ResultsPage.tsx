@@ -56,7 +56,7 @@ export function ResultsPage() {
   return (
     <AppLayout>
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-[length:var(--font-size-lg)] font-bold">採点けっか</h1>
+        <h1 className="text-app-lg font-bold">採点けっか</h1>
         <Button variant="secondary" onClick={() => navigate("/")}>
           ホーム
         </Button>
@@ -95,7 +95,7 @@ export function ResultsPage() {
             }
           >
             <p className="text-lg font-bold">{formatDateJa(selected.date)}</p>
-            <p className="text-[length:var(--font-size-lg)] font-bold">
+            <p className="text-app-lg font-bold">
               {selected.totalPoints >= 0 ? "+" : ""}
               {selected.totalPoints} ふん
             </p>

@@ -51,7 +51,7 @@ export function GradeDatePage() {
 
   return (
     <AppLayout>
-      <h1 className="mb-2 text-[length:var(--font-size-lg)] font-bold">
+      <h1 className="mb-2 text-app-lg font-bold">
         採点 {formatDateJa(date)}
       </h1>
       <p className="mb-4 text-sm text-muted">実際にできた / できなかった を選んでください</p>

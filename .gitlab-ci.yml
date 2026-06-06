@@ -1,0 +1,8 @@
+pages:
+  stage: deploy
+  image: alpine:latest
+  script:
+    - echo "Pages deploy placeholder — フロント実装後に dist を artifact として設定"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+  when: manual

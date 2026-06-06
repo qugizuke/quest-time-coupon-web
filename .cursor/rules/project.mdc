@@ -1,0 +1,28 @@
+---
+description: quest-time-coupon src リポジトリの開発ルール
+alwaysApply: true
+---
+
+# quest-time-coupon (src)
+
+## 最初に読むファイル
+
+1. `README.md`
+2. 兄弟リポジトリ `../docs/requirements.md`
+3. 兄弟リポジトリ `../docs/screen-design.md`
+
+## 記録
+
+| 内容 | 場所 |
+|------|------|
+| 要件・画面設計の更新 | `../docs/` リポジトリ |
+| ADR・API 仕様 | `../docs/` または `docs/`（src 内の実装メモ） |
+
+## クエスト定義
+
+- `quests/` 配下でコード管理
+- 変更はデプロイで反映（保護者はアプリ内編集しない）
+
+## 会社リポジトリ
+
+- 企画カード: `cursor-company` の `.company/pm/projects/quest-time-coupon.md`

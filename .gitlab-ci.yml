@@ -24,6 +24,12 @@ test:
 build:
   stage: build
   script:
+    - |
+      if [ -z "$VITE_GAS_URL" ] || [ -z "$VITE_API_KEY" ]; then
+        echo "ERROR: VITE_GAS_URL / VITE_API_KEY が未設定です。"
+        echo "Settings → CI/CD → Variables に .env と同じ値を登録してください。"
+        exit 1
+      fi
     - npm ci
     - npm run build
     - cp dist/index.html dist/404.html

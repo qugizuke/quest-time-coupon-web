@@ -18,7 +18,8 @@ npm run dev
 ```
 
 - 開発 URL: http://localhost:5173
-- モック API 無効化: `.env` で `VITE_MOCK_API=false` と GAS URL/キーを設定
+- ローカル: `.env` に `VITE_GAS_URL` / `VITE_API_KEY` / `VITE_MOCK_API` を設定
+- **GitLab Pages**: `.env` は使われない。CI/CD Variables に同じ `VITE_*` を登録して再ビルドすること
 
 ## デプロイ
 

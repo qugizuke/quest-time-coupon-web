@@ -108,6 +108,7 @@ export async function mockApi<T>(
               ? ("graded" as const)
               : ("ungraded" as const),
           ungradedCount: hasAnswers && !isGraded ? 1 : 0,
+          totalPoints: isGraded ? 0 : null,
         };
       });
       return { dates: list } as T;

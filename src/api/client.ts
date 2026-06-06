@@ -109,6 +109,7 @@ export function fetchGradeDates(): Promise<{
     date: string;
     status: "ungraded" | "graded" | "unanswered";
     ungradedCount: number;
+    totalPoints: number | null;
   }>;
 }> {
   return request("gradeDates", { method: "GET" });

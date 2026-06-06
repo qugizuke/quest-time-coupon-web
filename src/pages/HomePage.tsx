@@ -42,8 +42,8 @@ export function HomePage() {
 
   return (
     <AppLayout>
-      <div className="flex flex-1 flex-col gap-6">
-        <Card className="flex min-h-[40vh] flex-col items-center justify-center text-center">
+      <div className="flex flex-1 flex-col justify-center gap-6">
+        <Card className="flex flex-col items-center justify-center text-center">
           <p className="text-lg text-muted">残り時間</p>
           <p className="text-app-xl font-bold text-primary">
             {data.displayBalance}
@@ -77,6 +77,17 @@ export function HomePage() {
             タイマー
           </Button>
         </div>
+      </div>
+
+      <div className="pointer-events-none fixed inset-x-0 bottom-4 z-10 mx-auto flex max-w-lg justify-end px-4">
+        <Button
+          className="pointer-events-auto min-h-10 px-4 py-2 text-base opacity-70"
+          variant="secondary"
+          onClick={() => navigate("/grade/login")}
+          aria-label="採点画面へ"
+        >
+          採点
+        </Button>
       </div>
     </AppLayout>
   );

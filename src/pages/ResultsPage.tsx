@@ -13,7 +13,11 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useDailyQuests } from "@/hooks/useDailyQuests";
 import { formatDateJa } from "@/lib/date";
-import { actualDoneLabel, childAnswerLabel } from "@/lib/labels";
+import { actualDoneLabel, childAnswerLabel, isUnknownChildAnswer } from "@/lib/labels";
+
+/** 「分からない」回答がある日の促しメッセージ */
+const UNKNOWN_ANSWER_MESSAGE =
+  "「分からない」と答えたクエストは、ママが採点しない代わりに減点されます。次からはクエストを意識して「できた」「できなかった」で答えよう。";
 
 /**
  * 採点結果画面
@@ -113,10 +117,17 @@ export function ResultsPage() {
             </p>
           </Card>
 
+          {selected.details.some((d) => isUnknownChildAnswer(d.childAnswer)) && (
+            <div className="rounded-default border-2 border-warning bg-warning/20 px-4 py-3 text-base text-gray-900">
+              {UNKNOWN_ANSWER_MESSAGE}
+            </div>
+          )}
+
           <ul className="flex flex-col gap-2">
             {selected.details.map((d) => {
               const title =
                 daily?.quests.find((q) => q.id === d.questId)?.title ?? d.questId;
+              const isUnknown = isUnknownChildAnswer(d.childAnswer);
               return (
                 <li
                   key={d.questId}
@@ -128,9 +139,13 @@ export function ResultsPage() {
                   <p className="text-sm text-muted">
                     自分の回答: {childAnswerLabel(d.childAnswer)}
                   </p>
-                  <p className="text-sm text-muted">
-                    ママの採点: {actualDoneLabel(d.actualDone)}
-                  </p>
+                  {isUnknown ? (
+                    <p className="text-sm text-muted">ママの採点: なし（自動減点）</p>
+                  ) : (
+                    <p className="text-sm text-muted">
+                      ママの採点: {actualDoneLabel(d.actualDone)}
+                    </p>
+                  )}
                   <p className="text-sm text-muted">{d.finalPoints}分</p>
                 </li>
               );

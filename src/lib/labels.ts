@@ -28,3 +28,12 @@ export function childAnswerLabel(value: ChildAnswer): string {
 export function actualDoneLabel(value: boolean): string {
   return value ? "できた" : "できなかった";
 }
+
+/**
+ * 保護者採点が不要な「分からない」回答か
+ * @param {ChildAnswer} value - 回答値
+ * @returns {boolean} 分からないなら true
+ */
+export function isUnknownChildAnswer(value: ChildAnswer): boolean {
+  return value === -1;
+}

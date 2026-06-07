@@ -1,33 +1,57 @@
 /**
  * @file クエスト登録締切ユーティリティ
- * @description 毎日のクエスト登録締切（20:30）の判定を行う。
+ * @description 定時ボーナス締切（20:30）と登録受付締切（21:00）を判定する。
  * @limitation ブラウザのローカルタイムゾーンを使用する。
  */
 
-/** @type {number} クエスト登録締切の時（24時間表記） */
-export const QUEST_DEADLINE_HOUR = 20;
+/** @type {number} 定時ボーナス締切の時（+15分） */
+export const QUEST_BONUS_DEADLINE_HOUR = 20;
 
-/** @type {number} クエスト登録締切の分 */
-export const QUEST_DEADLINE_MINUTE = 30;
+/** @type {number} 定時ボーナス締切の分 */
+export const QUEST_BONUS_DEADLINE_MINUTE = 30;
 
-/** @type {number} 締切カウントダウン表示開始の時（24時間表記） */
+/** @type {number} 登録受付締切の時 */
+export const QUEST_REGISTRATION_CUTOFF_HOUR = 21;
+
+/** @type {number} 登録受付締切の分 */
+export const QUEST_REGISTRATION_CUTOFF_MINUTE = 0;
+
+/** @type {number} ボーナス締切カウントダウン表示開始の時 */
 export const QUEST_COUNTDOWN_START_HOUR = 20;
 
-/** @type {number} 締切カウントダウン表示開始の分 */
+/** @type {number} ボーナス締切カウントダウン表示開始の分 */
 export const QUEST_COUNTDOWN_START_MINUTE = 0;
 
 /**
- * 指定日の登録締切時刻（ローカル）を返す
+ * 指定日の定時ボーナス締切（20:30）を返す
  * @param {string} date - YYYY-MM-DD
- * @returns {Date} 締切 Date（その日 20:30:00.000）
+ * @returns {Date} その日 20:30:00.000
  */
-export function getQuestDeadline(date: string): Date {
+export function getQuestBonusDeadline(date: string): Date {
   const [y, m, d] = date.split("-").map(Number);
-  return new Date(y, m - 1, d, QUEST_DEADLINE_HOUR, QUEST_DEADLINE_MINUTE, 0, 0);
+  return new Date(y, m - 1, d, QUEST_BONUS_DEADLINE_HOUR, QUEST_BONUS_DEADLINE_MINUTE, 0, 0);
 }
 
 /**
- * カウントダウン表示開始時刻（ローカル）を返す
+ * 指定日の登録受付締切（21:00）を返す
+ * @param {string} date - YYYY-MM-DD
+ * @returns {Date} その日 21:00:00.000
+ */
+export function getQuestRegistrationCutoff(date: string): Date {
+  const [y, m, d] = date.split("-").map(Number);
+  return new Date(
+    y,
+    m - 1,
+    d,
+    QUEST_REGISTRATION_CUTOFF_HOUR,
+    QUEST_REGISTRATION_CUTOFF_MINUTE,
+    0,
+    0,
+  );
+}
+
+/**
+ * ボーナス締切カウントダウン表示開始時刻（20:00）を返す
  * @param {string} date - YYYY-MM-DD
  * @returns {Date} その日 20:00:00.000
  */
@@ -45,27 +69,57 @@ export function getQuestCountdownStart(date: string): Date {
 }
 
 /**
- * 締切カウントダウンを表示する時間帯か（20:00 以上かつ 20:30 未満）
+ * ボーナス締切カウントダウンを表示する時間帯か（20:00 以上かつ 20:30 未満）
  * @param {string} date - 対象日 YYYY-MM-DD
  * @param {Date} [now] - 判定基準時刻
  * @returns {boolean} 表示対象なら true
  */
-export function isQuestDeadlineCountdownVisible(
+export function isQuestBonusCountdownVisible(
   date: string,
   now: Date = new Date(),
 ): boolean {
   const ms = now.getTime();
-  return ms >= getQuestCountdownStart(date).getTime() && ms < getQuestDeadline(date).getTime();
+  return (
+    ms >= getQuestCountdownStart(date).getTime() &&
+    ms < getQuestBonusDeadline(date).getTime()
+  );
 }
 
 /**
- * 登録締切までの残りミリ秒
+ * 登録受付締切カウントダウンを表示する時間帯か（20:30 以上かつ 21:00 未満）
+ * @param {string} date - 対象日 YYYY-MM-DD
+ * @param {Date} [now] - 判定基準時刻
+ * @returns {boolean} 表示対象なら true
+ */
+export function isQuestRegistrationCutoffCountdownVisible(
+  date: string,
+  now: Date = new Date(),
+): boolean {
+  const ms = now.getTime();
+  return (
+    ms >= getQuestBonusDeadline(date).getTime() &&
+    ms < getQuestRegistrationCutoff(date).getTime()
+  );
+}
+
+/**
+ * 登録受付締切（21:00）までの残りミリ秒
  * @param {string} date - 対象日 YYYY-MM-DD
  * @param {Date} [now] - 判定基準時刻
  * @returns {number} 残り ms（締切後は 0）
  */
-export function getMsUntilQuestDeadline(date: string, now: Date = new Date()): number {
-  return Math.max(0, getQuestDeadline(date).getTime() - now.getTime());
+export function getMsUntilQuestRegistrationCutoff(date: string, now: Date = new Date()): number {
+  return Math.max(0, getQuestRegistrationCutoff(date).getTime() - now.getTime());
+}
+
+/**
+ * 定時ボーナス締切までの残りミリ秒
+ * @param {string} date - 対象日 YYYY-MM-DD
+ * @param {Date} [now] - 判定基準時刻
+ * @returns {number} 残り ms（締切後は 0）
+ */
+export function getMsUntilQuestBonusDeadline(date: string, now: Date = new Date()): number {
+  return Math.max(0, getQuestBonusDeadline(date).getTime() - now.getTime());
 }
 
 /**
@@ -81,21 +135,41 @@ export function formatDeadlineCountdown(ms: number): string {
 }
 
 /**
- * 指定日の登録締切を過ぎているか
+ * 定時ボーナス締切（20:30）を過ぎているか
  * @param {string} date - 対象日 YYYY-MM-DD
- * @param {Date} [now] - 判定基準時刻（省略時は現在）
- * @returns {boolean} 締切後なら true
+ * @param {Date} [now] - 判定基準時刻
+ * @returns {boolean} 20:30 超過なら true
  */
-export function isPastQuestDeadline(date: string, now: Date = new Date()): boolean {
-  return now.getTime() > getQuestDeadline(date).getTime();
+export function isPastQuestBonusDeadline(date: string, now: Date = new Date()): boolean {
+  return now.getTime() > getQuestBonusDeadline(date).getTime();
 }
 
 /**
- * 画面表示用の締切ラベル
+ * 登録受付締切（21:00）を過ぎているか
+ * @param {string} date - 対象日 YYYY-MM-DD
+ * @param {Date} [now] - 判定基準時刻
+ * @returns {boolean} 21:00 超過なら true
+ */
+export function isPastQuestRegistrationCutoff(date: string, now: Date = new Date()): boolean {
+  return now.getTime() > getQuestRegistrationCutoff(date).getTime();
+}
+
+/**
+ * 定時ボーナス締切の表示ラベル
  * @returns {string} 例: "20:30"
  */
-export function formatQuestDeadlineLabel(): string {
-  const hour = String(QUEST_DEADLINE_HOUR).padStart(2, "0");
-  const minute = String(QUEST_DEADLINE_MINUTE).padStart(2, "0");
+export function formatQuestBonusDeadlineLabel(): string {
+  const hour = String(QUEST_BONUS_DEADLINE_HOUR).padStart(2, "0");
+  const minute = String(QUEST_BONUS_DEADLINE_MINUTE).padStart(2, "0");
+  return `${hour}:${minute}`;
+}
+
+/**
+ * 登録受付締切の表示ラベル
+ * @returns {string} 例: "21:00"
+ */
+export function formatQuestRegistrationCutoffLabel(): string {
+  const hour = String(QUEST_REGISTRATION_CUTOFF_HOUR).padStart(2, "0");
+  const minute = String(QUEST_REGISTRATION_CUTOFF_MINUTE).padStart(2, "0");
   return `${hour}:${minute}`;
 }

@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { QuestDeadlineCountdown } from "@/components/QuestDeadlineCountdown";
+import { QuestRegistrationCutoffCountdown } from "@/components/QuestRegistrationCutoffCountdown";
 import { QuestRulesDialog } from "@/components/QuestRulesDialog";
 import { homeQuery } from "@/api/queries";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -23,9 +24,9 @@ const STATUS_LABEL = {
   completed: "今日は全部終わり！",
 } as const;
 
-/** 締切後に未着手だった場合のメッセージ */
-function missedStartMessage(deadlineLabel: string): string {
-  return `${deadlineLabel}を過ぎたので、今日はクエストを開始できません（-30分）`;
+/** 登録受付締切後に未着手だった場合のメッセージ */
+function missedStartMessage(cutoffLabel: string): string {
+  return `${cutoffLabel}を過ぎたので、今日はクエストを開始できません（-30分）`;
 }
 
 /**
@@ -60,9 +61,10 @@ export function HomePage() {
     );
   }
 
-  const canStartQuest = data.questAction === "start" && !deadline.pastDeadline;
+  const canStartQuest =
+    data.questAction === "start" && !deadline.pastRegistrationCutoff;
   const showMissedStartMessage =
-    deadline.pastDeadline &&
+    deadline.pastRegistrationCutoff &&
     data.todayStatus === "unanswered" &&
     data.questAction === "start";
 
@@ -77,22 +79,31 @@ export function HomePage() {
           </p>
           <p className="mt-4 text-base">
             {showMissedStartMessage
-              ? missedStartMessage(deadline.deadlineLabel)
+              ? missedStartMessage(deadline.registrationCutoffLabel)
               : STATUS_LABEL[data.todayStatus]}
           </p>
-          {!deadline.pastDeadline &&
+          {!deadline.pastRegistrationCutoff &&
             (data.questAction === "start" || data.questAction === "retry") &&
-            !deadline.showCountdown && (
+            !deadline.showBonusCountdown &&
+            !deadline.showRegistrationCountdown && (
               <p className="mt-2 text-sm text-muted">
-                {deadline.deadlineLabel} までにクエストを始めて登録しよう（定時登録で +15分！）
+                {deadline.bonusDeadlineLabel} までに登録すると +15分！（
+                {deadline.registrationCutoffLabel} まで受付）
               </p>
             )}
         </Card>
 
-        {deadline.showCountdown && (
+        {deadline.showBonusCountdown && (
           <QuestDeadlineCountdown
-            countdownFormatted={deadline.countdownFormatted}
-            deadlineLabel={deadline.deadlineLabel}
+            countdownFormatted={deadline.bonusCountdownFormatted}
+            bonusDeadlineLabel={deadline.bonusDeadlineLabel}
+          />
+        )}
+
+        {deadline.showRegistrationCountdown && (
+          <QuestRegistrationCutoffCountdown
+            countdownFormatted={deadline.registrationCountdownFormatted}
+            registrationCutoffLabel={deadline.registrationCutoffLabel}
           />
         )}
 

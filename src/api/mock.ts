@@ -4,7 +4,7 @@
  */
 import type { ChildAnswer, HomeData } from "@/types/api";
 import { todayLocal } from "@/lib/date";
-import { isPastQuestDeadline } from "@/lib/deadline";
+import { isPastQuestRegistrationCutoff } from "@/lib/deadline";
 
 interface MockStore {
   balanceMinutes: number;
@@ -46,9 +46,9 @@ export async function mockApi<T>(
       const hasAnswers = !!dayAnswers && dayAnswers.size > 0;
       const isGraded = store.gradedDates.has(today);
       const isAcked = store.acknowledgedDates.has(today);
-      const pastDeadline = isPastQuestDeadline(today);
+      const pastCutoff = isPastQuestRegistrationCutoff(today);
 
-      if (pastDeadline && !hasAnswers && !store.missedRegistrationDates.has(today)) {
+      if (pastCutoff && !hasAnswers && !store.missedRegistrationDates.has(today)) {
         store.missedRegistrationDates.add(today);
       }
 

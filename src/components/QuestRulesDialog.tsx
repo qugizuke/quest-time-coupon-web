@@ -4,7 +4,8 @@
  */
 import { Dialog } from "@/components/ui/Dialog";
 import {
-  formatQuestDeadlineLabel,
+  formatQuestBonusDeadlineLabel,
+  formatQuestRegistrationCutoffLabel,
   QUEST_COUNTDOWN_START_HOUR,
   QUEST_COUNTDOWN_START_MINUTE,
 } from "@/lib/deadline";
@@ -32,7 +33,8 @@ function formatCountdownStartLabel(): string {
  * @returns {RuleSection[]} セクション一覧
  */
 function buildQuestRuleSections(): RuleSection[] {
-  const deadlineLabel = formatQuestDeadlineLabel();
+  const bonusLabel = formatQuestBonusDeadlineLabel();
+  const cutoffLabel = formatQuestRegistrationCutoffLabel();
   const countdownStartLabel = formatCountdownStartLabel();
 
   return [
@@ -46,13 +48,15 @@ function buildQuestRuleSections(): RuleSection[] {
       ],
     },
     {
-      title: "クエスト開始の締切",
+      title: "クエスト登録の時間",
       items: [
-        `毎日 ${deadlineLabel} までにクエストを始めて登録しよう（定時登録で +15分！）`,
-        `${countdownStartLabel} 以降、まだ始めていないときホームに締切までのタイマーが出る`,
-        `${deadlineLabel} を過ぎると「クエスト開始」が押せなくなるよ（-30分）`,
-        `${deadlineLabel} より前に始めていれば、回答中に時間を過ぎても「登録する」はできる`,
-        `ママが採点する前なら、${deadlineLabel} を過ぎても「やり直す」はできる`,
+        `${bonusLabel} までに登録すると定時ボーナス +15分！`,
+        `${cutoffLabel} までなら登録できる（${bonusLabel} 以降はボーナスなし）`,
+        `${countdownStartLabel} 以降、まだ始めていないときホームにボーナス締切のタイマーが出る`,
+        `${bonusLabel} を過ぎると登録締切のタイマーが出る（赤い表示。${cutoffLabel} まで！）`,
+        `${cutoffLabel} を過ぎると「クエスト開始」が押せなくなるよ（-30分）`,
+        `${bonusLabel} より前に始めていれば、回答中に時間を過ぎても「登録する」はできる`,
+        `ママが採点する前なら、${cutoffLabel} を過ぎても「やり直す」はできる`,
       ],
     },
     {

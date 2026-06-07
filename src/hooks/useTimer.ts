@@ -3,6 +3,7 @@
  * @description タイマー状態の管理・復元・tick。
  */
 import { useCallback, useEffect, useState } from "react";
+import { useScreenWakeLock } from "@/hooks/useScreenWakeLock";
 import {
   clearTimerState,
   getTimerState,
@@ -52,15 +53,22 @@ function calcDisplay(state: TimerState, now: number): TimerDisplay {
  */
 export function useTimer(displayBalance: number) {
   const [state, setState] = useState<TimerState | null>(() => getTimerState());
-  const [display, setDisplay] = useState<TimerDisplay>({
+  const [display, setDisplay] = useState<TimerDisplay>(() => ({
     phase: "idle",
-    seconds: 0,
+    seconds: displayBalance * 60,
     isPenalty: false,
-  });
+  }));
+
+  /** カウントダウン中は画面スリープを防ぐ（Android Chrome 等） */
+  useScreenWakeLock(!!state);
 
   useEffect(() => {
     if (!state) {
-      setDisplay({ phase: "idle", seconds: 0, isPenalty: false });
+      setDisplay({
+        phase: "idle",
+        seconds: displayBalance * 60,
+        isPenalty: false,
+      });
       return;
     }
 
@@ -68,7 +76,7 @@ export function useTimer(displayBalance: number) {
     tick();
     const id = window.setInterval(tick, 1000);
     return () => window.clearInterval(id);
-  }, [state]);
+  }, [state, displayBalance]);
 
   useEffect(() => {
     const onBeforeUnload = (e: BeforeUnloadEvent) => {

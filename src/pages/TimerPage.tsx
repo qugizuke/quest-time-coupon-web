@@ -59,23 +59,13 @@ export function TimerPage() {
           display.isPenalty ? "bg-danger/10" : ""
         }`}
       >
-        {display.phase === "idle" && (
-          <>
-            <p className="text-muted">残り {displayBalance} 分</p>
-            <p className="mt-4 text-app-xl font-bold">00:00</p>
-          </>
-        )}
-        {display.phase !== "idle" && (
-          <>
-            <p className="text-lg">
-              {display.isPenalty ? "超過時間" : "残り時間"}
-            </p>
-            <p className="mt-4 text-app-xl font-bold text-primary">
-              {display.isPenalty ? "+" : ""}
-              {formatMinutesSeconds(display.seconds)}
-            </p>
-          </>
-        )}
+        <p className="text-lg">
+          {display.isPenalty ? "超過時間" : "残り時間"}
+        </p>
+        <p className="mt-4 text-app-xl font-bold text-primary">
+          {display.isPenalty ? "+" : ""}
+          {formatMinutesSeconds(display.seconds)}
+        </p>
       </Card>
 
       {!canStart && !isRunning && displayBalance <= 0 && (

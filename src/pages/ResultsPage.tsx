@@ -17,7 +17,7 @@ import { actualDoneLabel, childAnswerLabel, isUnknownChildAnswer } from "@/lib/l
 
 /** 「分からない」回答がある日の促しメッセージ */
 const UNKNOWN_ANSWER_MESSAGE =
-  "「分からない」と答えたクエストは、ママが採点しない代わりに減点されます。次からはクエストを意識して「できた」「できなかった」で答えよう。";
+  "「分からない」は、その日クエストを意識できていなかった扱いで大きめの減点だよ。次からは思い出して「できた」「できなかった」で答えよう！";
 
 /**
  * 採点結果画面

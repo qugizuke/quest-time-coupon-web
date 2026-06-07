@@ -3,7 +3,9 @@
  * @description 子ども向けホーム。残高・状態・各画面への導線。
  */
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { QuestRulesDialog } from "@/components/QuestRulesDialog";
 import { homeQuery } from "@/api/queries";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { LoadingScreen } from "@/components/layout/LoadingScreen";
@@ -24,6 +26,7 @@ const STATUS_LABEL = {
  */
 export function HomePage() {
   const navigate = useNavigate();
+  const [rulesOpen, setRulesOpen] = useState(false);
   const { data, isLoading, error } = useQuery(homeQuery);
 
   if (isLoading) {
@@ -70,6 +73,9 @@ export function HomePage() {
               やり直す
             </Button>
           )}
+          <Button fullWidth variant="secondary" onClick={() => setRulesOpen(true)}>
+            クエストのルール
+          </Button>
           <Button fullWidth variant="secondary" onClick={() => navigate("/results")}>
             採点結果
           </Button>
@@ -78,6 +84,8 @@ export function HomePage() {
           </Button>
         </div>
       </div>
+
+      <QuestRulesDialog open={rulesOpen} onClose={() => setRulesOpen(false)} />
 
       <div className="pointer-events-none fixed inset-x-0 bottom-4 z-10 mx-auto flex max-w-lg justify-end px-4">
         <Button

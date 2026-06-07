@@ -126,7 +126,7 @@ export function GradeDatePage() {
           採点を確定
         </Button>
         <Button variant="secondary" fullWidth onClick={() => navigate("/grade")}>
-          一覧にもどる
+          一覧に戻る
         </Button>
       </div>
     </AppLayout>

@@ -3,7 +3,7 @@
  * @description 保護者が1日分を採点する画面。
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { postGrade } from "@/api/client";
 import { gradeQuery, queryKeys } from "@/api/queries";
@@ -25,6 +25,20 @@ export function GradeDatePage() {
   const { data: gradeData, isLoading } = useQuery(gradeQuery(date));
   const { data: daily } = useDailyQuests();
   const [grades, setGrades] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (!gradeData) return;
+    setGrades((prev) => {
+      const next = { ...prev };
+      for (const item of gradeData.items) {
+        if (isUnknownChildAnswer(item.childAnswer)) continue;
+        if (item.actualDone !== null && next[item.questId] === undefined) {
+          next[item.questId] = item.actualDone;
+        }
+      }
+      return next;
+    });
+  }, [gradeData]);
 
   const gradableItems = useMemo(
     () => gradeData?.items.filter((item) => !isUnknownChildAnswer(item.childAnswer)) ?? [],

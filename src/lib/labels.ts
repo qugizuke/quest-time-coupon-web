@@ -34,6 +34,6 @@ export function actualDoneLabel(value: boolean): string {
  * @param {ChildAnswer} value - 回答値
  * @returns {boolean} 分からないなら true
  */
-export function isUnknownChildAnswer(value: ChildAnswer): boolean {
-  return value === -1;
+export function isUnknownChildAnswer(value: ChildAnswer | number | string): boolean {
+  return Number(value) === -1;
 }

@@ -31,9 +31,9 @@ export function GradeDatePage() {
     [gradeData],
   );
 
-  const isComplete = gradableItems.every(
-    (item) => grades[item.questId] !== undefined,
-  );
+  const isComplete =
+    gradableItems.length === 0 ||
+    gradableItems.every((item) => grades[item.questId] !== undefined);
 
   const mutation = useMutation({
     mutationFn: () => {

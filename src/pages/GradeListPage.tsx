@@ -33,9 +33,12 @@ function gradeDateRightLabel(item: {
       className: points >= 0 ? "text-success" : "text-danger",
     };
   }
-  if (item.status === "ungraded" && item.ungradedCount > 0) {
+  if (item.status === "ungraded") {
     return {
-      text: `${STATUS_LABEL.ungraded}（${item.ungradedCount}）`,
+      text:
+        item.ungradedCount > 0
+          ? `${STATUS_LABEL.ungraded}（${item.ungradedCount}）`
+          : `${STATUS_LABEL.ungraded}（要確定）`,
       className: "font-medium text-primary",
     };
   }

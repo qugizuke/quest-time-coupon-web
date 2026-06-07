@@ -5,6 +5,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { QuestDeadlineCountdown } from "@/components/QuestDeadlineCountdown";
 import { QuestRulesDialog } from "@/components/QuestRulesDialog";
 import { homeQuery } from "@/api/queries";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -12,6 +13,8 @@ import { LoadingScreen } from "@/components/layout/LoadingScreen";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { useQuestDeadlineClock } from "@/hooks/useQuestDeadlineClock";
+import { todayLocal } from "@/lib/date";
 
 const STATUS_LABEL = {
   unanswered: "今日はまだ答えていません",
@@ -19,6 +22,11 @@ const STATUS_LABEL = {
   pending_ack: "結果の確認が必要です",
   completed: "今日は全部終わり！",
 } as const;
+
+/** 締切後に未着手だった場合のメッセージ */
+function missedStartMessage(deadlineLabel: string): string {
+  return `${deadlineLabel}を過ぎたので、今日はクエストを開始できません（-30分）`;
+}
 
 /**
  * ホーム画面
@@ -28,6 +36,15 @@ export function HomePage() {
   const navigate = useNavigate();
   const [rulesOpen, setRulesOpen] = useState(false);
   const { data, isLoading, error } = useQuery(homeQuery);
+  const today = todayLocal();
+
+  const deadlineActive =
+    !isLoading &&
+    !!data &&
+    data.todayStatus === "unanswered" &&
+    data.questAction === "start";
+
+  const deadline = useQuestDeadlineClock(today, deadlineActive);
 
   if (isLoading) {
     return <LoadingScreen />;
@@ -43,6 +60,12 @@ export function HomePage() {
     );
   }
 
+  const canStartQuest = data.questAction === "start" && !deadline.pastDeadline;
+  const showMissedStartMessage =
+    deadline.pastDeadline &&
+    data.todayStatus === "unanswered" &&
+    data.questAction === "start";
+
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col justify-center gap-6">
@@ -52,8 +75,26 @@ export function HomePage() {
             {data.displayBalance}
             <span className="ml-2 text-2xl">分</span>
           </p>
-          <p className="mt-4 text-base">{STATUS_LABEL[data.todayStatus]}</p>
+          <p className="mt-4 text-base">
+            {showMissedStartMessage
+              ? missedStartMessage(deadline.deadlineLabel)
+              : STATUS_LABEL[data.todayStatus]}
+          </p>
+          {!deadline.pastDeadline &&
+            (data.questAction === "start" || data.questAction === "retry") &&
+            !deadline.showCountdown && (
+              <p className="mt-2 text-sm text-muted">
+                {deadline.deadlineLabel} までにクエストを始めて登録しよう（定時登録で +15分！）
+              </p>
+            )}
         </Card>
+
+        {deadline.showCountdown && (
+          <QuestDeadlineCountdown
+            countdownFormatted={deadline.countdownFormatted}
+            deadlineLabel={deadline.deadlineLabel}
+          />
+        )}
 
         {data.unacknowledgedCount > 0 && (
           <Banner onClick={() => navigate("/results")}>
@@ -63,8 +104,13 @@ export function HomePage() {
         )}
 
         <div className="flex flex-col gap-3">
-          {data.questAction === "start" && (
+          {data.questAction === "start" && canStartQuest && (
             <Button fullWidth onClick={() => navigate("/quest")}>
+              クエスト開始
+            </Button>
+          )}
+          {data.questAction === "start" && !canStartQuest && (
+            <Button fullWidth disabled>
               クエスト開始
             </Button>
           )}

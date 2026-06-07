@@ -71,12 +71,13 @@ export function postAnswers(payload: {
   });
 }
 
-/** GET results 一覧 */
+/** POST results 一覧 */
 export function fetchResults(): Promise<{
   items: Array<{
     date: string;
     totalPoints: number;
     acknowledged: boolean;
+    registrationTimingAdjustment: number;
     details: Array<{
       questId: string;
       childAnswer: ChildAnswer;

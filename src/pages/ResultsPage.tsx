@@ -19,6 +19,13 @@ import { actualDoneLabel, childAnswerLabel, isUnknownChildAnswer } from "@/lib/l
 const UNKNOWN_ANSWER_MESSAGE =
   "「分からない」は、その日クエストを意識できていなかった扱いで大きめの減点だよ。次からは思い出して「できた」「できなかった」で答えよう！";
 
+/** 登録タイミング調整の表示ラベル */
+function registrationTimingLabel(adjustment: number): string {
+  if (adjustment > 0) return `定時登録ボーナス +${adjustment}分`;
+  if (adjustment < 0) return `登録締切超過 ${adjustment}分`;
+  return "";
+}
+
 /**
  * 採点結果画面
  * @returns {JSX.Element} ページ
@@ -122,6 +129,25 @@ export function ResultsPage() {
               {UNKNOWN_ANSWER_MESSAGE}
             </div>
           )}
+
+          {selected.registrationTimingAdjustment !== 0 && (
+            <div
+              className={`rounded-default px-4 py-3 text-base ${
+                selected.registrationTimingAdjustment > 0
+                  ? "border-2 border-success bg-success/10 text-gray-900"
+                  : "border-2 border-danger bg-danger/10 text-gray-900"
+              }`}
+            >
+              {registrationTimingLabel(selected.registrationTimingAdjustment)}
+            </div>
+          )}
+
+          {selected.details.length === 0 &&
+            selected.registrationTimingAdjustment < 0 && (
+              <p className="text-base text-muted">
+                この日はクエストを登録しなかったため、減点が記録されています。
+              </p>
+            )}
 
           <ul className="flex flex-col gap-2">
             {selected.details.map((d) => {

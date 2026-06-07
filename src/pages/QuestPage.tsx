@@ -2,6 +2,7 @@
  * @file QuestPage
  * @description 1問ずつクエストに回答する画面。
  */
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import type { ChildAnswer } from "@/types/api";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -10,6 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { useDailyQuests } from "@/hooks/useDailyQuests";
 import { useQuestDraft } from "@/hooks/useQuestDraft";
 import { todayLocal } from "@/lib/date";
+import { ensureQuestSessionStarted } from "@/lib/sessionStorage";
 
 const CHOICES: { value: ChildAnswer; label: string }[] = [
   { value: 1, label: "できた" },
@@ -27,6 +29,10 @@ export function QuestPage() {
   const { data: daily, isLoading } = useDailyQuests();
   const { draft, ready, setAnswer, goNext, goPrev, isComplete, currentQuest } =
     useQuestDraft(date, daily);
+
+  useEffect(() => {
+    ensureQuestSessionStarted(date);
+  }, [date]);
 
   if (isLoading || !daily || !ready || !currentQuest) {
     return <LoadingScreen />;

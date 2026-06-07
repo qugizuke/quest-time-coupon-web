@@ -4,6 +4,7 @@
  */
 import type { ChildAnswer, HomeData } from "@/types/api";
 import { todayLocal } from "@/lib/date";
+import { isPastQuestDeadline } from "@/lib/deadline";
 
 interface MockStore {
   balanceMinutes: number;
@@ -11,6 +12,8 @@ interface MockStore {
   answers: Map<string, Map<string, ChildAnswer>>;
   gradedDates: Set<string>;
   acknowledgedDates: Set<string>;
+  /** 締切後未登録ペナルティが確定した日 */
+  missedRegistrationDates: Set<string>;
 }
 
 const store: MockStore = {
@@ -19,6 +22,7 @@ const store: MockStore = {
   answers: new Map(),
   gradedDates: new Set(),
   acknowledgedDates: new Set(),
+  missedRegistrationDates: new Set(),
 };
 
 /**
@@ -42,13 +46,23 @@ export async function mockApi<T>(
       const hasAnswers = !!dayAnswers && dayAnswers.size > 0;
       const isGraded = store.gradedDates.has(today);
       const isAcked = store.acknowledgedDates.has(today);
+      const pastDeadline = isPastQuestDeadline(today);
+
+      if (pastDeadline && !hasAnswers && !store.missedRegistrationDates.has(today)) {
+        store.missedRegistrationDates.add(today);
+      }
 
       let todayStatus: HomeData["todayStatus"] = "unanswered";
       let questAction: HomeData["questAction"] = "start";
 
       if (!hasAnswers) {
-        todayStatus = "unanswered";
-        questAction = "start";
+        if (store.missedRegistrationDates.has(today)) {
+          todayStatus = isAcked ? "completed" : "pending_ack";
+          questAction = "none";
+        } else {
+          todayStatus = "unanswered";
+          questAction = "start";
+        }
       } else if (!isGraded) {
         todayStatus = "answered_ungraded";
         questAction = "retry";
@@ -60,9 +74,10 @@ export async function mockApi<T>(
         questAction = "none";
       }
 
-      const unacknowledgedCount = [...store.gradedDates].filter(
-        (d) => !store.acknowledgedDates.has(d),
-      ).length;
+      const unacknowledgedCount = [
+        ...store.gradedDates,
+        ...store.missedRegistrationDates,
+      ].filter((d) => !store.acknowledgedDates.has(d)).length;
 
       return {
         displayBalance: Math.max(0, store.balanceMinutes),
@@ -86,6 +101,7 @@ export async function mockApi<T>(
       const map = new Map<string, ChildAnswer>();
       for (const a of answers) map.set(a.questId, a.childAnswer);
       store.answers.set(date, map);
+      store.missedRegistrationDates.delete(date);
       return {
         submittedAt: new Date().toISOString(),
         overwritten: true,
@@ -136,26 +152,39 @@ export async function mockApi<T>(
     }
 
     case "results": {
-      const items = [...store.gradedDates]
+      const gradedItems = [...store.gradedDates]
         .filter((d) => !store.acknowledgedDates.has(d))
         .map((date) => ({
           date,
           totalPoints: 15,
           acknowledged: false,
+          registrationTimingAdjustment: 15,
           details: [],
         }));
-      return { items } as T;
+      const missedItems = [...store.missedRegistrationDates]
+        .filter((d) => !store.acknowledgedDates.has(d))
+        .map((date) => ({
+          date,
+          totalPoints: -30,
+          acknowledged: false,
+          registrationTimingAdjustment: -30,
+          details: [],
+        }));
+      return { items: [...gradedItems, ...missedItems] } as T;
     }
 
     case "resultsAck": {
       const { date } = body as { date: string };
-      const delta = 15;
+      const isMissed = store.missedRegistrationDates.has(date);
+      const delta = isMissed ? -30 : 15;
+      store.acknowledgedDates.add(date);
       if (delta > 0) {
         const offset = Math.min(store.penaltyMinutes, delta);
         store.penaltyMinutes -= offset;
         store.balanceMinutes += delta - offset;
+      } else if (delta < 0) {
+        store.balanceMinutes += delta;
       }
-      store.acknowledgedDates.add(date);
       return {
         appliedDelta: delta,
         penaltyOffset: 0,

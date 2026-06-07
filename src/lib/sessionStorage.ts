@@ -77,6 +77,50 @@ export function setQuestDraft(date: string, draft: QuestDraft): void {
  */
 export function clearQuestDraft(date: string): void {
   sessionStorage.removeItem(draftKey(date));
+  clearQuestSession(date);
+}
+
+/**
+ * クエストセッション開始時刻キーを生成する
+ * @param {string} date - YYYY-MM-DD
+ * @returns {string} ストレージキー
+ */
+export function questSessionKey(date: string): string {
+  return `qtc:questSession:${date}`;
+}
+
+/**
+ * クエストセッション開始時刻（ms）を取得する
+ * @param {string} date - 日付
+ * @returns {number | null} 開始時刻。未記録は null
+ */
+export function getQuestSessionStartedAt(date: string): number | null {
+  try {
+    const raw = sessionStorage.getItem(questSessionKey(date));
+    if (!raw) return null;
+    const ms = Number(raw);
+    return Number.isFinite(ms) ? ms : null;
+  } catch (error) {
+    console.error(`getQuestSessionStartedAt: date=${date}`, error);
+    return null;
+  }
+}
+
+/**
+ * クエストセッション開始時刻を記録する（既に記録済みなら上書きしない）
+ * @param {string} date - 日付
+ */
+export function ensureQuestSessionStarted(date: string): void {
+  if (getQuestSessionStartedAt(date) != null) return;
+  sessionStorage.setItem(questSessionKey(date), String(Date.now()));
+}
+
+/**
+ * クエストセッション開始時刻を削除する
+ * @param {string} date - 日付
+ */
+export function clearQuestSession(date: string): void {
+  sessionStorage.removeItem(questSessionKey(date));
 }
 
 /**

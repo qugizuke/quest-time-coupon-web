@@ -34,10 +34,15 @@ export interface HomeData {
   canStartTimer: boolean;
 }
 
+/** クエストカテゴリ（routine=日々のルーティン, reminder=毎日注意されているもの） */
+export type QuestCategory = "routine" | "reminder";
+
 /** クエスト定義 */
 export interface QuestDefinition {
   id: string;
   order: number;
+  /** @type {QuestCategory} カテゴリ（未設定時は routine 扱い） */
+  category?: QuestCategory;
   title: string;
   hint?: string;
 }

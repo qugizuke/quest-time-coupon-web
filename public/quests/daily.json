@@ -1,12 +1,12 @@
 {
   "version": 1,
   "quests": [
-    { "id": "brush-teeth-am", "order": 1, "title": "朝の歯みがきをした", "hint": "起床後15分以内" },
-    { "id": "wash-hands-gargle", "order": 2, "title": "帰宅後、手洗いとうがいをした" },
-    { "id": "homework", "order": 3, "title": "宿題をテキパキとやった", "hint": "ご飯までに" },
-    { "id": "sleep-on-time", "order": 4, "title": "決められた時間に寝る" },
-    { "id": "brush-teeth-pm", "order": 5, "title": "夜の歯みがきをした", "hint": "寝る時間の30分前までに終わらせる" },
-    { "id": "save-water", "order": 6, "title": "水とお湯の無駄づかいをしない" },
-    { "id": "listen-to-mama", "order": 7, "title": "ママの話をちゃんときく", "hint": "怒られる前に動く" }
+    { "id": "brush-teeth-am", "order": 1, "category": "routine", "title": "朝の歯みがきをした", "hint": "起床後15分以内" },
+    { "id": "wash-hands-gargle", "order": 2, "category": "routine", "title": "帰宅後、手洗いとうがいをした" },
+    { "id": "homework", "order": 3, "category": "routine", "title": "宿題をテキパキとやった", "hint": "ご飯までに" },
+    { "id": "sleep-on-time", "order": 4, "category": "routine", "title": "決められた時間に寝る" },
+    { "id": "brush-teeth-pm", "order": 5, "category": "routine", "title": "夜の歯みがきをした", "hint": "寝る時間の30分前までに終わらせる" },
+    { "id": "save-water", "order": 6, "category": "reminder", "title": "水とお湯の無駄づかいをしない" },
+    { "id": "listen-to-mama", "order": 7, "category": "reminder", "title": "ママの話をちゃんときく", "hint": "怒られる前に動く" }
   ]
 }

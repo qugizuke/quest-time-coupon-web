@@ -29,6 +29,33 @@ const store: MockStore = {
   adjustmentsByDate: new Map(),
 };
 
+/** @type {number} 定時登録ボーナス（分） */
+const REGISTRATION_ON_TIME_BONUS = 15;
+
+/** @type {number} 未登録ペナルティ（分） */
+const MISSED_REGISTRATION_PENALTY = -60;
+
+/**
+ * モック用の採点合計点を算出する（クエスト点は未シミュレート）
+ * @param {string} date - 対象日
+ * @returns {number} totalPoints
+ */
+function calcMockTotalPoints(date: string): number {
+  if (store.missedRegistrationDates.has(date)) {
+    return MISSED_REGISTRATION_PENALTY;
+  }
+  const dayAnswers = store.answers.get(date);
+  const answers = dayAnswers
+    ? [...dayAnswers.entries()].map(([questId, childAnswer]) => ({
+        questId,
+        childAnswer,
+      }))
+    : [];
+  return isBedtimePrepBlockingRegistrationBonus(answers)
+    ? 0
+    : REGISTRATION_ON_TIME_BONUS;
+}
+
 /**
  * モック API ハンドラ
  * @param {string} action - action 名
@@ -182,27 +209,17 @@ export async function mockApi<T>(
       const gradedItems = [...store.gradedDates]
         .filter((d) => !store.acknowledgedDates.has(d))
         .map((date) => {
-          const dayAnswers = store.answers.get(date);
-          const answers = dayAnswers
-            ? [...dayAnswers.entries()].map(([questId, childAnswer]) => ({
-                questId,
-                childAnswer,
-              }))
-            : [];
           const adjustments = (store.adjustmentsByDate.get(date) ?? []).map((a) => ({
             kind: a.kind,
             code: a.code,
             label: a.code,
             minutes: a.kind === "bonus" ? a.minutes : -a.minutes,
           }));
-          const registrationTimingAdjustment = isBedtimePrepBlockingRegistrationBonus(
-            answers,
-          )
-            ? 0
-            : 15;
+          const totalPoints = calcMockTotalPoints(date);
+          const registrationTimingAdjustment = totalPoints;
           return {
             date,
-            totalPoints: 15,
+            totalPoints,
             acknowledged: false,
             registrationTimingAdjustment,
             adjustments,
@@ -213,9 +230,9 @@ export async function mockApi<T>(
         .filter((d) => !store.acknowledgedDates.has(d))
         .map((date) => ({
           date,
-          totalPoints: -60,
+          totalPoints: MISSED_REGISTRATION_PENALTY,
           acknowledged: false,
-          registrationTimingAdjustment: -60,
+          registrationTimingAdjustment: MISSED_REGISTRATION_PENALTY,
           adjustments: [],
           details: [],
         }));
@@ -224,8 +241,7 @@ export async function mockApi<T>(
 
     case "resultsAck": {
       const { date } = body as { date: string };
-      const isMissed = store.missedRegistrationDates.has(date);
-      const delta = isMissed ? -60 : 15;
+      const delta = calcMockTotalPoints(date);
       store.acknowledgedDates.add(date);
       if (delta > 0) {
         const offset = Math.min(store.penaltyMinutes, delta);

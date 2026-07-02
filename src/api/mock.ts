@@ -5,6 +5,7 @@
 import type { ChildAnswer, GradeAdjustment, HomeData } from "@/types/api";
 import { todayLocal } from "@/lib/date";
 import { isPastQuestRegistrationCutoff, isWeekendEve } from "@/lib/deadline";
+import { isBedtimePrepBlockingRegistrationBonus } from "@/lib/registrationBonus";
 
 interface MockStore {
   balanceMinutes: number;
@@ -181,17 +182,29 @@ export async function mockApi<T>(
       const gradedItems = [...store.gradedDates]
         .filter((d) => !store.acknowledgedDates.has(d))
         .map((date) => {
+          const dayAnswers = store.answers.get(date);
+          const answers = dayAnswers
+            ? [...dayAnswers.entries()].map(([questId, childAnswer]) => ({
+                questId,
+                childAnswer,
+              }))
+            : [];
           const adjustments = (store.adjustmentsByDate.get(date) ?? []).map((a) => ({
             kind: a.kind,
             code: a.code,
             label: a.code,
             minutes: a.kind === "bonus" ? a.minutes : -a.minutes,
           }));
+          const registrationTimingAdjustment = isBedtimePrepBlockingRegistrationBonus(
+            answers,
+          )
+            ? 0
+            : 15;
           return {
             date,
             totalPoints: 15,
             acknowledged: false,
-            registrationTimingAdjustment: 15,
+            registrationTimingAdjustment,
             adjustments,
             details: [],
           };

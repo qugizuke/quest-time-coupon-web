@@ -1,0 +1,61 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run test
+
+      - name: Build
+        env:
+          GITHUB_PAGES: "true"
+          VITE_GAS_URL: ${{ secrets.VITE_GAS_URL }}
+          VITE_API_KEY: ${{ secrets.VITE_API_KEY }}
+          VITE_MOCK_API: "false"
+        run: |
+          if [ -z "$VITE_GAS_URL" ] || [ -z "$VITE_API_KEY" ]; then
+            echo "ERROR: VITE_GAS_URL / VITE_API_KEY が未設定です。"
+            echo "Settings → Secrets and variables → Actions を確認してください。"
+            exit 1
+          fi
+          npm run build
+          cp dist/index.html dist/404.html
+          test -f dist/404.html
+          test -f dist/quests/daily.json
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -13,7 +13,7 @@ export function useDailyQuests() {
   return useQuery({
     queryKey: ["dailyQuests"],
     queryFn: async (): Promise<DailyQuests> => {
-      const res = await fetch("/quests/daily.json");
+      const res = await fetch(`${import.meta.env.BASE_URL}quests/daily.json`);
       if (!res.ok) {
         throw new Error(
           `useDailyQuests: daily.json の取得に失敗 status=${res.status}`,

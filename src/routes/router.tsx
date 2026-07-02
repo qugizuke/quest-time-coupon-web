@@ -3,6 +3,7 @@
  */
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import { GradeGuard } from "@/components/GradeGuard";
+import { resolveRouterBasename } from "@/lib/routerBasename";
 import { GradeDatePage } from "@/pages/GradeDatePage";
 import { GradeListPage } from "@/pages/GradeListPage";
 import { GradeLoginPage } from "@/pages/GradeLoginPage";
@@ -13,7 +14,10 @@ import { ResultsPage } from "@/pages/ResultsPage";
 import { TimerPage } from "@/pages/TimerPage";
 
 /** アプリルーター */
-export const router = createBrowserRouter([
+const basename = resolveRouterBasename(import.meta.env.BASE_URL);
+
+export const router = createBrowserRouter(
+  [
   { path: "/", element: <HomePage /> },
   { path: "/quest", element: <QuestPage /> },
   { path: "/quest/confirm", element: <QuestConfirmPage /> },
@@ -29,4 +33,6 @@ export const router = createBrowserRouter([
     ],
   },
   { path: "*", element: <Navigate to="/" replace /> },
-]);
+  ],
+  { basename },
+);

@@ -1,7 +1,7 @@
 /**
  * @file Vite ビルド設定
  * @description React SPA の開発サーバー・本番ビルドを構成する。
- *   quests/daily.json を public へコピーし、GitLab Pages 向けに dist を出力する。
+ *   quests/daily.json を public へコピーし、GitHub Pages 向けに dist を出力する。
  * @limitation GAS URL はビルド時環境変数 VITE_GAS_URL / VITE_API_KEY が必要
  */
 import { defineConfig } from "vite";
@@ -25,7 +25,11 @@ function copyQuestsPlugin() {
   };
 }
 
+/** GitHub Actions ビルド時のみ repository Pages 用 base を付与する */
+const isGitHubPages = process.env.GITHUB_PAGES === "true";
+
 export default defineConfig({
+  base: isGitHubPages ? "/quest-time-coupon-web/" : "/",
   plugins: [react(), tailwindcss(), copyQuestsPlugin()],
   resolve: {
     alias: {

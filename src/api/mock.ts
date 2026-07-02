@@ -36,11 +36,11 @@ const REGISTRATION_ON_TIME_BONUS = 15;
 const MISSED_REGISTRATION_PENALTY = -60;
 
 /**
- * モック用の採点合計点を算出する（クエスト点は未シミュレート）
+ * モック用の定時登録加減点を算出する（クエスト点は未シミュレート）
  * @param {string} date - 対象日
- * @returns {number} totalPoints
+ * @returns {number} 定時登録ボーナスまたは未登録ペナルティ
  */
-function calcMockTotalPoints(date: string): number {
+function calcMockRegistrationTimingAdjustment(date: string): number {
   if (store.missedRegistrationDates.has(date)) {
     return MISSED_REGISTRATION_PENALTY;
   }
@@ -54,6 +54,26 @@ function calcMockTotalPoints(date: string): number {
   return isBedtimePrepBlockingRegistrationBonus(answers)
     ? 0
     : REGISTRATION_ON_TIME_BONUS;
+}
+
+/**
+ * モック用の任意加減点合計を算出する
+ * @param {string} date - 対象日
+ * @returns {number} bonus は正、penalty は負の合計
+ */
+function sumMockAdjustments(date: string): number {
+  return (store.adjustmentsByDate.get(date) ?? []).reduce((sum, adj) => {
+    return sum + (adj.kind === "bonus" ? adj.minutes : -adj.minutes);
+  }, 0);
+}
+
+/**
+ * モック用の採点合計点を算出する（クエスト点は未シミュレート）
+ * @param {string} date - 対象日
+ * @returns {number} totalPoints
+ */
+function calcMockTotalPoints(date: string): number {
+  return calcMockRegistrationTimingAdjustment(date) + sumMockAdjustments(date);
 }
 
 /**
@@ -215,8 +235,9 @@ export async function mockApi<T>(
             label: a.code,
             minutes: a.kind === "bonus" ? a.minutes : -a.minutes,
           }));
+          const registrationTimingAdjustment =
+            calcMockRegistrationTimingAdjustment(date);
           const totalPoints = calcMockTotalPoints(date);
-          const registrationTimingAdjustment = totalPoints;
           return {
             date,
             totalPoints,

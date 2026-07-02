@@ -18,6 +18,7 @@ import { Card } from "@/components/ui/Card";
 import { useQuestDeadlineClock } from "@/hooks/useQuestDeadlineClock";
 import { isWeekendEve } from "@/lib/deadline";
 import { todayLocal } from "@/lib/date";
+import { setBedtimeHourDraft } from "@/lib/sessionStorage";
 import type { BedtimeHour } from "@/types/api";
 
 const STATUS_LABEL = {
@@ -54,8 +55,9 @@ export function HomePage() {
   useEffect(() => {
     if (data?.bedtimeHour) {
       setBedtimeHour(data.bedtimeHour);
+      setBedtimeHourDraft(today, data.bedtimeHour);
     }
-  }, [data?.bedtimeHour]);
+  }, [data?.bedtimeHour, today]);
 
   const registrationMutation = useMutation({
     mutationFn: (hour: BedtimeHour) =>
@@ -100,6 +102,7 @@ export function HomePage() {
    */
   function handleBedtimeChange(hour: BedtimeHour) {
     setBedtimeHour(hour);
+    setBedtimeHourDraft(today, hour);
     registrationMutation.mutate(hour);
   }
 

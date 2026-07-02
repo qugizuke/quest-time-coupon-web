@@ -3,6 +3,7 @@
  * @description 定時ボーナス締切と登録受付締切を判定する（v5: bedtime 対応）。
  * @limitation ブラウザのローカルタイムゾーンを使用する。
  */
+import { isEveOfRestDay } from "@/lib/japaneseHolidays";
 import type { BedtimeHour } from "@/types/api";
 
 /** @type {number} 定時ボーナス締切の時（平日デフォルト） */
@@ -34,14 +35,12 @@ export function normalizeBedtimeHour(bedtimeHour?: number): BedtimeHour {
 }
 
 /**
- * 金曜・土曜（休日前日）かどうか
+ * 休日前日かどうか（翌日が土日または日本の祝日）
  * @param {string} date - YYYY-MM-DD
- * @returns {boolean} 金・土なら true
+ * @returns {boolean} 就寝時刻選択可能日なら true
  */
 export function isWeekendEve(date: string): boolean {
-  const [y, m, d] = date.split("-").map(Number);
-  const day = new Date(y, m - 1, d).getDay();
-  return day === 5 || day === 6;
+  return isEveOfRestDay(date);
 }
 
 /**

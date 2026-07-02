@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { useDailyQuests } from "@/hooks/useDailyQuests";
 import { todayLocal } from "@/lib/date";
 import { childAnswerLabel } from "@/lib/labels";
-import { getQuestDraft, clearQuestDraft } from "@/lib/sessionStorage";
+import { getQuestDraft, clearQuestDraft, getBedtimeHourDraft } from "@/lib/sessionStorage";
 import { isWeekendEve } from "@/lib/deadline";
 import type { BedtimeHour } from "@/types/api";
 
@@ -40,7 +40,7 @@ export function QuestConfirmPage() {
         return { questId: q.id, childAnswer: a.childAnswer };
       });
       const bedtimeHour: BedtimeHour | undefined = isWeekendEve(date)
-        ? (homeData?.bedtimeHour ?? 21)
+        ? (getBedtimeHourDraft(date) ?? homeData?.bedtimeHour ?? 21)
         : undefined;
       return postAnswers({ date, answers, bedtimeHour });
     },

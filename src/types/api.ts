@@ -35,9 +35,9 @@ export interface HomeData {
   questAction: QuestAction;
   unacknowledgedCount: number;
   canStartTimer: boolean;
-  /** 金土の就寝時刻（時）。未設定時は 21 */
+  /** 金土・祝日前日の就寝時刻（時）。未設定時は 21 */
   bedtimeHour?: BedtimeHour;
-  /** 金土（休日前日）か */
+  /** 休日前日（翌日が土日または祝日）か */
   isWeekendEve?: boolean;
 }
 

@@ -2,7 +2,7 @@
  * @file Session Storage ラッパー
  * @description クエスト下書き・タイマー状態の永続化。
  */
-import type { QuestDraft } from "@/types/api";
+import type { BedtimeHour, QuestDraft } from "@/types/api";
 
 /** タイマーフェーズ */
 export type TimerPhase = "running" | "penalty";
@@ -54,6 +54,50 @@ export function draftKey(date: string): string {
 export const TIMER_KEY = "qtc:timer";
 
 /**
+ * 就寝時刻下書きキーを生成する
+ * @param {string} date - YYYY-MM-DD
+ * @returns {string} ストレージキー
+ */
+export function bedtimeHourKey(date: string): string {
+  return `qtc:bedtimeHour:${date}`;
+}
+
+/**
+ * 就寝時刻下書きを取得する
+ * @param {string} date - 日付
+ * @returns {BedtimeHour | null} 保存済みの就寝時刻。未保存は null
+ */
+export function getBedtimeHourDraft(date: string): BedtimeHour | null {
+  try {
+    const raw = sessionStorage.getItem(bedtimeHourKey(date));
+    if (raw === "21" || raw === "22" || raw === "23") {
+      return Number(raw) as BedtimeHour;
+    }
+    return null;
+  } catch (error) {
+    console.error(`getBedtimeHourDraft: date=${date}`, error);
+    return null;
+  }
+}
+
+/**
+ * 就寝時刻下書きを保存する
+ * @param {string} date - 日付
+ * @param {BedtimeHour} hour - 就寝時刻（時）
+ */
+export function setBedtimeHourDraft(date: string, hour: BedtimeHour): void {
+  sessionStorage.setItem(bedtimeHourKey(date), String(hour));
+}
+
+/**
+ * 就寝時刻下書きを削除する
+ * @param {string} date - 日付
+ */
+export function clearBedtimeHourDraft(date: string): void {
+  sessionStorage.removeItem(bedtimeHourKey(date));
+}
+
+/**
  * クエスト下書きを取得する
  * @param {string} date - 日付
  * @returns {QuestDraft | null} 下書き
@@ -78,6 +122,7 @@ export function setQuestDraft(date: string, draft: QuestDraft): void {
 export function clearQuestDraft(date: string): void {
   sessionStorage.removeItem(draftKey(date));
   clearQuestSession(date);
+  clearBedtimeHourDraft(date);
 }
 
 /**

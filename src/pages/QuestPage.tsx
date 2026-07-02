@@ -1,6 +1,6 @@
 /**
  * @file QuestPage
- * @description 1問ずつクエストに回答する画面。
+ * @description 1問ずつクエストに回答する画面（宿題条件分岐対応）。
  */
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -27,8 +27,18 @@ export function QuestPage() {
   const navigate = useNavigate();
   const date = todayLocal();
   const { data: daily, isLoading } = useDailyQuests();
-  const { draft, ready, setAnswer, goNext, goPrev, isComplete, currentQuest } =
-    useQuestDraft(date, daily);
+  const {
+    draft,
+    ready,
+    setAnswer,
+    goNext,
+    goPrev,
+    isComplete,
+    currentQuest,
+    isFollowUpMode,
+    canGoNext,
+    canConfirm,
+  } = useQuestDraft(date, daily);
 
   useEffect(() => {
     ensureQuestSessionStarted(date);
@@ -46,7 +56,7 @@ export function QuestPage() {
     <AppLayout>
       <div className="flex flex-1 flex-col gap-6 transition-opacity duration-300">
         <p className="text-center text-muted">
-          {draft.index + 1} / {daily.quests.length}
+          {isFollowUpMode ? "追問" : `${draft.index + 1} / ${daily.quests.length}`}
         </p>
 
         <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
@@ -75,23 +85,19 @@ export function QuestPage() {
           <Button
             className="flex-1"
             variant="secondary"
-            disabled={draft.index === 0}
+            disabled={draft.index === 0 && !isFollowUpMode}
             onClick={goPrev}
           >
             戻る
           </Button>
-          {draft.index < daily.quests.length - 1 ? (
-            <Button
-              className="flex-1"
-              disabled={currentAnswer === undefined}
-              onClick={goNext}
-            >
+          {canGoNext ? (
+            <Button className="flex-1" onClick={goNext}>
               次へ
             </Button>
           ) : (
             <Button
               className="flex-1"
-              disabled={!isComplete}
+              disabled={!canConfirm && !isComplete}
               onClick={() => navigate("/quest/confirm")}
             >
               確認へ

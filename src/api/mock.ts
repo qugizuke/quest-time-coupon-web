@@ -1,10 +1,11 @@
 /**
  * @file モック API
- * @description GAS 未接続時の開発用インメモリ API。
+ * @description GAS 未接続時の開発用インメモリ API（v5 対応）。
  */
-import type { ChildAnswer, HomeData } from "@/types/api";
+import type { ChildAnswer, GradeAdjustment, HomeData } from "@/types/api";
 import { todayLocal } from "@/lib/date";
-import { isPastQuestRegistrationCutoff } from "@/lib/deadline";
+import { isPastQuestRegistrationCutoff, isWeekendEve } from "@/lib/deadline";
+import { isBedtimePrepBlockingRegistrationBonus } from "@/lib/registrationBonus";
 
 interface MockStore {
   balanceMinutes: number;
@@ -12,8 +13,9 @@ interface MockStore {
   answers: Map<string, Map<string, ChildAnswer>>;
   gradedDates: Set<string>;
   acknowledgedDates: Set<string>;
-  /** 締切後未登録ペナルティが確定した日 */
   missedRegistrationDates: Set<string>;
+  bedtimeByDate: Map<string, number>;
+  adjustmentsByDate: Map<string, GradeAdjustment[]>;
 }
 
 const store: MockStore = {
@@ -23,7 +25,56 @@ const store: MockStore = {
   gradedDates: new Set(),
   acknowledgedDates: new Set(),
   missedRegistrationDates: new Set(),
+  bedtimeByDate: new Map(),
+  adjustmentsByDate: new Map(),
 };
+
+/** @type {number} 定時登録ボーナス（分） */
+const REGISTRATION_ON_TIME_BONUS = 15;
+
+/** @type {number} 未登録ペナルティ（分） */
+const MISSED_REGISTRATION_PENALTY = -60;
+
+/**
+ * モック用の定時登録加減点を算出する（クエスト点は未シミュレート）
+ * @param {string} date - 対象日
+ * @returns {number} 定時登録ボーナスまたは未登録ペナルティ
+ */
+function calcMockRegistrationTimingAdjustment(date: string): number {
+  if (store.missedRegistrationDates.has(date)) {
+    return MISSED_REGISTRATION_PENALTY;
+  }
+  const dayAnswers = store.answers.get(date);
+  const answers = dayAnswers
+    ? [...dayAnswers.entries()].map(([questId, childAnswer]) => ({
+        questId,
+        childAnswer,
+      }))
+    : [];
+  return isBedtimePrepBlockingRegistrationBonus(answers)
+    ? 0
+    : REGISTRATION_ON_TIME_BONUS;
+}
+
+/**
+ * モック用の任意加減点合計を算出する
+ * @param {string} date - 対象日
+ * @returns {number} bonus は正、penalty は負の合計
+ */
+function sumMockAdjustments(date: string): number {
+  return (store.adjustmentsByDate.get(date) ?? []).reduce((sum, adj) => {
+    return sum + (adj.kind === "bonus" ? adj.minutes : -adj.minutes);
+  }, 0);
+}
+
+/**
+ * モック用の採点合計点を算出する（クエスト点は未シミュレート）
+ * @param {string} date - 対象日
+ * @returns {number} totalPoints
+ */
+function calcMockTotalPoints(date: string): number {
+  return calcMockRegistrationTimingAdjustment(date) + sumMockAdjustments(date);
+}
 
 /**
  * モック API ハンドラ
@@ -46,7 +97,8 @@ export async function mockApi<T>(
       const hasAnswers = !!dayAnswers && dayAnswers.size > 0;
       const isGraded = store.gradedDates.has(today);
       const isAcked = store.acknowledgedDates.has(today);
-      const pastCutoff = isPastQuestRegistrationCutoff(today);
+      const bedtimeHour = store.bedtimeByDate.get(today) ?? 21;
+      const pastCutoff = isPastQuestRegistrationCutoff(today, new Date(), bedtimeHour);
 
       if (pastCutoff && !hasAnswers && !store.missedRegistrationDates.has(today)) {
         store.missedRegistrationDates.add(today);
@@ -87,13 +139,22 @@ export async function mockApi<T>(
         questAction,
         unacknowledgedCount,
         canStartTimer: store.balanceMinutes > 0,
+        bedtimeHour,
+        isWeekendEve: isWeekendEve(today),
       } as T;
     }
 
+    case "registrationSetting": {
+      const { date, bedtimeHour } = body as { date: string; bedtimeHour: number };
+      store.bedtimeByDate.set(date, bedtimeHour);
+      return { date, bedtimeHour } as T;
+    }
+
     case "answers": {
-      const { date, answers } = body as {
+      const { date, answers, bedtimeHour } = body as {
         date: string;
         answers: { questId: string; childAnswer: ChildAnswer }[];
+        bedtimeHour?: number;
       };
       if (store.gradedDates.has(date)) {
         throw new Error("ALREADY_GRADED: 採点済みのため上書きできません");
@@ -102,6 +163,9 @@ export async function mockApi<T>(
       for (const a of answers) map.set(a.questId, a.childAnswer);
       store.answers.set(date, map);
       store.missedRegistrationDates.delete(date);
+      if (bedtimeHour != null) {
+        store.bedtimeByDate.set(date, bedtimeHour);
+      }
       return {
         submittedAt: new Date().toISOString(),
         overwritten: true,
@@ -132,11 +196,17 @@ export async function mockApi<T>(
 
     case "grade": {
       if (init?.method === "POST") {
-        const { date } = body as { date: string };
+        const { date, adjustments } = body as {
+          date: string;
+          adjustments?: GradeAdjustment[];
+        };
         if (store.gradedDates.has(date)) {
           throw new Error("ALREADY_GRADED: 再採点はできません");
         }
         store.gradedDates.add(date);
+        if (adjustments?.length) {
+          store.adjustmentsByDate.set(date, adjustments);
+        }
         return { gradedAt: new Date().toISOString() } as T;
       }
       const date = query?.date ?? today;
@@ -148,26 +218,43 @@ export async function mockApi<T>(
             actualDone: null,
           }))
         : [];
-      return { date, items } as T;
+      return {
+        date,
+        items,
+        adjustments: store.adjustmentsByDate.get(date) ?? [],
+      } as T;
     }
 
     case "results": {
       const gradedItems = [...store.gradedDates]
         .filter((d) => !store.acknowledgedDates.has(d))
-        .map((date) => ({
-          date,
-          totalPoints: 15,
-          acknowledged: false,
-          registrationTimingAdjustment: 15,
-          details: [],
-        }));
+        .map((date) => {
+          const adjustments = (store.adjustmentsByDate.get(date) ?? []).map((a) => ({
+            kind: a.kind,
+            code: a.code,
+            label: a.code,
+            minutes: a.kind === "bonus" ? a.minutes : -a.minutes,
+          }));
+          const registrationTimingAdjustment =
+            calcMockRegistrationTimingAdjustment(date);
+          const totalPoints = calcMockTotalPoints(date);
+          return {
+            date,
+            totalPoints,
+            acknowledged: false,
+            registrationTimingAdjustment,
+            adjustments,
+            details: [],
+          };
+        });
       const missedItems = [...store.missedRegistrationDates]
         .filter((d) => !store.acknowledgedDates.has(d))
         .map((date) => ({
           date,
-          totalPoints: -30,
+          totalPoints: MISSED_REGISTRATION_PENALTY,
           acknowledged: false,
-          registrationTimingAdjustment: -30,
+          registrationTimingAdjustment: MISSED_REGISTRATION_PENALTY,
+          adjustments: [],
           details: [],
         }));
       return { items: [...gradedItems, ...missedItems] } as T;
@@ -175,8 +262,7 @@ export async function mockApi<T>(
 
     case "resultsAck": {
       const { date } = body as { date: string };
-      const isMissed = store.missedRegistrationDates.has(date);
-      const delta = isMissed ? -30 : 15;
+      const delta = calcMockTotalPoints(date);
       store.acknowledgedDates.add(date);
       if (delta > 0) {
         const offset = Math.min(store.penaltyMinutes, delta);

@@ -1,14 +1,13 @@
 /**
  * @file QuestRulesDialog
- * @description クエスト（ルール）説明ダイアログ。子ども向けの要点を表示する。
+ * @description クエスト（ルール）説明ダイアログ。子ども向けの要点を表示する（v5 仕様）。
  */
 import { Dialog } from "@/components/ui/Dialog";
 import {
   formatQuestBonusDeadlineLabel,
   formatQuestRegistrationCutoffLabel,
-  QUEST_COUNTDOWN_START_HOUR,
-  QUEST_COUNTDOWN_START_MINUTE,
 } from "@/lib/deadline";
+import { todayLocal } from "@/lib/date";
 
 /** ルール見出しと本文 */
 interface RuleSection {
@@ -19,23 +18,13 @@ interface RuleSection {
 }
 
 /**
- * カウントダウン表示開始時刻のラベル（例: "20:00"）
- * @returns {string} HH:MM
- */
-function formatCountdownStartLabel(): string {
-  const hour = String(QUEST_COUNTDOWN_START_HOUR).padStart(2, "0");
-  const minute = String(QUEST_COUNTDOWN_START_MINUTE).padStart(2, "0");
-  return `${hour}:${minute}`;
-}
-
-/**
- * クエストルール本文（5分単位・現行仕様）
+ * クエストルール本文（5分単位・v5 仕様）
  * @returns {RuleSection[]} セクション一覧
  */
 function buildQuestRuleSections(): RuleSection[] {
-  const bonusLabel = formatQuestBonusDeadlineLabel();
+  const today = todayLocal();
+  const bonusLabel = formatQuestBonusDeadlineLabel(today);
   const cutoffLabel = formatQuestRegistrationCutoffLabel();
-  const countdownStartLabel = formatCountdownStartLabel();
 
   return [
     {
@@ -50,13 +39,12 @@ function buildQuestRuleSections(): RuleSection[] {
     {
       title: "クエスト登録の時間",
       items: [
-        `${bonusLabel} までに登録すると定時ボーナス +15分！`,
-        `${cutoffLabel} までなら登録できる（${bonusLabel} 以降はボーナスなし）`,
-        `${countdownStartLabel} 以降、まだ始めていないときホームにボーナス締切のタイマーが出る`,
-        `${bonusLabel} を過ぎると登録締切のタイマーが出る（赤い表示。${cutoffLabel} まで！）`,
-        `${cutoffLabel} を過ぎると「クエスト開始」が押せなくなるよ（-30分）`,
-        `${bonusLabel} より前に始めていれば、回答中に時間を過ぎても「登録する」はできる`,
-        `ママが採点する前なら、${cutoffLabel} を過ぎても「やり直す」はできる`,
+        `平日は ${bonusLabel} までに登録すると定時ボーナス +15分！（${cutoffLabel} まで受付）`,
+        "休日前日は「今日の寝る時間」を選べる（21:00 / 22:00 / 23:00）",
+        "寝る時間の30分前までに登録すると +15分！",
+        "1問目「寝る準備は終わっていますか？」に「できなかった」と答えた日は、時間内でも +15分 は付かない",
+        `${cutoffLabel} を過ぎると「クエスト開始」が押せなくなるよ（-60分）`,
+        "ママが採点する前なら、締切を過ぎても「やり直す」はできる",
       ],
     },
     {
@@ -66,7 +54,7 @@ function buildQuestRuleSections(): RuleSection[] {
         "増えた時間で、Switch や YouTube を楽しもう",
         "うまくいった: +5分。続けて成功すると、もっと増える！",
         "できなかった: -5分。次は「できた」と答えられるようにしよう",
-        "嘘（できたと言ったのにできていない）: -15分。いちばん重い減点。正直に答えよう",
+        "嘘（できたと言ったのにできていない）: -10分。正直に答えよう",
       ],
     },
     {
@@ -74,7 +62,6 @@ function buildQuestRuleSections(): RuleSection[] {
       items: [
         "「分からない」は -10分。ママは採点しないけど、自動で減点されるよ",
         "クエストは、その日ちゃんと意識して取り組むことが大切だから",
-        "「分からない」は「ちゃんと思い出していない」扱い。嘘ほどではないけど、大きめの減点になる",
         "できたかどうか、少し考えてから「できた」「できなかった」で答えよう",
       ],
     },

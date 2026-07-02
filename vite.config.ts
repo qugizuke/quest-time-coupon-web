@@ -1,7 +1,7 @@
 /**
  * @file Vite ビルド設定
  * @description React SPA の開発サーバー・本番ビルドを構成する。
- *   quests/daily.json を public へコピーし、GitHub Pages 向けに dist を出力する。
+ *   JSON 定義を public へコピーし、GitHub Pages 向けに dist を出力する。
  * @limitation GAS URL はビルド時環境変数 VITE_GAS_URL / VITE_API_KEY が必要
  */
 import { defineConfig } from "vite";
@@ -10,17 +10,25 @@ import tailwindcss from "@tailwindcss/vite";
 import { cpSync, mkdirSync } from "node:fs";
 import path, { resolve } from "node:path";
 
-/** quests 定義を public 配下へ同期するプラグイン */
-function copyQuestsPlugin() {
+/** JSON 定義を public 配下へ同期するプラグイン */
+function copyDefinitionsPlugin() {
   return {
-    name: "copy-quests",
+    name: "copy-definitions",
     buildStart() {
-      const destDir = resolve(__dirname, "public/quests");
-      mkdirSync(destDir, { recursive: true });
-      cpSync(
-        resolve(__dirname, "quests/daily.json"),
-        resolve(destDir, "daily.json"),
-      );
+      const definitions = [
+        {
+          src: resolve(__dirname, "quests/daily.json"),
+          dest: resolve(__dirname, "public/quests/daily.json"),
+        },
+        {
+          src: resolve(__dirname, "adjustments/grade.json"),
+          dest: resolve(__dirname, "public/adjustments/grade.json"),
+        },
+      ];
+      for (const def of definitions) {
+        mkdirSync(path.dirname(def.dest), { recursive: true });
+        cpSync(def.src, def.dest);
+      }
     },
   };
 }
@@ -30,7 +38,7 @@ const isGitHubPages = process.env.GITHUB_PAGES === "true";
 
 export default defineConfig({
   base: isGitHubPages ? "/quest-time-coupon-web/" : "/",
-  plugins: [react(), tailwindcss(), copyQuestsPlugin()],
+  plugins: [react(), tailwindcss(), copyDefinitionsPlugin()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),

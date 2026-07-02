@@ -14,6 +14,7 @@ import { Card } from "@/components/ui/Card";
 import { useDailyQuests } from "@/hooks/useDailyQuests";
 import { formatDateJa } from "@/lib/date";
 import { actualDoneLabel, childAnswerLabel, isUnknownChildAnswer } from "@/lib/labels";
+import { resolveQuestTitle } from "@/lib/questLabels";
 
 /** 「分からない」回答がある日の促しメッセージ */
 const UNKNOWN_ANSWER_MESSAGE =
@@ -169,8 +170,7 @@ export function ResultsPage() {
 
           <ul className="flex flex-col gap-2">
             {selected.details.map((d) => {
-              const title =
-                daily?.quests.find((q) => q.id === d.questId)?.title ?? d.questId;
+              const title = resolveQuestTitle(daily, d.questId);
               const isUnknown = isUnknownChildAnswer(d.childAnswer);
               return (
                 <li

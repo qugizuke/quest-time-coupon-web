@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "items": [
+    { "kind": "bonus", "code": "helped", "label": "お手伝いをした" },
+    { "kind": "bonus", "code": "test100", "label": "テストで100点を取れた" },
+    { "kind": "penalty", "code": "lied", "label": "嘘をついた" },
+    { "kind": "penalty", "code": "defiant", "label": "反抗的な態度を取った" }
+  ]
+}

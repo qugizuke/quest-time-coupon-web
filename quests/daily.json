@@ -9,26 +9,26 @@
       "hint": "夜の歯磨きや学校の準備。「できなかった」と答えると定時ボーナス（+15分）は付かない"
     },
     {
-      "id": "sleep-on-time",
+      "id": "sleep-on-time-yesterday",
       "order": 2,
       "category": "routine",
       "title": "昨日は決められた時間に寝ましたか？"
     },
     {
-      "id": "brush-teeth-am",
+      "id": "brush-teeth-gargle-am",
       "order": 3,
       "category": "routine",
       "title": "朝は歯磨きとうがいをしましたか？",
       "hint": "起きてから15分以内"
     },
     {
-      "id": "wash-hands-gargle",
+      "id": "wash-hands-gargle-after-school",
       "order": 4,
       "category": "routine",
       "title": "帰宅後、手洗いとうがいをしましたか？"
     },
     {
-      "id": "homework",
+      "id": "homework-done-today",
       "order": 5,
       "category": "routine",
       "title": "今日は宿題をやりましたか？",
@@ -39,13 +39,13 @@
       }
     },
     {
-      "id": "save-water",
+      "id": "save-water-hot-water",
       "order": 6,
       "category": "reminder",
       "title": "水やお湯の無駄遣いをしませんでしたか？"
     },
     {
-      "id": "listen-to-mama",
+      "id": "listen-to-mama-before-warning",
       "order": 7,
       "category": "reminder",
       "title": "ママの話はちゃんと聞けましたか？",

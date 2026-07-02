@@ -85,7 +85,7 @@ export interface QuestDraft {
 /** 保護者裁量の加減点 */
 export type AdjustmentKind = "bonus" | "penalty";
 
-export type AdjustmentCode = "helped" | "test100" | "lied" | "defiant";
+export type AdjustmentCode = string;
 
 export interface GradeAdjustment {
   kind: AdjustmentKind;
@@ -100,8 +100,8 @@ export interface AdjustmentDefinition {
   label: string;
 }
 
-/** 保護者採点画面用の調整選択状態 */
-export interface AdjustmentSelection {
-  enabled: boolean;
-  minutes: number;
+/** 任意加減点定義 */
+export interface GradeAdjustmentDefinitions {
+  version: number;
+  items: AdjustmentDefinition[];
 }

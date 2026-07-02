@@ -26,10 +26,10 @@ export function QuestRegistrationCutoffCountdown({
       className="flex flex-col items-center gap-1 rounded-default border-2 border-danger bg-danger/10 px-4 py-4 text-center"
       role="timer"
       aria-live="polite"
-      aria-label={`登録締切 ${registrationCutoffLabel} まであと ${countdownFormatted}。過ぎると30分減点`}
+      aria-label={`登録締切 ${registrationCutoffLabel} まであと ${countdownFormatted}。過ぎると60分減点`}
     >
       <p className="text-base font-bold text-danger">
-        登録を忘れると -30分！
+        登録を忘れると -60分！
       </p>
       <p className="text-app-xl font-bold tabular-nums text-danger">
         {countdownFormatted}

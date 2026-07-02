@@ -1,21 +1,24 @@
 /**
  * @file HomePage
- * @description 子ども向けホーム。残高・状態・各画面への導線。
+ * @description 子ども向けホーム。残高・状態・各画面への導線（v5: 寝る時間選択対応）。
  */
-import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { QuestDeadlineCountdown } from "@/components/QuestDeadlineCountdown";
 import { QuestRegistrationCutoffCountdown } from "@/components/QuestRegistrationCutoffCountdown";
 import { QuestRulesDialog } from "@/components/QuestRulesDialog";
-import { homeQuery } from "@/api/queries";
+import { homeQuery, queryKeys } from "@/api/queries";
+import { postRegistrationSetting } from "@/api/client";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { LoadingScreen } from "@/components/layout/LoadingScreen";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useQuestDeadlineClock } from "@/hooks/useQuestDeadlineClock";
+import { isWeekendEve } from "@/lib/deadline";
 import { todayLocal } from "@/lib/date";
+import type { BedtimeHour } from "@/types/api";
 
 const STATUS_LABEL = {
   unanswered: "今日はまだ答えていません",
@@ -24,9 +27,15 @@ const STATUS_LABEL = {
   completed: "今日は全部終わり！",
 } as const;
 
+const BEDTIME_OPTIONS: { value: BedtimeHour; label: string }[] = [
+  { value: 21, label: "21:00" },
+  { value: 22, label: "22:00" },
+  { value: 23, label: "23:00" },
+];
+
 /** 登録受付締切後に未着手だった場合のメッセージ */
 function missedStartMessage(cutoffLabel: string): string {
-  return `${cutoffLabel}を過ぎたので、今日はクエストを開始できません（-30分）`;
+  return `${cutoffLabel}を過ぎたので、今日はクエストを開始できません（-60分）`;
 }
 
 /**
@@ -35,9 +44,26 @@ function missedStartMessage(cutoffLabel: string): string {
  */
 export function HomePage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [rulesOpen, setRulesOpen] = useState(false);
   const { data, isLoading, error } = useQuery(homeQuery);
   const today = todayLocal();
+  const showBedtimePicker = isWeekendEve(today);
+  const [bedtimeHour, setBedtimeHour] = useState<BedtimeHour>(21);
+
+  useEffect(() => {
+    if (data?.bedtimeHour) {
+      setBedtimeHour(data.bedtimeHour);
+    }
+  }, [data?.bedtimeHour]);
+
+  const registrationMutation = useMutation({
+    mutationFn: (hour: BedtimeHour) =>
+      postRegistrationSetting({ date: today, bedtimeHour: hour }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.home });
+    },
+  });
 
   const deadlineActive =
     !isLoading &&
@@ -45,7 +71,7 @@ export function HomePage() {
     data.todayStatus === "unanswered" &&
     data.questAction === "start";
 
-  const deadline = useQuestDeadlineClock(today, deadlineActive);
+  const deadline = useQuestDeadlineClock(today, deadlineActive, bedtimeHour);
 
   if (isLoading) {
     return <LoadingScreen />;
@@ -67,6 +93,15 @@ export function HomePage() {
     deadline.pastRegistrationCutoff &&
     data.todayStatus === "unanswered" &&
     data.questAction === "start";
+
+  /**
+   * 寝る時間を選択してサーバに保存する
+   * @param {BedtimeHour} hour - 就寝時刻（時）
+   */
+  function handleBedtimeChange(hour: BedtimeHour) {
+    setBedtimeHour(hour);
+    registrationMutation.mutate(hour);
+  }
 
   return (
     <AppLayout>
@@ -92,6 +127,25 @@ export function HomePage() {
               </p>
             )}
         </Card>
+
+        {showBedtimePicker && data.todayStatus === "unanswered" && (
+          <Card>
+            <p className="mb-3 text-center font-medium">今日の寝る時間</p>
+            <div className="flex gap-2">
+              {BEDTIME_OPTIONS.map((opt) => (
+                <Button
+                  key={opt.value}
+                  className="flex-1"
+                  variant={bedtimeHour === opt.value ? "primary" : "secondary"}
+                  onClick={() => handleBedtimeChange(opt.value)}
+                  disabled={registrationMutation.isPending}
+                >
+                  {opt.label}
+                </Button>
+              ))}
+            </div>
+          </Card>
+        )}
 
         {deadline.showBonusCountdown && (
           <QuestDeadlineCountdown

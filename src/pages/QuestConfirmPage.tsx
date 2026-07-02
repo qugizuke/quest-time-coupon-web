@@ -2,16 +2,18 @@
  * @file QuestConfirmPage
  * @description 回答一覧の最終確認と登録。
  */
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { postAnswers } from "@/api/client";
-import { queryKeys } from "@/api/queries";
+import { homeQuery, queryKeys } from "@/api/queries";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/Button";
 import { useDailyQuests } from "@/hooks/useDailyQuests";
 import { todayLocal } from "@/lib/date";
 import { childAnswerLabel } from "@/lib/labels";
 import { getQuestDraft, clearQuestDraft } from "@/lib/sessionStorage";
+import { isWeekendEve } from "@/lib/deadline";
+import type { BedtimeHour } from "@/types/api";
 
 /**
  * 最終確認画面
@@ -22,6 +24,7 @@ export function QuestConfirmPage() {
   const queryClient = useQueryClient();
   const date = todayLocal();
   const { data: daily } = useDailyQuests();
+  const { data: homeData } = useQuery(homeQuery);
   const draft = getQuestDraft(date);
 
   const mutation = useMutation({
@@ -36,7 +39,10 @@ export function QuestConfirmPage() {
         }
         return { questId: q.id, childAnswer: a.childAnswer };
       });
-      return postAnswers({ date, answers });
+      const bedtimeHour: BedtimeHour | undefined = isWeekendEve(date)
+        ? (homeData?.bedtimeHour ?? 21)
+        : undefined;
+      return postAnswers({ date, answers, bedtimeHour });
     },
     onSuccess: () => {
       clearQuestDraft(date);

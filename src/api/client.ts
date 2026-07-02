@@ -2,7 +2,7 @@
  * @file GAS API クライアント
  * @description action ベースの GET/POST。VITE_MOCK_API=true 時はモックを返す。
  */
-import type { ApiResponse, ChildAnswer, HomeData } from "@/types/api";
+import type { ApiResponse, ChildAnswer, GradeAdjustment, HomeData } from "@/types/api";
 import { mockApi } from "@/api/mock";
 import { todayLocal } from "@/lib/date";
 
@@ -63,8 +63,21 @@ export function fetchHome(date: string = todayLocal()): Promise<HomeData> {
 export function postAnswers(payload: {
   date: string;
   answers: { questId: string; childAnswer: ChildAnswer }[];
+  bedtimeHour?: number;
 }): Promise<{ submittedAt: string; overwritten: boolean }> {
   return request("answers", {
+    method: "POST",
+    headers: GAS_POST_HEADERS,
+    body: JSON.stringify(payload),
+  });
+}
+
+/** POST registrationSetting */
+export function postRegistrationSetting(payload: {
+  date: string;
+  bedtimeHour: number;
+}): Promise<{ date: string; bedtimeHour: number }> {
+  return request("registrationSetting", {
     method: "POST",
     headers: GAS_POST_HEADERS,
     body: JSON.stringify(payload),
@@ -78,6 +91,12 @@ export function fetchResults(): Promise<{
     totalPoints: number;
     acknowledged: boolean;
     registrationTimingAdjustment: number;
+    adjustments?: Array<{
+      kind: "bonus" | "penalty";
+      code: string;
+      label: string;
+      minutes: number;
+    }>;
     details: Array<{
       questId: string;
       childAnswer: ChildAnswer;
@@ -124,6 +143,7 @@ export function fetchGrade(date: string): Promise<{
     childAnswer: ChildAnswer;
     actualDone: boolean | null;
   }>;
+  adjustments: GradeAdjustment[];
 }> {
   return request("grade", { method: "GET" }, { date });
 }
@@ -132,6 +152,7 @@ export function fetchGrade(date: string): Promise<{
 export function postGrade(payload: {
   date: string;
   grades: { questId: string; actualDone: boolean }[];
+  adjustments?: GradeAdjustment[];
 }): Promise<{ gradedAt: string }> {
   return request("grade", {
     method: "POST",

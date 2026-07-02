@@ -142,6 +142,24 @@ export function ResultsPage() {
             </div>
           )}
 
+          {(selected.adjustments ?? []).length > 0 && (
+            <ul className="flex flex-col gap-2">
+              {selected.adjustments!.map((adj) => (
+                <li
+                  key={`${adj.kind}-${adj.code}`}
+                  className={`rounded-default px-4 py-3 text-base ${
+                    adj.minutes > 0
+                      ? "border-2 border-success bg-success/10 text-gray-900"
+                      : "border-2 border-danger bg-danger/10 text-gray-900"
+                  }`}
+                >
+                  {adj.label}: {adj.minutes > 0 ? "+" : ""}
+                  {adj.minutes}分
+                </li>
+              ))}
+            </ul>
+          )}
+
           {selected.details.length === 0 &&
             selected.registrationTimingAdjustment < 0 && (
               <p className="text-base text-muted">

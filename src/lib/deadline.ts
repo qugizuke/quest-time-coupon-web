@@ -1,125 +1,158 @@
 /**
  * @file クエスト登録締切ユーティリティ
- * @description 定時ボーナス締切（20:30）と登録受付締切（21:00）を判定する。
+ * @description 定時ボーナス締切と登録受付締切を判定する（v5: bedtime 対応）。
  * @limitation ブラウザのローカルタイムゾーンを使用する。
  */
+import type { BedtimeHour } from "@/types/api";
 
-/** @type {number} 定時ボーナス締切の時（+15分） */
+/** @type {number} 定時ボーナス締切の時（平日デフォルト） */
 export const QUEST_BONUS_DEADLINE_HOUR = 20;
 
-/** @type {number} 定時ボーナス締切の分 */
+/** @type {number} 定時ボーナス締切の分（平日デフォルト） */
 export const QUEST_BONUS_DEADLINE_MINUTE = 30;
 
-/** @type {number} 登録受付締切の時 */
+/** @type {number} 登録受付締切の時（平日デフォルト） */
 export const QUEST_REGISTRATION_CUTOFF_HOUR = 21;
 
 /** @type {number} 登録受付締切の分 */
 export const QUEST_REGISTRATION_CUTOFF_MINUTE = 0;
 
-/** @type {number} ボーナス締切カウントダウン表示開始の時 */
+/** @type {number} ボーナス締切カウントダウン表示開始の時（平日デフォルト） */
 export const QUEST_COUNTDOWN_START_HOUR = 20;
 
 /** @type {number} ボーナス締切カウントダウン表示開始の分 */
 export const QUEST_COUNTDOWN_START_MINUTE = 0;
 
 /**
- * 指定日の定時ボーナス締切（20:30）を返す
- * @param {string} date - YYYY-MM-DD
- * @returns {Date} その日 20:30:00.000
+ * 就寝時刻を正規化する
+ * @param {number | undefined} bedtimeHour - 就寝時刻（時）
+ * @returns {BedtimeHour} 21 / 22 / 23
  */
-export function getQuestBonusDeadline(date: string): Date {
-  const [y, m, d] = date.split("-").map(Number);
-  return new Date(y, m - 1, d, QUEST_BONUS_DEADLINE_HOUR, QUEST_BONUS_DEADLINE_MINUTE, 0, 0);
+export function normalizeBedtimeHour(bedtimeHour?: number): BedtimeHour {
+  if (bedtimeHour === 22 || bedtimeHour === 23) return bedtimeHour;
+  return 21;
 }
 
 /**
- * 指定日の登録受付締切（21:00）を返す
+ * 金曜・土曜（休日前日）かどうか
  * @param {string} date - YYYY-MM-DD
- * @returns {Date} その日 21:00:00.000
+ * @returns {boolean} 金・土なら true
  */
-export function getQuestRegistrationCutoff(date: string): Date {
+export function isWeekendEve(date: string): boolean {
   const [y, m, d] = date.split("-").map(Number);
-  return new Date(
-    y,
-    m - 1,
-    d,
-    QUEST_REGISTRATION_CUTOFF_HOUR,
-    QUEST_REGISTRATION_CUTOFF_MINUTE,
-    0,
-    0,
-  );
+  const day = new Date(y, m - 1, d).getDay();
+  return day === 5 || day === 6;
 }
 
 /**
- * ボーナス締切カウントダウン表示開始時刻（20:00）を返す
+ * 指定日の定時ボーナス締切を返す（就寝30分前）
  * @param {string} date - YYYY-MM-DD
- * @returns {Date} その日 20:00:00.000
+ * @param {number} [bedtimeHour] - 就寝時刻（時）
+ * @returns {Date} ボーナス締切
  */
-export function getQuestCountdownStart(date: string): Date {
+export function getQuestBonusDeadline(date: string, bedtimeHour?: number): Date {
+  const hour = normalizeBedtimeHour(bedtimeHour);
   const [y, m, d] = date.split("-").map(Number);
-  return new Date(
-    y,
-    m - 1,
-    d,
-    QUEST_COUNTDOWN_START_HOUR,
-    QUEST_COUNTDOWN_START_MINUTE,
-    0,
-    0,
-  );
+  const bonusMinute = hour === 21 ? 30 : 0;
+  const bonusHour = hour === 21 ? 20 : hour - 1;
+  return new Date(y, m - 1, d, bonusHour, bonusMinute, 0, 0);
 }
 
 /**
- * ボーナス締切カウントダウンを表示する時間帯か（20:00 以上かつ 20:30 未満）
+ * 指定日の登録受付締切を返す
+ * @param {string} date - YYYY-MM-DD
+ * @param {number} [bedtimeHour] - 就寝時刻（時）
+ * @returns {Date} 登録締切
+ */
+export function getQuestRegistrationCutoff(date: string, bedtimeHour?: number): Date {
+  const hour = normalizeBedtimeHour(bedtimeHour);
+  const [y, m, d] = date.split("-").map(Number);
+  return new Date(y, m - 1, d, hour, 0, 0, 0);
+}
+
+/**
+ * ボーナス締切カウントダウン表示開始時刻（ボーナス締切30分前）を返す
+ * @param {string} date - YYYY-MM-DD
+ * @param {number} [bedtimeHour] - 就寝時刻（時）
+ * @returns {Date} カウントダウン開始
+ */
+export function getQuestCountdownStart(date: string, bedtimeHour?: number): Date {
+  const bonus = getQuestBonusDeadline(date, bedtimeHour);
+  return new Date(bonus.getTime() - 30 * 60 * 1000);
+}
+
+/**
+ * ボーナス締切カウントダウンを表示する時間帯か
  * @param {string} date - 対象日 YYYY-MM-DD
  * @param {Date} [now] - 判定基準時刻
+ * @param {number} [bedtimeHour] - 就寝時刻（時）
  * @returns {boolean} 表示対象なら true
  */
 export function isQuestBonusCountdownVisible(
   date: string,
   now: Date = new Date(),
+  bedtimeHour?: number,
 ): boolean {
   const ms = now.getTime();
   return (
-    ms >= getQuestCountdownStart(date).getTime() &&
-    ms < getQuestBonusDeadline(date).getTime()
+    ms >= getQuestCountdownStart(date, bedtimeHour).getTime() &&
+    ms < getQuestBonusDeadline(date, bedtimeHour).getTime()
   );
 }
 
 /**
- * 登録受付締切カウントダウンを表示する時間帯か（20:30 以上かつ 21:00 未満）
+ * 登録受付締切カウントダウンを表示する時間帯か
  * @param {string} date - 対象日 YYYY-MM-DD
  * @param {Date} [now] - 判定基準時刻
+ * @param {number} [bedtimeHour] - 就寝時刻（時）
  * @returns {boolean} 表示対象なら true
  */
 export function isQuestRegistrationCutoffCountdownVisible(
   date: string,
   now: Date = new Date(),
+  bedtimeHour?: number,
 ): boolean {
   const ms = now.getTime();
   return (
-    ms >= getQuestBonusDeadline(date).getTime() &&
-    ms < getQuestRegistrationCutoff(date).getTime()
+    ms >= getQuestBonusDeadline(date, bedtimeHour).getTime() &&
+    ms < getQuestRegistrationCutoff(date, bedtimeHour).getTime()
   );
 }
 
 /**
- * 登録受付締切（21:00）までの残りミリ秒
+ * 登録受付締切までの残りミリ秒
  * @param {string} date - 対象日 YYYY-MM-DD
  * @param {Date} [now] - 判定基準時刻
+ * @param {number} [bedtimeHour] - 就寝時刻（時）
  * @returns {number} 残り ms（締切後は 0）
  */
-export function getMsUntilQuestRegistrationCutoff(date: string, now: Date = new Date()): number {
-  return Math.max(0, getQuestRegistrationCutoff(date).getTime() - now.getTime());
+export function getMsUntilQuestRegistrationCutoff(
+  date: string,
+  now: Date = new Date(),
+  bedtimeHour?: number,
+): number {
+  return Math.max(
+    0,
+    getQuestRegistrationCutoff(date, bedtimeHour).getTime() - now.getTime(),
+  );
 }
 
 /**
  * 定時ボーナス締切までの残りミリ秒
  * @param {string} date - 対象日 YYYY-MM-DD
  * @param {Date} [now] - 判定基準時刻
+ * @param {number} [bedtimeHour] - 就寝時刻（時）
  * @returns {number} 残り ms（締切後は 0）
  */
-export function getMsUntilQuestBonusDeadline(date: string, now: Date = new Date()): number {
-  return Math.max(0, getQuestBonusDeadline(date).getTime() - now.getTime());
+export function getMsUntilQuestBonusDeadline(
+  date: string,
+  now: Date = new Date(),
+  bedtimeHour?: number,
+): number {
+  return Math.max(
+    0,
+    getQuestBonusDeadline(date, bedtimeHour).getTime() - now.getTime(),
+  );
 }
 
 /**
@@ -135,41 +168,57 @@ export function formatDeadlineCountdown(ms: number): string {
 }
 
 /**
- * 定時ボーナス締切（20:30）を過ぎているか
+ * 定時ボーナス締切を過ぎているか
  * @param {string} date - 対象日 YYYY-MM-DD
  * @param {Date} [now] - 判定基準時刻
- * @returns {boolean} 20:30 超過なら true
+ * @param {number} [bedtimeHour] - 就寝時刻（時）
+ * @returns {boolean} 超過なら true
  */
-export function isPastQuestBonusDeadline(date: string, now: Date = new Date()): boolean {
-  return now.getTime() > getQuestBonusDeadline(date).getTime();
+export function isPastQuestBonusDeadline(
+  date: string,
+  now: Date = new Date(),
+  bedtimeHour?: number,
+): boolean {
+  return now.getTime() > getQuestBonusDeadline(date, bedtimeHour).getTime();
 }
 
 /**
- * 登録受付締切（21:00）を過ぎているか
+ * 登録受付締切を過ぎているか
  * @param {string} date - 対象日 YYYY-MM-DD
  * @param {Date} [now] - 判定基準時刻
- * @returns {boolean} 21:00 超過なら true
+ * @param {number} [bedtimeHour] - 就寝時刻（時）
+ * @returns {boolean} 超過なら true
  */
-export function isPastQuestRegistrationCutoff(date: string, now: Date = new Date()): boolean {
-  return now.getTime() > getQuestRegistrationCutoff(date).getTime();
+export function isPastQuestRegistrationCutoff(
+  date: string,
+  now: Date = new Date(),
+  bedtimeHour?: number,
+): boolean {
+  return now.getTime() > getQuestRegistrationCutoff(date, bedtimeHour).getTime();
 }
 
 /**
  * 定時ボーナス締切の表示ラベル
+ * @param {string} date - 対象日
+ * @param {number} [bedtimeHour] - 就寝時刻（時）
  * @returns {string} 例: "20:30"
  */
-export function formatQuestBonusDeadlineLabel(): string {
-  const hour = String(QUEST_BONUS_DEADLINE_HOUR).padStart(2, "0");
-  const minute = String(QUEST_BONUS_DEADLINE_MINUTE).padStart(2, "0");
+export function formatQuestBonusDeadlineLabel(
+  date: string,
+  bedtimeHour?: number,
+): string {
+  const d = getQuestBonusDeadline(date, bedtimeHour);
+  const hour = String(d.getHours()).padStart(2, "0");
+  const minute = String(d.getMinutes()).padStart(2, "0");
   return `${hour}:${minute}`;
 }
 
 /**
  * 登録受付締切の表示ラベル
+ * @param {number} [bedtimeHour] - 就寝時刻（時）
  * @returns {string} 例: "21:00"
  */
-export function formatQuestRegistrationCutoffLabel(): string {
-  const hour = String(QUEST_REGISTRATION_CUTOFF_HOUR).padStart(2, "0");
-  const minute = String(QUEST_REGISTRATION_CUTOFF_MINUTE).padStart(2, "0");
-  return `${hour}:${minute}`;
+export function formatQuestRegistrationCutoffLabel(bedtimeHour?: number): string {
+  const hour = String(normalizeBedtimeHour(bedtimeHour)).padStart(2, "0");
+  return `${hour}:00`;
 }

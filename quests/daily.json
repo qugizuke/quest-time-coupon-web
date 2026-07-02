@@ -1,12 +1,55 @@
 {
-  "version": 1,
+  "version": 2,
   "quests": [
-    { "id": "brush-teeth-am", "order": 1, "category": "routine", "title": "朝の歯みがきをした", "hint": "起床後15分以内" },
-    { "id": "wash-hands-gargle", "order": 2, "category": "routine", "title": "帰宅後、手洗いとうがいをした" },
-    { "id": "homework", "order": 3, "category": "routine", "title": "宿題をテキパキとやった", "hint": "ご飯までに" },
-    { "id": "sleep-on-time", "order": 4, "category": "routine", "title": "決められた時間に寝る" },
-    { "id": "brush-teeth-pm", "order": 5, "category": "routine", "title": "夜の歯みがきをした", "hint": "寝る時間の30分前までに終わらせる" },
-    { "id": "save-water", "order": 6, "category": "reminder", "title": "水とお湯の無駄づかいをしない" },
-    { "id": "listen-to-mama", "order": 7, "category": "reminder", "title": "ママの話をちゃんときく", "hint": "怒られる前に動く" }
+    {
+      "id": "bedtime-prep",
+      "order": 1,
+      "category": "routine",
+      "title": "今日はもう寝る準備は終わっていますか？",
+      "hint": "夜の歯磨きや学校の準備"
+    },
+    {
+      "id": "sleep-on-time",
+      "order": 2,
+      "category": "routine",
+      "title": "昨日は決められた時間に寝ましたか？"
+    },
+    {
+      "id": "brush-teeth-am",
+      "order": 3,
+      "category": "routine",
+      "title": "朝は歯磨きとうがいをしましたか？",
+      "hint": "起きてから15分以内"
+    },
+    {
+      "id": "wash-hands-gargle",
+      "order": 4,
+      "category": "routine",
+      "title": "帰宅後、手洗いとうがいをしましたか？"
+    },
+    {
+      "id": "homework",
+      "order": 5,
+      "category": "routine",
+      "title": "今日は宿題をやりましたか？",
+      "hint": "やった場合: 宿題はテキパキとできましたか？",
+      "conditional": {
+        "followUpWhen": 1,
+        "followUpTitle": "宿題はテキパキとできましたか？"
+      }
+    },
+    {
+      "id": "save-water",
+      "order": 6,
+      "category": "reminder",
+      "title": "水やお湯の無駄遣いをしませんでしたか？"
+    },
+    {
+      "id": "listen-to-mama",
+      "order": 7,
+      "category": "reminder",
+      "title": "ママの話はちゃんと聞けましたか？",
+      "hint": "怒られる前に動く"
+    }
   ]
 }

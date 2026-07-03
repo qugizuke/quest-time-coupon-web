@@ -249,6 +249,8 @@ export function useQuestDraft(date: string, daily: DailyQuests | undefined) {
     : currentQuest
       ? draft.gateAnswers?.[currentQuest.id]
       : undefined;
+  const isCurrentQuestAnswered =
+    !!currentQuest && isQuestAnswered(currentQuest, draft);
 
   return {
     draft,
@@ -262,7 +264,7 @@ export function useQuestDraft(date: string, daily: DailyQuests | undefined) {
     isFollowUpMode,
     canGoNext:
       !isFollowUpMode &&
-      currentAnswer !== undefined &&
+      isCurrentQuestAnswered &&
       draft.index < (daily?.quests.length ?? 1) - 1,
     canConfirm: isComplete,
   };

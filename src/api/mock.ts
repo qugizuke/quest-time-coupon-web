@@ -266,13 +266,6 @@ function validateMockRetryImmutableAnswers(
   nextAnswers: { questId: string; childAnswer: ChildAnswer }[],
 ): void {
   const nextMap = new Map(nextAnswers.map((answer) => [answer.questId, answer.childAnswer]));
-  for (const quest of daily.quests) {
-    if (quest.scoringRole === "conditional" && existingAnswers?.has(quest.id) && !nextMap.has(quest.id)) {
-      throw new Error(
-        `BAD_REQUEST: 回答済みの条件付きクエストは削除できません questId=${quest.id}`,
-      );
-    }
-  }
   const existingAnswer = existingAnswers?.get(BEDTIME_PREP_QUEST_ID);
   if (existingAnswer === undefined) return;
   const nextAnswer = nextMap.get(BEDTIME_PREP_QUEST_ID);

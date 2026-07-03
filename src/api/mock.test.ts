@@ -116,7 +116,7 @@ describe("mockApi answers 受付タイミング", () => {
     expect(home.bedtimeHour).toBe(21);
   });
 
-  it("回答済みの条件付きクエストは retry で削除できない", async () => {
+  it("回答済みの条件付きクエストは retry で削除できる", async () => {
     const date = "2026-06-22";
     vi.setSystemTime(new Date(2026, 5, 22, 20, 30, 0));
 
@@ -132,16 +132,16 @@ describe("mockApi answers 受付タイミング", () => {
       }),
     });
 
-    await expect(
-      mockApi("answers", {
-        method: "POST",
-        body: JSON.stringify({
-          date,
-          answers: sampleAnswers,
-          bedtimeHour: 21,
-        }),
+    const result = await mockApi<{ submittedAt: string; overwritten: boolean }>("answers", {
+      method: "POST",
+      body: JSON.stringify({
+        date,
+        answers: sampleAnswers,
+        bedtimeHour: 21,
       }),
-    ).rejects.toThrow("回答済みの条件付きクエストは削除できません");
+    });
+
+    expect(result.overwritten).toBe(true);
   });
 });
 

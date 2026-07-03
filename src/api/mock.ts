@@ -257,6 +257,25 @@ function validateMockAnswers(
 }
 
 /**
+ * モック retry で registration gate の回答変更を拒否する
+ * @param {Map<string, ChildAnswer> | undefined} existingAnswers - 既存回答
+ * @param {{ questId: string; childAnswer: ChildAnswer }[]} nextAnswers - 再送回答
+ */
+function validateMockRetryImmutableAnswers(
+  existingAnswers: Map<string, ChildAnswer> | undefined,
+  nextAnswers: { questId: string; childAnswer: ChildAnswer }[],
+): void {
+  const existingAnswer = existingAnswers?.get(BEDTIME_PREP_QUEST_ID);
+  if (existingAnswer === undefined) return;
+  const nextAnswer = nextAnswers.find((answer) => answer.questId === BEDTIME_PREP_QUEST_ID);
+  if (nextAnswer && nextAnswer.childAnswer !== existingAnswer) {
+    throw new Error(
+      `BAD_REQUEST: 回答済みの登録ゲートは変更できません questId=${BEDTIME_PREP_QUEST_ID}`,
+    );
+  }
+}
+
+/**
  * モック任意加減点 payload を検証する
  * @param {GradeAdjustment[]} adjustments - 加減点 payload
  */
@@ -401,7 +420,8 @@ export async function mockApi<T>(
         throw new Error("ALREADY_GRADED: 採点済みのため上書きできません");
       }
       const hour = store.bedtimeByDate.get(date) ?? bedtimeHour ?? 21;
-      const isNewRegistration = !store.answers.has(date);
+      const existingAnswers = store.answers.get(date);
+      const isNewRegistration = !existingAnswers;
       if (isNewRegistration) {
         if (store.missedRegistrationDates.has(date) || store.gradedDates.has(date)) {
           throw new Error("ALREADY_RESULT: 結果作成済みのため回答を保存できません");
@@ -412,6 +432,8 @@ export async function mockApi<T>(
         if (isPastQuestRegistrationCutoff(date, new Date(), hour)) {
           throw new Error("BAD_REQUEST: 登録受付締切を過ぎているため回答を保存できません");
         }
+      } else {
+        validateMockRetryImmutableAnswers(existingAnswers, answers);
       }
       const map = new Map<string, ChildAnswer>();
       for (const a of answers) map.set(a.questId, a.childAnswer);

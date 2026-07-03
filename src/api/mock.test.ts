@@ -62,6 +62,33 @@ describe("mockApi answers 受付タイミング", () => {
 
     expect(result.overwritten).toBe(true);
   });
+
+  it("回答済みの登録ゲートは retry で変更できない", async () => {
+    const date = "2026-06-14";
+    vi.setSystemTime(new Date(2026, 5, 14, 20, 30, 0));
+
+    await mockApi("answers", {
+      method: "POST",
+      body: JSON.stringify({ date, answers: sampleAnswers, bedtimeHour: 21 }),
+    });
+
+    vi.setSystemTime(new Date(2026, 5, 14, 21, 30, 0));
+
+    await expect(
+      mockApi("answers", {
+        method: "POST",
+        body: JSON.stringify({
+          date,
+          answers: sampleAnswers.map((answer) =>
+            answer.questId === "bedtime-prep"
+              ? { ...answer, childAnswer: 0 as const }
+              : answer,
+          ),
+          bedtimeHour: 21,
+        }),
+      }),
+    ).rejects.toThrow("回答済みの登録ゲートは変更できません");
+  });
 });
 
 describe("mockApi registrationSetting 競合ガード", () => {

@@ -5,12 +5,17 @@
 import type { ChildAnswer, GradeAdjustment, HomeData } from "@/types/api";
 import { todayLocal } from "@/lib/date";
 import { isBeforeQuestRegistrationStart, isPastQuestRegistrationCutoff, isWeekendEve } from "@/lib/deadline";
-import { isBedtimePrepBlockingRegistrationBonus } from "@/lib/registrationBonus";
+import {
+  BEDTIME_PREP_QUEST_ID,
+  calcBedtimePrepFalseClaimPenalty,
+  canApplyBedtimePrepRegistrationBonus,
+} from "@/lib/registrationBonus";
 
 interface MockStore {
   balanceMinutes: number;
   penaltyMinutes: number;
   answers: Map<string, Map<string, ChildAnswer>>;
+  grades: Map<string, Map<string, boolean>>;
   gradedDates: Set<string>;
   acknowledgedDates: Set<string>;
   missedRegistrationDates: Set<string>;
@@ -22,6 +27,7 @@ const store: MockStore = {
   balanceMinutes: 0,
   penaltyMinutes: 0,
   answers: new Map(),
+  grades: new Map(),
   gradedDates: new Set(),
   acknowledgedDates: new Set(),
   missedRegistrationDates: new Set(),
@@ -44,16 +50,32 @@ function calcMockRegistrationTimingAdjustment(date: string): number {
   if (store.missedRegistrationDates.has(date)) {
     return MISSED_REGISTRATION_PENALTY;
   }
-  const dayAnswers = store.answers.get(date);
-  const answers = dayAnswers
-    ? [...dayAnswers.entries()].map(([questId, childAnswer]) => ({
-        questId,
-        childAnswer,
-      }))
-    : [];
-  return isBedtimePrepBlockingRegistrationBonus(answers)
-    ? 0
-    : REGISTRATION_ON_TIME_BONUS;
+  return canApplyBedtimePrepRegistrationBonus(mockBedtimePrepEvaluation(date))
+    ? REGISTRATION_ON_TIME_BONUS
+    : 0;
+}
+
+/**
+ * モック用の寝る準備判定材料を返す
+ * @param {string} date - 対象日
+ * @returns {{ childAnswer: ChildAnswer; actualDone: boolean } | undefined} 判定材料
+ */
+function mockBedtimePrepEvaluation(
+  date: string,
+): { childAnswer: ChildAnswer; actualDone: boolean } | undefined {
+  const childAnswer = store.answers.get(date)?.get(BEDTIME_PREP_QUEST_ID);
+  const actualDone = store.grades.get(date)?.get(BEDTIME_PREP_QUEST_ID);
+  if (childAnswer === undefined || actualDone === undefined) return undefined;
+  return { childAnswer, actualDone };
+}
+
+/**
+ * モック用の寝る準備虚偽ペナルティを算出する
+ * @param {string} date - 対象日
+ * @returns {number} ペナルティ分数
+ */
+function calcMockBedtimePrepPenalty(date: string): number {
+  return calcBedtimePrepFalseClaimPenalty(mockBedtimePrepEvaluation(date));
 }
 
 /**
@@ -73,7 +95,11 @@ function sumMockAdjustments(date: string): number {
  * @returns {number} totalPoints
  */
 function calcMockTotalPoints(date: string): number {
-  return calcMockRegistrationTimingAdjustment(date) + sumMockAdjustments(date);
+  return (
+    calcMockRegistrationTimingAdjustment(date) +
+    calcMockBedtimePrepPenalty(date) +
+    sumMockAdjustments(date)
+  );
 }
 
 /**
@@ -206,14 +232,19 @@ export async function mockApi<T>(
 
     case "grade": {
       if (init?.method === "POST") {
-        const { date, adjustments } = body as {
+        const { date, grades, adjustments } = body as {
           date: string;
+          grades?: { questId: string; actualDone: boolean }[];
           adjustments?: GradeAdjustment[];
         };
         if (store.gradedDates.has(date)) {
           throw new Error("ALREADY_GRADED: 再採点はできません");
         }
         store.gradedDates.add(date);
+        store.grades.set(
+          date,
+          new Map((grades ?? []).map((g) => [g.questId, g.actualDone])),
+        );
         if (adjustments?.length) {
           store.adjustmentsByDate.set(date, adjustments);
         }
@@ -247,12 +278,22 @@ export async function mockApi<T>(
           }));
           const registrationTimingAdjustment =
             calcMockRegistrationTimingAdjustment(date);
+          const bedtimePrepPenalty = calcMockBedtimePrepPenalty(date);
           const totalPoints = calcMockTotalPoints(date);
           return {
             date,
             totalPoints,
             acknowledged: false,
             registrationTimingAdjustment,
+            registrationTimingReason:
+              registrationTimingAdjustment > 0
+                ? `定時登録ボーナス +${registrationTimingAdjustment}分（寝る準備確認済み）`
+                : "定時登録ボーナスなし（寝る準備が確認できませんでした）",
+            bedtimePrepPenalty,
+            bedtimePrepPenaltyReason:
+              bedtimePrepPenalty !== 0
+                ? `寝る準備の虚偽ペナルティ ${bedtimePrepPenalty}分`
+                : undefined,
             adjustments,
             details: [],
           };

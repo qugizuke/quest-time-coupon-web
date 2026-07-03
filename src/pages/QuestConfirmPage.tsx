@@ -13,7 +13,38 @@ import { todayLocal } from "@/lib/date";
 import { childAnswerLabel } from "@/lib/labels";
 import { getQuestDraft, clearQuestDraft, getBedtimeHourDraft } from "@/lib/sessionStorage";
 import { isWeekendEve } from "@/lib/deadline";
-import type { BedtimeHour } from "@/types/api";
+import type { BedtimeHour, ChildAnswer, DailyQuests, QuestDefinition, QuestDraft } from "@/types/api";
+
+/**
+ * API に送信する回答を下書きから構築する
+ * @param {DailyQuests} daily - クエスト定義
+ * @param {QuestDraft} draft - 下書き
+ * @returns {{ questId: string; childAnswer: ChildAnswer }[]} 送信対象回答
+ */
+function buildSubmittableAnswers(
+  daily: DailyQuests,
+  draft: QuestDraft,
+): { questId: string; childAnswer: ChildAnswer }[] {
+  return daily.quests.flatMap((q) => {
+    const a = draft.answers.find((x) => x.questId === q.id);
+    if (a?.childAnswer !== undefined) {
+      return [{ questId: q.id, childAnswer: a.childAnswer }];
+    }
+    if (q.conditional?.persistGateAnswer === false) {
+      return [];
+    }
+    throw new Error(`QuestConfirmPage: 未回答 questId=${q.id}`);
+  });
+}
+
+/**
+ * 確認画面に表示するタイトルを返す
+ * @param {QuestDefinition} quest - クエスト定義
+ * @returns {string} 表示タイトル
+ */
+function confirmationTitle(quest: QuestDefinition): string {
+  return quest.conditional?.followUpTitle ?? quest.title;
+}
 
 /**
  * 最終確認画面
@@ -32,13 +63,7 @@ export function QuestConfirmPage() {
       if (!draft || !daily) {
         throw new Error("QuestConfirmPage: 下書きまたは定義がありません");
       }
-      const answers = daily.quests.map((q) => {
-        const a = draft.answers.find((x) => x.questId === q.id);
-        if (a?.childAnswer === undefined) {
-          throw new Error(`QuestConfirmPage: 未回答 questId=${q.id}`);
-        }
-        return { questId: q.id, childAnswer: a.childAnswer };
-      });
+      const answers = buildSubmittableAnswers(daily, draft);
       const bedtimeHour: BedtimeHour | undefined = isWeekendEve(date)
         ? (getBedtimeHourDraft(date) ?? homeData?.bedtimeHour ?? 21)
         : undefined;
@@ -68,14 +93,17 @@ export function QuestConfirmPage() {
         最後の確認
       </h1>
       <ul className="mb-6 flex flex-col gap-2">
-        {daily.quests.map((q) => {
+        {daily.quests.flatMap((q) => {
           const a = draft.answers.find((x) => x.questId === q.id);
+          if (a?.childAnswer === undefined && q.conditional?.persistGateAnswer === false) {
+            return [];
+          }
           return (
             <li
               key={q.id}
               className="flex justify-between rounded-default bg-white px-4 py-3 shadow-sm"
             >
-              <span>{q.title}</span>
+              <span>{confirmationTitle(q)}</span>
               <span className="font-medium">
                 {a?.childAnswer !== undefined
                   ? childAnswerLabel(a.childAnswer)

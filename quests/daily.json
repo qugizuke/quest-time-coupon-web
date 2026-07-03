@@ -5,19 +5,25 @@
       "id": "bedtime-prep",
       "order": 1,
       "category": "routine",
+      "answerMode": "binary",
+      "scoringRole": "registrationGate",
       "title": "今日はもう寝る準備は終わっていますか？",
-      "hint": "夜の歯磨きや学校の準備。「できなかった」と答えると定時ボーナス（+15分）は付かない"
+      "hint": "夜の歯磨きや学校の準備。ママの確認後に定時ボーナスが決まります"
     },
     {
       "id": "sleep-on-time-yesterday",
       "order": 2,
       "category": "routine",
+      "answerMode": "default",
+      "scoringRole": "standard",
       "title": "昨日は決められた時間に寝ましたか？"
     },
     {
       "id": "brush-teeth-gargle-am",
       "order": 3,
       "category": "routine",
+      "answerMode": "default",
+      "scoringRole": "standard",
       "title": "朝は歯磨きとうがいをしましたか？",
       "hint": "起きてから15分以内"
     },
@@ -25,29 +31,39 @@
       "id": "wash-hands-gargle-after-school",
       "order": 4,
       "category": "routine",
+      "answerMode": "default",
+      "scoringRole": "standard",
       "title": "帰宅後、手洗いとうがいをしましたか？"
     },
     {
       "id": "homework-done-today",
       "order": 5,
       "category": "routine",
+      "answerMode": "default",
+      "scoringRole": "conditional",
       "title": "今日は宿題をやりましたか？",
       "hint": "やった場合: 宿題はテキパキとできましたか？",
       "conditional": {
+        "gateAnswerMode": "yesNo",
         "followUpWhen": 1,
-        "followUpTitle": "宿題はテキパキとできましたか？"
+        "followUpTitle": "宿題はテキパキとできましたか？",
+        "persistGateAnswer": false
       }
     },
     {
       "id": "save-water-hot-water",
       "order": 6,
       "category": "reminder",
+      "answerMode": "default",
+      "scoringRole": "standard",
       "title": "水やお湯の無駄遣いをしませんでしたか？"
     },
     {
       "id": "listen-to-mama-before-warning",
       "order": 7,
       "category": "reminder",
+      "answerMode": "default",
+      "scoringRole": "standard",
       "title": "ママの話はちゃんと聞けましたか？",
       "hint": "怒られる前に動く"
     }

@@ -21,10 +21,26 @@ const UNKNOWN_ANSWER_MESSAGE =
   "「分からない」は、その日クエストを意識できていなかった扱いで大きめの減点だよ。次からは思い出して「できた」「できなかった」で答えよう！";
 
 /** 登録タイミング調整の表示ラベル */
-function registrationTimingLabel(adjustment: number): string {
+function registrationTimingLabel(adjustment: number, reason?: string): string {
+  if (reason) return reason;
   if (adjustment > 0) return `定時登録ボーナス +${adjustment}分`;
   if (adjustment < 0) return `登録締切超過 ${adjustment}分`;
   return "";
+}
+
+/**
+ * 定時登録ボーナス内訳の表示スタイルを返す
+ * @param {number} adjustment - 調整分数
+ * @returns {string} className
+ */
+function registrationTimingClassName(adjustment: number): string {
+  if (adjustment > 0) {
+    return "border-2 border-success bg-success/10 text-gray-900";
+  }
+  if (adjustment < 0) {
+    return "border-2 border-danger bg-danger/10 text-gray-900";
+  }
+  return "border-2 border-warning bg-warning/20 text-gray-900";
 }
 
 /**
@@ -131,15 +147,24 @@ export function ResultsPage() {
             </div>
           )}
 
-          {selected.registrationTimingAdjustment !== 0 && (
+          {(selected.registrationTimingAdjustment !== 0 ||
+            selected.registrationTimingReason) && (
             <div
-              className={`rounded-default px-4 py-3 text-base ${
-                selected.registrationTimingAdjustment > 0
-                  ? "border-2 border-success bg-success/10 text-gray-900"
-                  : "border-2 border-danger bg-danger/10 text-gray-900"
-              }`}
+              className={`rounded-default px-4 py-3 text-base ${registrationTimingClassName(
+                selected.registrationTimingAdjustment,
+              )}`}
             >
-              {registrationTimingLabel(selected.registrationTimingAdjustment)}
+              {registrationTimingLabel(
+                selected.registrationTimingAdjustment,
+                selected.registrationTimingReason,
+              )}
+            </div>
+          )}
+
+          {!!selected.bedtimePrepPenalty && selected.bedtimePrepPenalty !== 0 && (
+            <div className="rounded-default border-2 border-danger bg-danger/10 px-4 py-3 text-base text-gray-900">
+              {selected.bedtimePrepPenaltyReason ??
+                `寝る準備の虚偽ペナルティ ${selected.bedtimePrepPenalty}分`}
             </div>
           )}
 

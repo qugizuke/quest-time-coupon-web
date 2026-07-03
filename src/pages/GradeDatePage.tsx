@@ -15,7 +15,7 @@ import { useDailyQuests } from "@/hooks/useDailyQuests";
 import { formatDateJa } from "@/lib/date";
 import { childAnswerLabel, isUnknownChildAnswer } from "@/lib/labels";
 import { resolveQuestTitle } from "@/lib/questLabels";
-import type { AdjustmentDefinition, GradeAdjustment } from "@/types/api";
+import type { AdjustmentDefinition, DailyQuests, GradeAdjustment } from "@/types/api";
 
 const BONUS_MINUTE_OPTIONS = [10, 20, 30, 40, 50, 60];
 const PENALTY_MINUTE_OPTIONS = [-10, -20, -30, -40, -50, -60];
@@ -90,6 +90,19 @@ function formatMinuteOption(minutes: number): string {
  */
 function defaultMinutesFor(def: AdjustmentDefinition): number {
   return def.kind === "bonus" ? 10 : -10;
+}
+
+/**
+ * 定時登録ボーナス判定用クエストか
+ * @param {DailyQuests | undefined} daily - クエスト定義
+ * @param {string} questId - クエスト ID
+ * @returns {boolean} 判定用なら true
+ */
+function isRegistrationGateQuest(
+  daily: DailyQuests | undefined,
+  questId: string,
+): boolean {
+  return daily?.quests.find((q) => q.id === questId)?.scoringRole === "registrationGate";
 }
 
 /**
@@ -254,12 +267,22 @@ export function GradeDatePage() {
 
       <ul className="flex flex-col gap-4">
         {gradeData.items.map((item) => {
-          const title = resolveQuestTitle(daily, item.questId);
+          const title = resolveQuestTitle(daily, item.questId, {
+            preferFollowUpTitle: true,
+          });
           const isUnknown = isUnknownChildAnswer(item.childAnswer);
           const selected = grades[item.questId];
+          const isRegistrationGate = isRegistrationGateQuest(daily, item.questId);
+          const appliesFalseClaimPenalty =
+            isRegistrationGate && item.childAnswer === 1 && selected === false;
           return (
             <li key={item.questId} className="rounded-default bg-white p-4 shadow-sm">
               <p className="font-medium">{title}</p>
+              {isRegistrationGate && (
+                <p className="mt-1 text-sm text-warning">
+                  ボーナス判定用（点数なし）。できたと答えたのにできていなかった場合、-30分。
+                </p>
+              )}
               <p className="mb-3 text-sm text-muted">
                 子どもの回答: {childAnswerLabel(item.childAnswer)}
               </p>
@@ -288,6 +311,11 @@ export function GradeDatePage() {
                     実際にできなかった
                   </Button>
                 </div>
+              )}
+              {appliesFalseClaimPenalty && (
+                <p className="mt-3 rounded-default bg-danger/10 px-3 py-2 text-sm text-danger">
+                  虚偽ペナルティ -30分 が付きます。
+                </p>
               )}
             </li>
           );

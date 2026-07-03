@@ -5,7 +5,7 @@
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import type { ChildAnswer } from "@/types/api";
+import type { ChildAnswer, QuestDefinition } from "@/types/api";
 import { homeQuery } from "@/api/queries";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { LoadingScreen } from "@/components/layout/LoadingScreen";
@@ -21,6 +21,34 @@ const CHOICES: { value: ChildAnswer; label: string }[] = [
   { value: 0, label: "できなかった" },
   { value: -1, label: "分からない" },
 ];
+
+/** 2択クエスト用の選択肢 */
+const BINARY_CHOICES: { value: ChildAnswer; label: string }[] = [
+  { value: 1, label: "できた" },
+  { value: 0, label: "できなかった" },
+];
+
+/** はい / いいえゲート用の選択肢 */
+const YES_NO_CHOICES: { value: ChildAnswer; label: string }[] = [
+  { value: 1, label: "はい" },
+  { value: 0, label: "いいえ" },
+];
+
+/**
+ * 現在のクエストに表示する選択肢を返す
+ * @param {QuestDefinition} quest - 表示中のクエスト
+ * @param {boolean} isFollowUpMode - 追問表示中か
+ * @returns {{ value: ChildAnswer; label: string }[]} 選択肢一覧
+ */
+function answerChoicesFor(
+  quest: QuestDefinition,
+  isFollowUpMode: boolean,
+): { value: ChildAnswer; label: string }[] {
+  if (isFollowUpMode) return CHOICES;
+  if (quest.conditional?.gateAnswerMode === "yesNo") return YES_NO_CHOICES;
+  if (quest.answerMode === "binary") return BINARY_CHOICES;
+  return CHOICES;
+}
 
 /**
  * クエスト回答画面
@@ -39,6 +67,7 @@ export function QuestPage() {
     goPrev,
     isComplete,
     currentQuest,
+    currentAnswer,
     isFollowUpMode,
     canGoNext,
     canConfirm,
@@ -61,9 +90,7 @@ export function QuestPage() {
     return <LoadingScreen />;
   }
 
-  const currentAnswer = draft.answers.find(
-    (a) => a.questId === currentQuest.id,
-  )?.childAnswer;
+  const choices = answerChoicesFor(currentQuest, isFollowUpMode);
 
   return (
     <AppLayout>
@@ -82,7 +109,7 @@ export function QuestPage() {
         </div>
 
         <div className="flex flex-col gap-3">
-          {CHOICES.map((c) => (
+          {choices.map((c) => (
             <Button
               key={c.value}
               fullWidth

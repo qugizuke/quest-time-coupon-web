@@ -160,11 +160,14 @@ export async function mockApi<T>(
         throw new Error("ALREADY_GRADED: 採点済みのため上書きできません");
       }
       const hour = bedtimeHour ?? store.bedtimeByDate.get(date) ?? 21;
-      if (isBeforeQuestRegistrationStart(date, new Date(), hour)) {
-        throw new Error("BAD_REQUEST: 登録受付開始前のため回答を保存できません");
-      }
-      if (isPastQuestRegistrationCutoff(date, new Date(), hour)) {
-        throw new Error("BAD_REQUEST: 登録受付締切を過ぎているため回答を保存できません");
+      const isNewRegistration = !store.answers.has(date);
+      if (isNewRegistration) {
+        if (isBeforeQuestRegistrationStart(date, new Date(), hour)) {
+          throw new Error("BAD_REQUEST: 登録受付開始前のため回答を保存できません");
+        }
+        if (isPastQuestRegistrationCutoff(date, new Date(), hour)) {
+          throw new Error("BAD_REQUEST: 登録受付締切を過ぎているため回答を保存できません");
+        }
       }
       const map = new Map<string, ChildAnswer>();
       for (const a of answers) map.set(a.questId, a.childAnswer);

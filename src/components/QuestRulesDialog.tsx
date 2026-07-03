@@ -2,12 +2,15 @@
  * @file QuestRulesDialog
  * @description クエスト（ルール）説明ダイアログ。子ども向けの要点を表示する（v5 仕様）。
  */
+import { useMemo } from "react";
 import { Dialog } from "@/components/ui/Dialog";
 import {
   formatQuestBonusDeadlineLabel,
   formatQuestRegistrationCutoffLabel,
+  formatQuestRegistrationStartLabel,
 } from "@/lib/deadline";
 import { todayLocal } from "@/lib/date";
+import type { BedtimeHour } from "@/types/api";
 
 /** ルール見出しと本文 */
 interface RuleSection {
@@ -19,12 +22,30 @@ interface RuleSection {
 
 /**
  * クエストルール本文（5分単位・v5 仕様）
+ * @param {BedtimeHour} bedtimeHour - 就寝時刻（時）
+ * @param {boolean} isRestDayEve - 休日前日か
  * @returns {RuleSection[]} セクション一覧
  */
-function buildQuestRuleSections(): RuleSection[] {
+function buildQuestRuleSections(
+  bedtimeHour: BedtimeHour,
+  isRestDayEve: boolean,
+): RuleSection[] {
   const today = todayLocal();
-  const bonusLabel = formatQuestBonusDeadlineLabel(today);
-  const cutoffLabel = formatQuestRegistrationCutoffLabel();
+  const startLabel = formatQuestRegistrationStartLabel(bedtimeHour);
+  const bonusLabel = formatQuestBonusDeadlineLabel(today, bedtimeHour);
+  const cutoffLabel = formatQuestRegistrationCutoffLabel(bedtimeHour);
+  const bedtimeLabel = formatQuestRegistrationCutoffLabel(bedtimeHour);
+
+  const registrationItems = isRestDayEve
+    ? [
+        "休日前日は「今日の寝る時間」を選べる（21:00 / 22:00 / 23:00）",
+        `受付は ${startLabel}〜${cutoffLabel}（寝る時間の1時間前から）`,
+        `${bonusLabel} までに登録すると定時ボーナス +15分！（寝る時間の30分前まで）`,
+      ]
+    : [
+        `受付は ${startLabel}〜${cutoffLabel}（寝る時間 ${bedtimeLabel} の1時間前から）`,
+        `${bonusLabel} までに登録すると定時ボーナス +15分！（寝る時間の30分前まで）`,
+      ];
 
   return [
     {
@@ -39,9 +60,7 @@ function buildQuestRuleSections(): RuleSection[] {
     {
       title: "クエスト登録の時間",
       items: [
-        `平日は ${bonusLabel} までに登録すると定時ボーナス +15分！（${cutoffLabel} まで受付）`,
-        "休日前日は「今日の寝る時間」を選べる（21:00 / 22:00 / 23:00）",
-        "寝る時間の30分前までに登録すると +15分！",
+        ...registrationItems,
         "1問目「寝る準備は終わっていますか？」に「できなかった」と答えた日は、時間内でも +15分 は付かない",
         `${cutoffLabel} を過ぎると「クエスト開始」が押せなくなるよ（-60分）`,
         "ママが採点する前なら、締切を過ぎても「やり直す」はできる",
@@ -77,14 +96,15 @@ function buildQuestRuleSections(): RuleSection[] {
   ];
 }
 
-/** クエストルール本文 */
-const QUEST_RULE_SECTIONS = buildQuestRuleSections();
-
 interface QuestRulesDialogProps {
   /** @type {boolean} 表示中か */
   open: boolean;
   /** @type {() => void} 閉じる */
   onClose: () => void;
+  /** @type {BedtimeHour} 就寝時刻（時） */
+  bedtimeHour?: BedtimeHour;
+  /** @type {boolean} 休日前日か */
+  isRestDayEve?: boolean;
 }
 
 /**
@@ -92,11 +112,21 @@ interface QuestRulesDialogProps {
  * @param {QuestRulesDialogProps} props - props
  * @returns {JSX.Element} ダイアログ
  */
-export function QuestRulesDialog({ open, onClose }: QuestRulesDialogProps) {
+export function QuestRulesDialog({
+  open,
+  onClose,
+  bedtimeHour = 21,
+  isRestDayEve = false,
+}: QuestRulesDialogProps) {
+  const sections = useMemo(
+    () => buildQuestRuleSections(bedtimeHour, isRestDayEve),
+    [bedtimeHour, isRestDayEve],
+  );
+
   return (
     <Dialog open={open} onClose={onClose} title="クエストのルール">
       <div className="flex flex-col gap-5 text-base leading-relaxed">
-        {QUEST_RULE_SECTIONS.map((section) => (
+        {sections.map((section) => (
           <section key={section.title}>
             <h3 className="mb-2 font-bold text-primary">{section.title}</h3>
             <ul className="list-disc space-y-1 pl-5 text-gray-800">

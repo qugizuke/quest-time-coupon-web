@@ -3,15 +3,18 @@
  * @description 1問ずつクエストに回答する画面（宿題条件分岐対応）。
  */
 import { useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import type { ChildAnswer } from "@/types/api";
+import { homeQuery } from "@/api/queries";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { LoadingScreen } from "@/components/layout/LoadingScreen";
 import { Button } from "@/components/ui/Button";
 import { useDailyQuests } from "@/hooks/useDailyQuests";
 import { useQuestDraft } from "@/hooks/useQuestDraft";
 import { todayLocal } from "@/lib/date";
-import { ensureQuestSessionStarted } from "@/lib/sessionStorage";
+import { isBeforeQuestRegistrationStart } from "@/lib/deadline";
+import { ensureQuestSessionStarted, getBedtimeHourDraft } from "@/lib/sessionStorage";
 
 const CHOICES: { value: ChildAnswer; label: string }[] = [
   { value: 1, label: "できた" },
@@ -26,6 +29,7 @@ const CHOICES: { value: ChildAnswer; label: string }[] = [
 export function QuestPage() {
   const navigate = useNavigate();
   const date = todayLocal();
+  const { data: homeData } = useQuery(homeQuery);
   const { data: daily, isLoading } = useDailyQuests();
   const {
     draft,
@@ -43,6 +47,15 @@ export function QuestPage() {
   useEffect(() => {
     ensureQuestSessionStarted(date);
   }, [date]);
+
+  useEffect(() => {
+    if (!homeData || homeData.questAction !== "start") return;
+    const bedtimeHour =
+      getBedtimeHourDraft(date) ?? homeData.bedtimeHour ?? 21;
+    if (isBeforeQuestRegistrationStart(date, new Date(), bedtimeHour)) {
+      navigate("/", { replace: true });
+    }
+  }, [date, homeData, navigate]);
 
   if (isLoading || !daily || !ready || !currentQuest) {
     return <LoadingScreen />;

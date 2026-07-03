@@ -90,7 +90,9 @@ export function HomePage() {
   }
 
   const canStartQuest =
-    data.questAction === "start" && !deadline.pastRegistrationCutoff;
+    data.questAction === "start" &&
+    !deadline.pastRegistrationCutoff &&
+    !deadline.beforeRegistrationStart;
   const showMissedStartMessage =
     deadline.pastRegistrationCutoff &&
     data.todayStatus === "unanswered" &&
@@ -121,12 +123,22 @@ export function HomePage() {
               : STATUS_LABEL[data.todayStatus]}
           </p>
           {!deadline.pastRegistrationCutoff &&
+            deadline.beforeRegistrationStart &&
+            data.questAction === "start" && (
+              <p className="mt-2 text-sm text-muted">
+                {deadline.registrationStartLabel} からクエスト開始できます（
+                {deadline.registrationCutoffLabel} まで受付）
+              </p>
+            )}
+          {!deadline.pastRegistrationCutoff &&
             (data.questAction === "start" || data.questAction === "retry") &&
+            !deadline.beforeRegistrationStart &&
             !deadline.showBonusCountdown &&
             !deadline.showRegistrationCountdown && (
               <p className="mt-2 text-sm text-muted">
                 {deadline.bonusDeadlineLabel} までに登録すると +15分！（寝る準備が
-                できている日のみ・{deadline.registrationCutoffLabel} まで受付）
+                できている日のみ・{deadline.registrationStartLabel}〜
+                {deadline.registrationCutoffLabel} 受付）
               </p>
             )}
         </Card>
@@ -199,7 +211,12 @@ export function HomePage() {
         </div>
       </div>
 
-      <QuestRulesDialog open={rulesOpen} onClose={() => setRulesOpen(false)} />
+      <QuestRulesDialog
+        open={rulesOpen}
+        onClose={() => setRulesOpen(false)}
+        bedtimeHour={bedtimeHour}
+        isRestDayEve={showBedtimePicker}
+      />
 
       <div className="pointer-events-none fixed inset-x-0 bottom-4 z-10 mx-auto flex max-w-lg justify-end px-4">
         <Button

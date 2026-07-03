@@ -85,6 +85,32 @@ function calcMockRegistrationTimingAdjustment(date: string): number {
 }
 
 /**
+ * モック用の定時登録ボーナス理由文を返す
+ * @param {string} date - 対象日
+ * @param {number} adjustment - 調整分数
+ * @returns {string} 表示理由
+ */
+function describeMockRegistrationTimingReason(
+  date: string,
+  adjustment: number,
+): string {
+  if (adjustment > 0) {
+    return `定時登録ボーナス +${adjustment}分（寝る準備確認済み）`;
+  }
+  const bedtimePrep = mockBedtimePrepEvaluation(date);
+  if (!bedtimePrep) {
+    return "定時登録ボーナスなし（寝る準備が未採点です）";
+  }
+  if (bedtimePrep.childAnswer !== 1) {
+    return "定時登録ボーナスなし（寝る準備をできなかったと回答しました）";
+  }
+  if (!bedtimePrep.actualDone) {
+    return "定時登録ボーナスなし（寝る準備が確認できませんでした）";
+  }
+  return "定時登録ボーナスなし（ボーナス締切を過ぎていました）";
+}
+
+/**
  * モック用の寝る準備判定材料を返す
  * @param {string} date - 対象日
  * @returns {{ childAnswer: ChildAnswer; actualDone: boolean } | undefined} 判定材料
@@ -475,18 +501,10 @@ export async function mockApi<T>(
           }));
           const registrationTimingAdjustment =
             calcMockRegistrationTimingAdjustment(date);
-          const submittedAt = store.submittedAtByDate.get(date);
-          const submitted = submittedAt ? new Date(submittedAt) : undefined;
-          const bedtimeHour = store.bedtimeByDate.get(date) ?? 21;
-          const isPastBonusDeadline =
-            submitted !== undefined &&
-            isPastQuestBonusDeadline(date, submitted, bedtimeHour);
-          const registrationTimingReason =
-            registrationTimingAdjustment > 0
-              ? `定時登録ボーナス +${registrationTimingAdjustment}分（寝る準備確認済み）`
-              : isPastBonusDeadline
-                ? "定時登録ボーナスなし（ボーナス締切を過ぎていました）"
-                : "定時登録ボーナスなし（寝る準備が確認できませんでした）";
+          const registrationTimingReason = describeMockRegistrationTimingReason(
+            date,
+            registrationTimingAdjustment,
+          );
           const bedtimePrepPenalty = calcMockBedtimePrepPenalty(date);
           const totalPoints = calcMockTotalPoints(date);
           const details = [...dayAnswers.entries()]

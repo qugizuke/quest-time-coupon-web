@@ -18,21 +18,28 @@ type DraftState = {
  * @param {DailyQuests} daily - クエスト定義
  * @param {Map<string, ChildAnswer | undefined>} savedMap - 旧 answers マップ
  * @param {Record<string, ChildAnswer> | undefined} savedGateAnswers - 保存済み gateAnswers
+ * @param {string | undefined} savedFollowUpQuestId - 追問表示中の questId
  * @returns {Record<string, ChildAnswer>} 補完済み gateAnswers
  */
 function buildGateAnswers(
   daily: DailyQuests,
   savedMap: Map<string, ChildAnswer | undefined>,
   savedGateAnswers: Record<string, ChildAnswer> | undefined,
+  savedFollowUpQuestId: string | undefined,
 ): Record<string, ChildAnswer> {
   const gateAnswers = { ...(savedGateAnswers ?? {}) };
   for (const quest of daily.quests) {
     if (!isNonPersistedGateQuest(quest) || gateAnswers[quest.id] !== undefined) {
       continue;
     }
+    if (savedFollowUpQuestId === quest.id) {
+      gateAnswers[quest.id] = quest.conditional?.followUpWhen ?? 1;
+      continue;
+    }
     const legacyAnswer = savedMap.get(quest.id);
-    if (legacyAnswer === undefined) continue;
-    gateAnswers[quest.id] = quest.conditional?.followUpWhen ?? 1;
+    if (legacyAnswer === 1 || legacyAnswer === 0) {
+      gateAnswers[quest.id] = legacyAnswer;
+    }
   }
   return gateAnswers;
 }
@@ -49,7 +56,12 @@ function buildAnswers(
   const savedMap = new Map(
     (saved?.answers ?? []).map((a) => [a.questId, a.childAnswer]),
   );
-  const gateAnswers = buildGateAnswers(daily, savedMap, saved?.gateAnswers);
+  const gateAnswers = buildGateAnswers(
+    daily,
+    savedMap,
+    saved?.gateAnswers,
+    saved?.followUpQuestId,
+  );
   return {
     answers: daily.quests.map((q) => ({
       questId: q.id,
@@ -150,7 +162,13 @@ export function useQuestDraft(date: string, daily: DailyQuests | undefined) {
         const answers = draft.answers.map((a) =>
           a.questId === currentQuest.id ? { ...a, childAnswer } : a,
         );
-        persist({ ...draft, answers, followUpQuestId: undefined });
+        const gateAnswers = isNonPersistedGateQuest(currentQuest)
+          ? {
+              ...(draft.gateAnswers ?? {}),
+              [currentQuest.id]: currentQuest.conditional?.followUpWhen ?? 1,
+            }
+          : draft.gateAnswers;
+        persist({ ...draft, answers, gateAnswers, followUpQuestId: undefined });
         return;
       }
 

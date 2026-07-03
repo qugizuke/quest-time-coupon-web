@@ -115,6 +115,34 @@ describe("mockApi answers 受付タイミング", () => {
     const home = await mockApi<{ bedtimeHour: number }>("home", undefined, { date });
     expect(home.bedtimeHour).toBe(21);
   });
+
+  it("回答済みの条件付きクエストは retry で削除できない", async () => {
+    const date = "2026-06-22";
+    vi.setSystemTime(new Date(2026, 5, 22, 20, 30, 0));
+
+    await mockApi("answers", {
+      method: "POST",
+      body: JSON.stringify({
+        date,
+        answers: [
+          ...sampleAnswers,
+          { questId: "homework-done-today", childAnswer: 1 as const },
+        ],
+        bedtimeHour: 21,
+      }),
+    });
+
+    await expect(
+      mockApi("answers", {
+        method: "POST",
+        body: JSON.stringify({
+          date,
+          answers: sampleAnswers,
+          bedtimeHour: 21,
+        }),
+      }),
+    ).rejects.toThrow("回答済みの条件付きクエストは削除できません");
+  });
 });
 
 describe("mockApi registrationSetting 競合ガード", () => {

@@ -265,10 +265,18 @@ function validateMockRetryImmutableAnswers(
   existingAnswers: Map<string, ChildAnswer> | undefined,
   nextAnswers: { questId: string; childAnswer: ChildAnswer }[],
 ): void {
+  const nextMap = new Map(nextAnswers.map((answer) => [answer.questId, answer.childAnswer]));
+  for (const quest of daily.quests) {
+    if (quest.scoringRole === "conditional" && existingAnswers?.has(quest.id) && !nextMap.has(quest.id)) {
+      throw new Error(
+        `BAD_REQUEST: 回答済みの条件付きクエストは削除できません questId=${quest.id}`,
+      );
+    }
+  }
   const existingAnswer = existingAnswers?.get(BEDTIME_PREP_QUEST_ID);
   if (existingAnswer === undefined) return;
-  const nextAnswer = nextAnswers.find((answer) => answer.questId === BEDTIME_PREP_QUEST_ID);
-  if (nextAnswer && nextAnswer.childAnswer !== existingAnswer) {
+  const nextAnswer = nextMap.get(BEDTIME_PREP_QUEST_ID);
+  if (nextAnswer !== undefined && nextAnswer !== existingAnswer) {
     throw new Error(
       `BAD_REQUEST: 回答済みの登録ゲートは変更できません questId=${BEDTIME_PREP_QUEST_ID}`,
     );

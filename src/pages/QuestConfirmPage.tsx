@@ -115,7 +115,7 @@ export function QuestConfirmPage() {
       return;
     }
     if (homeData.questAction !== "start") return;
-    const bedtimeHour = homeData.bedtimeHour ?? getBedtimeHourDraft(date) ?? 21;
+    const bedtimeHour = getBedtimeHourDraft(date) ?? homeData.bedtimeHour ?? 21;
     const now = new Date();
     if (
       isBeforeQuestRegistrationStart(date, now, bedtimeHour) ||
@@ -132,7 +132,7 @@ export function QuestConfirmPage() {
       }
       const answers = buildSubmittableAnswers(daily, draft);
       const bedtimeHour: BedtimeHour | undefined = isWeekendEve(date)
-        ? (homeData?.bedtimeHour ?? getBedtimeHourDraft(date) ?? 21)
+        ? (getBedtimeHourDraft(date) ?? homeData?.bedtimeHour ?? 21)
         : undefined;
       return postAnswers({ date, answers, bedtimeHour });
     },

@@ -52,6 +52,20 @@ const REGISTRATION_ON_TIME_BONUS = 15;
 const MISSED_REGISTRATION_PENALTY = -60;
 
 /**
+ * 就寝時刻 payload が有効か
+ * @param {number | undefined} bedtimeHour - 就寝時刻
+ * @returns {boolean} 未指定または 21/22/23 なら true
+ */
+function isValidOptionalBedtimeHour(bedtimeHour: number | undefined): boolean {
+  return (
+    bedtimeHour === undefined ||
+    bedtimeHour === 21 ||
+    bedtimeHour === 22 ||
+    bedtimeHour === 23
+  );
+}
+
+/**
  * モック用の定時登録加減点を算出する（クエスト点は未シミュレート）
  * @param {string} date - 対象日
  * @returns {number} 定時登録ボーナスまたは未登録ペナルティ
@@ -221,6 +235,9 @@ function validateMockAnswers(
  * @param {GradeAdjustment[]} adjustments - 加減点 payload
  */
 function validateMockAdjustments(adjustments: GradeAdjustment[]): void {
+  if (!Array.isArray(adjustments)) {
+    throw new Error("BAD_REQUEST: adjustments は配列である必要があります");
+  }
   const seen = new Set<string>();
   const definitions = new Map(adjustmentDefinitions.items.map((def) => [def.code, def]));
   for (const adj of adjustments) {
@@ -233,6 +250,9 @@ function validateMockAdjustments(adjustments: GradeAdjustment[]): void {
     }
     if (def.kind !== adj.kind) {
       throw new Error(`BAD_REQUEST: kind と code の組み合わせが不正 code=${adj.code}`);
+    }
+    if (typeof adj.minutes !== "number" || !Number.isFinite(adj.minutes)) {
+      throw new Error(`BAD_REQUEST: minutes は数値である必要があります code=${adj.code}`);
     }
     if (adj.minutes < 10 || adj.minutes > 60 || adj.minutes % 10 !== 0) {
       throw new Error(`BAD_REQUEST: minutes は10〜60の10分刻み code=${adj.code}`);
@@ -315,6 +335,15 @@ export async function mockApi<T>(
 
     case "registrationSetting": {
       const { date, bedtimeHour } = body as { date: string; bedtimeHour: number };
+      if (!isValidOptionalBedtimeHour(bedtimeHour)) {
+        throw new Error(`BAD_REQUEST: bedtimeHour が不正です bedtimeHour=${String(bedtimeHour)}`);
+      }
+      if (store.missedRegistrationDates.has(date)) {
+        throw new Error("ALREADY_RESULT: 結果作成済みのため設定できません");
+      }
+      if (isPastQuestRegistrationCutoff(date, new Date(), bedtimeHour)) {
+        throw new Error("BAD_REQUEST: 登録受付締切を過ぎているため設定できません");
+      }
       store.bedtimeByDate.set(date, bedtimeHour);
       return { date, bedtimeHour } as T;
     }
@@ -326,12 +355,18 @@ export async function mockApi<T>(
         bedtimeHour?: number;
       };
       validateMockAnswers(answers);
+      if (!isValidOptionalBedtimeHour(bedtimeHour)) {
+        throw new Error(`BAD_REQUEST: bedtimeHour が不正です bedtimeHour=${String(bedtimeHour)}`);
+      }
       if (store.gradedDates.has(date)) {
         throw new Error("ALREADY_GRADED: 採点済みのため上書きできません");
       }
-      const hour = bedtimeHour ?? store.bedtimeByDate.get(date) ?? 21;
+      const hour = store.bedtimeByDate.get(date) ?? bedtimeHour ?? 21;
       const isNewRegistration = !store.answers.has(date);
       if (isNewRegistration) {
+        if (store.missedRegistrationDates.has(date)) {
+          throw new Error("ALREADY_RESULT: 結果作成済みのため回答を保存できません");
+        }
         if (isBeforeQuestRegistrationStart(date, new Date(), hour)) {
           throw new Error("BAD_REQUEST: 登録受付開始前のため回答を保存できません");
         }
@@ -341,7 +376,7 @@ export async function mockApi<T>(
       }
       const map = new Map<string, ChildAnswer>();
       for (const a of answers) map.set(a.questId, a.childAnswer);
-      const submittedAt = new Date().toISOString();
+      const submittedAt = store.submittedAtByDate.get(date) ?? new Date().toISOString();
       store.answers.set(date, map);
       store.submittedAtByDate.set(date, submittedAt);
       store.missedRegistrationDates.delete(date);
@@ -474,6 +509,7 @@ export async function mockApi<T>(
           totalPoints: MISSED_REGISTRATION_PENALTY,
           acknowledged: store.acknowledgedDates.has(date),
           registrationTimingAdjustment: MISSED_REGISTRATION_PENALTY,
+          registrationTimingReason: `登録締切までにクエストを登録しなかったため ${MISSED_REGISTRATION_PENALTY}分`,
           adjustments: [],
           details: [],
         }));
@@ -482,6 +518,15 @@ export async function mockApi<T>(
 
     case "resultsAck": {
       const { date } = body as { date: string };
+      if (
+        !store.gradedDates.has(date) &&
+        !store.missedRegistrationDates.has(date)
+      ) {
+        throw new Error("NOT_FOUND: 結果がありません");
+      }
+      if (store.acknowledgedDates.has(date)) {
+        throw new Error("ALREADY_ACKNOWLEDGED: 確認済みです");
+      }
       const delta = calcMockTotalPoints(date);
       store.acknowledgedDates.add(date);
       let penaltyOffset = 0;
@@ -493,7 +538,7 @@ export async function mockApi<T>(
         store.balanceMinutes += delta;
       }
       return {
-        appliedDelta: delta,
+        appliedDelta: delta - penaltyOffset,
         penaltyOffset,
         displayBalance: Math.max(0, store.balanceMinutes),
         penaltyMinutes: store.penaltyMinutes,

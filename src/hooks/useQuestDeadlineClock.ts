@@ -7,8 +7,10 @@ import {
   formatDeadlineCountdown,
   formatQuestBonusDeadlineLabel,
   formatQuestRegistrationCutoffLabel,
+  formatQuestRegistrationStartLabel,
   getMsUntilQuestBonusDeadline,
   getMsUntilQuestRegistrationCutoff,
+  isBeforeQuestRegistrationStart,
   isPastQuestBonusDeadline,
   isPastQuestRegistrationCutoff,
   isQuestBonusCountdownVisible,
@@ -29,10 +31,14 @@ export interface QuestDeadlineClock {
   registrationCountdownFormatted: string;
   /** 登録受付締切を過ぎている */
   pastRegistrationCutoff: boolean;
+  /** 登録受付開始前 */
+  beforeRegistrationStart: boolean;
   /** 定時ボーナス締切を過ぎている */
   pastBonusDeadline: boolean;
   /** 定時ボーナス締切ラベル（例: "20:30"） */
   bonusDeadlineLabel: string;
+  /** 登録受付開始ラベル（例: "20:00"） */
+  registrationStartLabel: string;
   /** 登録受付締切ラベル（例: "21:00"） */
   registrationCutoffLabel: string;
 }
@@ -60,6 +66,7 @@ export function useQuestDeadlineClock(
   }, [active, date, bedtimeHour]);
 
   const pastRegistrationCutoff = isPastQuestRegistrationCutoff(date, now, bedtimeHour);
+  const beforeRegistrationStart = isBeforeQuestRegistrationStart(date, now, bedtimeHour);
   const pastBonusDeadline = isPastQuestBonusDeadline(date, now, bedtimeHour);
   const showBonusCountdown =
     active && isQuestBonusCountdownVisible(date, now, bedtimeHour);
@@ -76,8 +83,10 @@ export function useQuestDeadlineClock(
       getMsUntilQuestRegistrationCutoff(date, now, bedtimeHour),
     ),
     pastRegistrationCutoff,
+    beforeRegistrationStart,
     pastBonusDeadline,
     bonusDeadlineLabel: formatQuestBonusDeadlineLabel(date, bedtimeHour),
+    registrationStartLabel: formatQuestRegistrationStartLabel(bedtimeHour),
     registrationCutoffLabel: formatQuestRegistrationCutoffLabel(bedtimeHour),
   };
 }

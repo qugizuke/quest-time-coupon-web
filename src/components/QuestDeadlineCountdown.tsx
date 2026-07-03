@@ -1,6 +1,6 @@
 /**
  * @file QuestDeadlineCountdown
- * @description 未着手時、20:00 以降に定時ボーナス締切（20:30）までのカウントダウンを表示する。
+ * @description 未着手時、受付開始以降に定時ボーナス締切までのカウントダウンを表示する。
  */
 
 /** 表示用 props */

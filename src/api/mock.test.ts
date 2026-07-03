@@ -4,8 +4,16 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mockApi } from "./mock";
+import type { ChildAnswer } from "@/types/api";
 
-const sampleAnswers = [{ questId: "q1", childAnswer: 1 as const }];
+const sampleAnswers: { questId: string; childAnswer: ChildAnswer }[] = [
+  { questId: "bedtime-prep", childAnswer: 1 },
+  { questId: "sleep-on-time-yesterday", childAnswer: 1 },
+  { questId: "brush-teeth-gargle-am", childAnswer: 1 },
+  { questId: "wash-hands-gargle-after-school", childAnswer: 1 },
+  { questId: "save-water-hot-water", childAnswer: 1 },
+  { questId: "listen-to-mama-before-warning", childAnswer: 1 },
+];
 
 describe("mockApi answers 受付タイミング", () => {
   beforeEach(() => {
@@ -43,7 +51,11 @@ describe("mockApi answers 受付タイミング", () => {
       method: "POST",
       body: JSON.stringify({
         date,
-        answers: [{ questId: "q1", childAnswer: 0 }],
+        answers: sampleAnswers.map((answer) =>
+          answer.questId === "sleep-on-time-yesterday"
+            ? { ...answer, childAnswer: 0 as const }
+            : answer,
+        ),
         bedtimeHour: 21,
       }),
     });

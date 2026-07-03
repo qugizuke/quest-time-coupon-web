@@ -4,13 +4,20 @@
  */
 import type { ChildAnswer, GradeAdjustment, HomeData } from "@/types/api";
 import { todayLocal } from "@/lib/date";
-import { isBeforeQuestRegistrationStart, isPastQuestRegistrationCutoff, isWeekendEve } from "@/lib/deadline";
+import {
+  isBeforeQuestRegistrationStart,
+  isPastQuestBonusDeadline,
+  isPastQuestRegistrationCutoff,
+  isWeekendEve,
+} from "@/lib/deadline";
 import {
   BEDTIME_PREP_QUEST_ID,
   calcBedtimePrepFalseClaimPenalty,
   canApplyBedtimePrepRegistrationBonus,
 } from "@/lib/registrationBonus";
 import { isUnknownChildAnswer } from "@/lib/labels";
+import daily from "../../quests/daily.json";
+import adjustmentDefinitions from "../../adjustments/grade.json";
 
 interface MockStore {
   balanceMinutes: number;
@@ -21,6 +28,7 @@ interface MockStore {
   acknowledgedDates: Set<string>;
   missedRegistrationDates: Set<string>;
   bedtimeByDate: Map<string, number>;
+  submittedAtByDate: Map<string, string>;
   adjustmentsByDate: Map<string, GradeAdjustment[]>;
 }
 
@@ -33,6 +41,7 @@ const store: MockStore = {
   acknowledgedDates: new Set(),
   missedRegistrationDates: new Set(),
   bedtimeByDate: new Map(),
+  submittedAtByDate: new Map(),
   adjustmentsByDate: new Map(),
 };
 
@@ -51,6 +60,11 @@ function calcMockRegistrationTimingAdjustment(date: string): number {
   if (store.missedRegistrationDates.has(date)) {
     return MISSED_REGISTRATION_PENALTY;
   }
+  const submittedAt = store.submittedAtByDate.get(date);
+  if (!submittedAt) return 0;
+  const submitted = new Date(submittedAt);
+  const bedtimeHour = store.bedtimeByDate.get(date) ?? 21;
+  if (isPastQuestBonusDeadline(date, submitted, bedtimeHour)) return 0;
   return canApplyBedtimePrepRegistrationBonus(mockBedtimePrepEvaluation(date))
     ? REGISTRATION_ON_TIME_BONUS
     : 0;
@@ -149,6 +163,73 @@ function validateMockGrades(
 }
 
 /**
+ * モック回答 payload を本番 API と同じ要点で検証する
+ * @param {{ questId: string; childAnswer: ChildAnswer }[] | undefined} answers - 回答 payload
+ */
+function validateMockAnswers(
+  answers: { questId: string; childAnswer: ChildAnswer }[] | undefined,
+): void {
+  if (!Array.isArray(answers)) {
+    throw new Error("BAD_REQUEST: date と answers が必要です");
+  }
+  const seen = new Set<string>();
+  const questMap = new Map(daily.quests.map((q) => [q.id, q]));
+  for (const answer of answers) {
+    const quest = questMap.get(answer.questId);
+    if (!quest) {
+      throw new Error(`BAD_REQUEST: 未知の questId=${answer.questId}`);
+    }
+    if (seen.has(answer.questId)) {
+      throw new Error(`BAD_REQUEST: questId が重複しています questId=${answer.questId}`);
+    }
+    seen.add(answer.questId);
+    if (answer.childAnswer !== 1 && answer.childAnswer !== 0 && answer.childAnswer !== -1) {
+      throw new Error(
+        `BAD_REQUEST: childAnswer が不正です questId=${answer.questId}`,
+      );
+    }
+    if (quest.answerMode === "binary" && answer.childAnswer === -1) {
+      throw new Error(`BAD_REQUEST: 2択クエストに分からないは使えません questId=${answer.questId}`);
+    }
+  }
+  for (const quest of daily.quests) {
+    if (quest.conditional?.persistGateAnswer === false) continue;
+    if (!seen.has(quest.id)) {
+      throw new Error(`BAD_REQUEST: 未回答 questId=${quest.id}`);
+    }
+  }
+}
+
+/**
+ * モック任意加減点 payload を検証する
+ * @param {GradeAdjustment[]} adjustments - 加減点 payload
+ */
+function validateMockAdjustments(adjustments: GradeAdjustment[]): void {
+  const seen = new Set<string>();
+  const definitions = new Map(adjustmentDefinitions.items.map((def) => [def.code, def]));
+  for (const adj of adjustments) {
+    const def = definitions.get(adj.code);
+    if (!def) {
+      throw new Error(`BAD_REQUEST: 未知の調整項目 code=${adj.code}`);
+    }
+    if (adj.kind !== "bonus" && adj.kind !== "penalty") {
+      throw new Error(`BAD_REQUEST: 不正な kind=${String(adj.kind)} code=${adj.code}`);
+    }
+    if (def.kind !== adj.kind) {
+      throw new Error(`BAD_REQUEST: kind と code の組み合わせが不正 code=${adj.code}`);
+    }
+    if (adj.minutes < 10 || adj.minutes > 60 || adj.minutes % 10 !== 0) {
+      throw new Error(`BAD_REQUEST: minutes は10〜60の10分刻み code=${adj.code}`);
+    }
+    const key = `${adj.kind}:${adj.code}`;
+    if (seen.has(key)) {
+      throw new Error(`BAD_REQUEST: 重複 code=${adj.code}`);
+    }
+    seen.add(key);
+  }
+}
+
+/**
  * モック API ハンドラ
  * @param {string} action - action 名
  * @param {RequestInit} [init] - リクエスト
@@ -228,6 +309,7 @@ export async function mockApi<T>(
         answers: { questId: string; childAnswer: ChildAnswer }[];
         bedtimeHour?: number;
       };
+      validateMockAnswers(answers);
       if (store.gradedDates.has(date)) {
         throw new Error("ALREADY_GRADED: 採点済みのため上書きできません");
       }
@@ -243,13 +325,15 @@ export async function mockApi<T>(
       }
       const map = new Map<string, ChildAnswer>();
       for (const a of answers) map.set(a.questId, a.childAnswer);
+      const submittedAt = new Date().toISOString();
       store.answers.set(date, map);
+      store.submittedAtByDate.set(date, submittedAt);
       store.missedRegistrationDates.delete(date);
       if (bedtimeHour != null) {
         store.bedtimeByDate.set(date, bedtimeHour);
       }
       return {
-        submittedAt: new Date().toISOString(),
+        submittedAt,
         overwritten: true,
       } as T;
     }
@@ -287,6 +371,7 @@ export async function mockApi<T>(
           throw new Error("ALREADY_GRADED: 再採点はできません");
         }
         validateMockGrades(date, grades);
+        validateMockAdjustments(adjustments ?? []);
         store.gradedDates.add(date);
         store.grades.set(
           date,

@@ -341,10 +341,14 @@ export async function mockApi<T>(
       if (bedtimeHour !== 21 && !isWeekendEve(date)) {
         throw new Error("BAD_REQUEST: 休日前日以外は bedtimeHour を変更できません");
       }
-      if (store.missedRegistrationDates.has(date)) {
+      if (store.missedRegistrationDates.has(date) || store.gradedDates.has(date)) {
         throw new Error("ALREADY_RESULT: 結果作成済みのため設定できません");
       }
-      if (isPastQuestRegistrationCutoff(date, new Date(), bedtimeHour)) {
+      if (store.answers.has(date) || store.submittedAtByDate.has(date)) {
+        throw new Error("ALREADY_ANSWERED: 回答後は就寝時刻を変更できません");
+      }
+      const currentHour = store.bedtimeByDate.get(date) ?? 21;
+      if (isPastQuestRegistrationCutoff(date, new Date(), currentHour)) {
         throw new Error("BAD_REQUEST: 登録受付締切を過ぎているため設定できません");
       }
       store.bedtimeByDate.set(date, bedtimeHour);
@@ -370,7 +374,7 @@ export async function mockApi<T>(
       const hour = store.bedtimeByDate.get(date) ?? bedtimeHour ?? 21;
       const isNewRegistration = !store.answers.has(date);
       if (isNewRegistration) {
-        if (store.missedRegistrationDates.has(date)) {
+        if (store.missedRegistrationDates.has(date) || store.gradedDates.has(date)) {
           throw new Error("ALREADY_RESULT: 結果作成済みのため回答を保存できません");
         }
         if (isBeforeQuestRegistrationStart(date, new Date(), hour)) {
@@ -391,7 +395,7 @@ export async function mockApi<T>(
       }
       return {
         submittedAt,
-        overwritten: true,
+        overwritten: !isNewRegistration,
       } as T;
     }
 

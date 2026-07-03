@@ -57,6 +57,25 @@ function confirmationTitle(quest: QuestDefinition): string {
 }
 
 /**
+ * 確認画面に表示する行を返す
+ * @param {DailyQuests} daily - クエスト定義
+ * @param {QuestDraft} draft - 下書き
+ * @returns {{ questId: string; title: string; childAnswer: ChildAnswer }[]} 表示行
+ */
+function buildConfirmationItems(
+  daily: DailyQuests,
+  draft: QuestDraft,
+): { questId: string; title: string; childAnswer: ChildAnswer }[] {
+  const answers = buildSubmittableAnswers(daily, draft);
+  const answerMap = new Map(answers.map((answer) => [answer.questId, answer.childAnswer]));
+  return daily.quests.flatMap((q) => {
+    const childAnswer = answerMap.get(q.id);
+    if (childAnswer === undefined) return [];
+    return [{ questId: q.id, title: confirmationTitle(q), childAnswer }];
+  });
+}
+
+/**
  * 最終確認画面
  * @returns {JSX.Element} ページ
  */
@@ -67,6 +86,21 @@ export function QuestConfirmPage() {
   const { data: daily } = useDailyQuests();
   const { data: homeData } = useQuery(homeQuery);
   const draft = getQuestDraft(date);
+  let confirmationItems:
+    | { questId: string; title: string; childAnswer: ChildAnswer }[]
+    | null = null;
+  let draftError: string | null = null;
+
+  if (draft && daily) {
+    try {
+      confirmationItems = buildConfirmationItems(daily, draft);
+    } catch (error) {
+      draftError =
+        error instanceof Error
+          ? error.message
+          : "QuestConfirmPage: 下書きが不完全です";
+    }
+  }
 
   const mutation = useMutation({
     mutationFn: () => {
@@ -75,7 +109,7 @@ export function QuestConfirmPage() {
       }
       const answers = buildSubmittableAnswers(daily, draft);
       const bedtimeHour: BedtimeHour | undefined = isWeekendEve(date)
-        ? (getBedtimeHourDraft(date) ?? homeData?.bedtimeHour ?? 21)
+        ? (homeData?.bedtimeHour ?? getBedtimeHourDraft(date) ?? 21)
         : undefined;
       return postAnswers({ date, answers, bedtimeHour });
     },
@@ -86,10 +120,12 @@ export function QuestConfirmPage() {
     },
   });
 
-  if (!draft || !daily) {
+  if (!draft || !daily || !confirmationItems || draftError) {
     return (
       <AppLayout>
-        <p className="text-danger">下書きが見つかりません。</p>
+        <p className="text-danger">
+          {draftError ?? "下書きが見つかりません。"}
+        </p>
         <Button className="mt-4" onClick={() => navigate("/quest")}>
           クエストに戻る
         </Button>
@@ -103,31 +139,17 @@ export function QuestConfirmPage() {
         最後の確認
       </h1>
       <ul className="mb-6 flex flex-col gap-2">
-        {daily.quests.flatMap((q) => {
-          const a = draft.answers.find((x) => x.questId === q.id);
-          if (q.conditional?.persistGateAnswer === false) {
-            const gateAnswer = draft.gateAnswers?.[q.id];
-            if (
-              gateAnswer !== q.conditional.followUpWhen ||
-              a?.childAnswer === undefined
-            ) {
-              return [];
-            }
-          }
-          return (
+        {confirmationItems.map((item) => (
             <li
-              key={q.id}
+              key={item.questId}
               className="flex justify-between rounded-default bg-white px-4 py-3 shadow-sm"
             >
-              <span>{confirmationTitle(q)}</span>
+              <span>{item.title}</span>
               <span className="font-medium">
-                {a?.childAnswer !== undefined
-                  ? childAnswerLabel(a.childAnswer)
-                  : "—"}
+                {childAnswerLabel(item.childAnswer)}
               </span>
             </li>
-          );
-        })}
+          ))}
       </ul>
       {mutation.error && (
         <p className="mb-4 text-danger">

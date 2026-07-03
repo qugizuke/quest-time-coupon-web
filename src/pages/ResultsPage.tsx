@@ -100,6 +100,7 @@ export function ResultsPage() {
   const items = data?.items ?? [];
   const unacked = items.filter((i) => !i.acknowledged);
   const acked = items.filter((i) => i.acknowledged);
+  const hasMultipleUnacked = unacked.length > 1;
 
   return (
     <AppLayout>
@@ -149,6 +150,7 @@ export function ResultsPage() {
             </p>
             {!selected.acknowledged && penaltyPreviewOffset > 0 && (
               <p className="mt-2 text-sm text-muted">
+                {hasMultipleUnacked ? "この結果を先に確認すると、" : ""}
                 超過ペナルティ {penaltyPreviewOffset}分を相殺後、実質{" "}
                 {effectiveDeltaPreview >= 0 ? "+" : ""}
                 {effectiveDeltaPreview}分

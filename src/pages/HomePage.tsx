@@ -62,8 +62,14 @@ export function HomePage() {
   const registrationMutation = useMutation({
     mutationFn: (hour: BedtimeHour) =>
       postRegistrationSetting({ date: today, bedtimeHour: hour }),
-    onSuccess: () => {
+    onSuccess: (_data, hour) => {
+      setBedtimeHourDraft(today, hour);
       void queryClient.invalidateQueries({ queryKey: queryKeys.home });
+    },
+    onError: () => {
+      const fallbackHour = data?.bedtimeHour ?? 21;
+      setBedtimeHour(fallbackHour);
+      setBedtimeHourDraft(today, fallbackHour);
     },
   });
 
@@ -104,7 +110,6 @@ export function HomePage() {
    */
   function handleBedtimeChange(hour: BedtimeHour) {
     setBedtimeHour(hour);
-    setBedtimeHourDraft(today, hour);
     registrationMutation.mutate(hour);
   }
 

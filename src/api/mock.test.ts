@@ -63,3 +63,49 @@ describe("mockApi answers 受付タイミング", () => {
     expect(result.overwritten).toBe(true);
   });
 });
+
+describe("mockApi registrationSetting 競合ガード", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("回答後は就寝時刻を変更できない", async () => {
+    const date = "2026-06-06";
+    vi.setSystemTime(new Date(2026, 5, 6, 20, 30, 0));
+
+    await mockApi("answers", {
+      method: "POST",
+      body: JSON.stringify({ date, answers: sampleAnswers, bedtimeHour: 21 }),
+    });
+
+    await expect(
+      mockApi("registrationSetting", {
+        method: "POST",
+        body: JSON.stringify({ date, bedtimeHour: 23 }),
+      }),
+    ).rejects.toThrow("回答後は就寝時刻を変更できません");
+  });
+
+  it("現在の締切を過ぎた後に遅い bedtime へ延長できない", async () => {
+    const date = "2026-06-13";
+    vi.setSystemTime(new Date(2026, 5, 13, 20, 30, 0));
+
+    await mockApi("registrationSetting", {
+      method: "POST",
+      body: JSON.stringify({ date, bedtimeHour: 21 }),
+    });
+
+    vi.setSystemTime(new Date(2026, 5, 13, 21, 30, 0));
+
+    await expect(
+      mockApi("registrationSetting", {
+        method: "POST",
+        body: JSON.stringify({ date, bedtimeHour: 23 }),
+      }),
+    ).rejects.toThrow("登録受付締切を過ぎているため設定できません");
+  });
+});

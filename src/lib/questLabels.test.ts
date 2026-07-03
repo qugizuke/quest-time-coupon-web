@@ -10,6 +10,12 @@ const daily: DailyQuests = {
       order: 5,
       category: "routine",
       title: "今日は宿題をやりましたか？",
+      conditional: {
+        gateAnswerMode: "yesNo",
+        followUpWhen: 1,
+        followUpTitle: "宿題はテキパキとできましたか？",
+        persistGateAnswer: false,
+      },
     },
   ],
 };
@@ -23,6 +29,14 @@ describe("resolveQuestTitle", () => {
 
   it("旧 homework は旧質問文を返す", () => {
     expect(resolveQuestTitle(daily, "homework")).toBe("宿題をテキパキとやった");
+  });
+
+  it("採点画面用に追問タイトルを返す", () => {
+    expect(
+      resolveQuestTitle(daily, "homework-done-today", {
+        preferFollowUpTitle: true,
+      }),
+    ).toBe("宿題はテキパキとできましたか？");
   });
 
   it("廃止済み brush-teeth-pm は旧質問文を返す", () => {

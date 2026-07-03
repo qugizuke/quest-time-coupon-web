@@ -3,7 +3,7 @@
  * @description GAS Web App レスポンスの共有型。
  */
 
-/** 子どもの3択回答 */
+/** 子どもの回答値 */
 export type ChildAnswer = 1 | 0 | -1;
 
 /** 就寝時刻（時） */
@@ -44,12 +44,25 @@ export interface HomeData {
 /** クエストカテゴリ（routine=日々のルーティン, reminder=毎日注意されているもの） */
 export type QuestCategory = "routine" | "reminder";
 
+/** クエスト回答形式 */
+export type QuestAnswerMode = "default" | "binary";
+
+/** クエスト採点上の役割 */
+export type QuestScoringRole = "standard" | "registrationGate" | "conditional";
+
+/** 条件分岐ゲートの回答形式 */
+export type QuestGateAnswerMode = "yesNo";
+
 /** 条件分岐メタデータ */
 export interface QuestConditional {
+  /** ゲート問の回答形式 */
+  gateAnswerMode?: QuestGateAnswerMode;
   /** この回答のとき追問を表示 */
   followUpWhen: ChildAnswer;
   /** 追問のタイトル */
   followUpTitle: string;
+  /** ゲート回答を API 送信するか */
+  persistGateAnswer?: boolean;
 }
 
 /** クエスト定義 */
@@ -58,6 +71,10 @@ export interface QuestDefinition {
   order: number;
   /** @type {QuestCategory} カテゴリ（未設定時は routine 扱い） */
   category?: QuestCategory;
+  /** @type {QuestAnswerMode} 回答形式（未設定時は default） */
+  answerMode?: QuestAnswerMode;
+  /** @type {QuestScoringRole} 採点上の役割（未設定時は standard） */
+  scoringRole?: QuestScoringRole;
   title: string;
   hint?: string;
   /** 条件付き追問（宿題など） */
@@ -80,6 +97,8 @@ export interface QuestDraft {
   index: number;
   /** 追問表示中の questId */
   followUpQuestId?: string;
+  /** API に送らないゲート回答（例: 宿題をやったか） */
+  gateAnswers?: Record<string, ChildAnswer>;
 }
 
 /** 保護者裁量の加減点 */

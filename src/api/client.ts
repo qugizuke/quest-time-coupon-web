@@ -91,6 +91,9 @@ export function fetchResults(): Promise<{
     totalPoints: number;
     acknowledged: boolean;
     registrationTimingAdjustment: number;
+    registrationTimingReason?: string;
+    bedtimePrepPenalty?: number;
+    bedtimePrepPenaltyReason?: string;
     adjustments?: Array<{
       kind: "bonus" | "penalty";
       code: string;

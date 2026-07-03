@@ -18,15 +18,21 @@ const LEGACY_QUEST_TITLES: Record<string, string> = {
  * クエスト ID の表示タイトルを取得する
  * @param {DailyQuests | undefined} daily - 現在のクエスト定義
  * @param {string} questId - クエスト ID
+ * @param {{ preferFollowUpTitle?: boolean }} [options] - 表示オプション
  * @returns {string} 表示用タイトル
  */
 export function resolveQuestTitle(
   daily: DailyQuests | undefined,
   questId: string,
+  options: { preferFollowUpTitle?: boolean } = {},
 ): string {
+  const quest = daily?.quests.find((q) => q.id === questId);
+  if (options.preferFollowUpTitle && quest?.conditional?.followUpTitle) {
+    return quest.conditional.followUpTitle;
+  }
   return (
     LEGACY_QUEST_TITLES[questId] ??
-    daily?.quests.find((q) => q.id === questId)?.title ??
+    quest?.title ??
     questId
   );
 }

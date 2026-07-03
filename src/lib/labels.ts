@@ -11,12 +11,25 @@ export const CHILD_ANSWER_LABELS: Record<ChildAnswer, string> = {
   [-1]: "分からない",
 };
 
+/** はい / いいえ形式の表示文言 */
+export const YES_NO_LABELS: Record<0 | 1, string> = {
+  1: "はい",
+  0: "いいえ",
+};
+
 /**
  * 子ども回答のラベルを返す
  * @param {ChildAnswer} value - 回答値
+ * @param {"default" | "yesNo"} [mode] - 表示モード
  * @returns {string} 表示文言
  */
-export function childAnswerLabel(value: ChildAnswer): string {
+export function childAnswerLabel(
+  value: ChildAnswer,
+  mode: "default" | "yesNo" = "default",
+): string {
+  if (mode === "yesNo" && value !== -1) {
+    return YES_NO_LABELS[value];
+  }
   return CHILD_ANSWER_LABELS[value];
 }
 

@@ -51,10 +51,12 @@ export function HomePage() {
   const today = todayLocal();
   const showBedtimePicker = isWeekendEve(today);
   const [bedtimeHour, setBedtimeHour] = useState<BedtimeHour>(21);
+  const [confirmedBedtimeHour, setConfirmedBedtimeHour] = useState<BedtimeHour>(21);
 
   useEffect(() => {
     if (data?.bedtimeHour) {
       setBedtimeHour(data.bedtimeHour);
+      setConfirmedBedtimeHour(data.bedtimeHour);
       setBedtimeHourDraft(today, data.bedtimeHour);
     }
   }, [data?.bedtimeHour, today]);
@@ -62,8 +64,17 @@ export function HomePage() {
   const registrationMutation = useMutation({
     mutationFn: (hour: BedtimeHour) =>
       postRegistrationSetting({ date: today, bedtimeHour: hour }),
-    onSuccess: () => {
+    onSuccess: (saved) => {
+      const savedHour = saved.bedtimeHour as BedtimeHour;
+      setBedtimeHour(savedHour);
+      setConfirmedBedtimeHour(savedHour);
+      setBedtimeHourDraft(today, savedHour);
       void queryClient.invalidateQueries({ queryKey: queryKeys.home });
+    },
+    onError: () => {
+      const fallbackHour = confirmedBedtimeHour;
+      setBedtimeHour(fallbackHour);
+      setBedtimeHourDraft(today, fallbackHour);
     },
   });
 
@@ -92,7 +103,8 @@ export function HomePage() {
   const canStartQuest =
     data.questAction === "start" &&
     !deadline.pastRegistrationCutoff &&
-    !deadline.beforeRegistrationStart;
+    !deadline.beforeRegistrationStart &&
+    !registrationMutation.isPending;
   const showMissedStartMessage =
     deadline.pastRegistrationCutoff &&
     data.todayStatus === "unanswered" &&
@@ -104,7 +116,6 @@ export function HomePage() {
    */
   function handleBedtimeChange(hour: BedtimeHour) {
     setBedtimeHour(hour);
-    setBedtimeHourDraft(today, hour);
     registrationMutation.mutate(hour);
   }
 
@@ -136,8 +147,7 @@ export function HomePage() {
             !deadline.showBonusCountdown &&
             !deadline.showRegistrationCountdown && (
               <p className="mt-2 text-sm text-muted">
-                {deadline.bonusDeadlineLabel} までに登録すると +15分！（寝る準備が
-                できている日のみ・{deadline.registrationStartLabel}〜
+                {deadline.bonusDeadlineLabel} までに登録して、寝る準備をママが確認できたら +15分！（{deadline.registrationStartLabel}〜
                 {deadline.registrationCutoffLabel} 受付）
               </p>
             )}

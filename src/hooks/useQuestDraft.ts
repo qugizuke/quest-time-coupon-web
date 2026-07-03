@@ -6,25 +6,73 @@ import { useCallback, useEffect, useState } from "react";
 import type { ChildAnswer, DailyQuests, DraftAnswer, QuestDefinition } from "@/types/api";
 import { getQuestDraft, setQuestDraft } from "@/lib/sessionStorage";
 
+type DraftState = {
+  answers: DraftAnswer[];
+  index: number;
+  followUpQuestId?: string;
+  gateAnswers?: Record<string, ChildAnswer>;
+};
+
+/**
+ * 旧形式の下書きから gateAnswers を補完する
+ * @param {DailyQuests} daily - クエスト定義
+ * @param {Map<string, ChildAnswer | undefined>} savedMap - 旧 answers マップ
+ * @param {Record<string, ChildAnswer> | undefined} savedGateAnswers - 保存済み gateAnswers
+ * @param {string | undefined} savedFollowUpQuestId - 追問表示中の questId
+ * @returns {Record<string, ChildAnswer>} 補完済み gateAnswers
+ */
+function buildGateAnswers(
+  daily: DailyQuests,
+  savedMap: Map<string, ChildAnswer | undefined>,
+  savedGateAnswers: Record<string, ChildAnswer> | undefined,
+  savedFollowUpQuestId: string | undefined,
+): Record<string, ChildAnswer> {
+  const gateAnswers = { ...(savedGateAnswers ?? {}) };
+  for (const quest of daily.quests) {
+    if (!isNonPersistedGateQuest(quest) || gateAnswers[quest.id] !== undefined) {
+      continue;
+    }
+    if (savedFollowUpQuestId === quest.id) {
+      gateAnswers[quest.id] = quest.conditional?.followUpWhen ?? 1;
+      continue;
+    }
+    const legacyAnswer = savedMap.get(quest.id);
+    if (legacyAnswer === 1 || legacyAnswer === 0) {
+      gateAnswers[quest.id] = legacyAnswer;
+    }
+  }
+  return gateAnswers;
+}
+
 /**
  * クエスト定義と下書きから answers 配列を構築する
  * @param {DailyQuests} daily - クエスト定義
- * @param {{ answers: DraftAnswer[]; index: number; followUpQuestId?: string } | null} saved - Session Storage
+ * @param {DraftState | null} saved - Session Storage
  */
 function buildAnswers(
   daily: DailyQuests,
-  saved: { answers: DraftAnswer[]; index: number; followUpQuestId?: string } | null,
-): { answers: DraftAnswer[]; index: number; followUpQuestId?: string } {
+  saved: DraftState | null,
+): DraftState {
   const savedMap = new Map(
     (saved?.answers ?? []).map((a) => [a.questId, a.childAnswer]),
+  );
+  const gateAnswers = buildGateAnswers(
+    daily,
+    savedMap,
+    saved?.gateAnswers,
+    saved?.followUpQuestId,
   );
   return {
     answers: daily.quests.map((q) => ({
       questId: q.id,
       childAnswer: savedMap.get(q.id),
     })),
-    index: saved?.index ?? 0,
+    index: Math.min(
+      Math.max(saved?.index ?? 0, 0),
+      Math.max(daily.quests.length - 1, 0),
+    ),
     followUpQuestId: saved?.followUpQuestId,
+    gateAnswers,
   };
 }
 
@@ -40,18 +88,40 @@ function needsFollowUp(quest: QuestDefinition, answer: ChildAnswer | undefined):
 }
 
 /**
+ * ゲート回答を API に保存しない条件分岐クエストか
+ * @param {QuestDefinition | undefined} quest - クエスト定義
+ * @returns {boolean} ゲート専用なら true
+ */
+function isNonPersistedGateQuest(quest: QuestDefinition | undefined): boolean {
+  return !!quest?.conditional && quest.conditional.persistGateAnswer === false;
+}
+
+/**
+ * クエストが回答完了済みか
+ * @param {QuestDefinition} quest - クエスト定義
+ * @param {DraftState} draft - 下書き
+ * @returns {boolean} 完了済みなら true
+ */
+function isQuestAnswered(quest: QuestDefinition, draft: DraftState): boolean {
+  const answer = draft.answers.find((x) => x.questId === quest.id)?.childAnswer;
+  if (!isNonPersistedGateQuest(quest)) {
+    return answer !== undefined;
+  }
+  const gateAnswer = draft.gateAnswers?.[quest.id];
+  if (gateAnswer === undefined) return false;
+  return needsFollowUp(quest, gateAnswer) ? answer !== undefined : true;
+}
+
+/**
  * クエスト下書きフック
  * @param {string} date - 対象日
  * @param {DailyQuests | undefined} daily - クエスト定義
  */
 export function useQuestDraft(date: string, daily: DailyQuests | undefined) {
-  const [draft, setDraft] = useState<{
-    answers: DraftAnswer[];
-    index: number;
-    followUpQuestId?: string;
-  }>({
+  const [draft, setDraft] = useState<DraftState>({
     answers: [],
     index: 0,
+    gateAnswers: {},
   });
   const [ready, setReady] = useState(false);
 
@@ -67,7 +137,7 @@ export function useQuestDraft(date: string, daily: DailyQuests | undefined) {
   }, [date, daily]);
 
   const persist = useCallback(
-    (next: { answers: DraftAnswer[]; index: number; followUpQuestId?: string }) => {
+    (next: DraftState) => {
       setDraft(next);
       setQuestDraft(date, next);
     },
@@ -92,13 +162,38 @@ export function useQuestDraft(date: string, daily: DailyQuests | undefined) {
         const answers = draft.answers.map((a) =>
           a.questId === currentQuest.id ? { ...a, childAnswer } : a,
         );
-        persist({ ...draft, answers, followUpQuestId: undefined });
+        const gateAnswers = isNonPersistedGateQuest(currentQuest)
+          ? {
+              ...(draft.gateAnswers ?? {}),
+              [currentQuest.id]: currentQuest.conditional?.followUpWhen ?? 1,
+            }
+          : draft.gateAnswers;
+        persist({ ...draft, answers, gateAnswers, followUpQuestId: undefined });
         return;
       }
 
       const answers = draft.answers.map((a) =>
         a.questId === currentQuest.id ? { ...a, childAnswer } : a,
       );
+
+      if (isNonPersistedGateQuest(currentQuest)) {
+        const gateAnswers = {
+          ...(draft.gateAnswers ?? {}),
+          [currentQuest.id]: childAnswer,
+        };
+        const answersWithoutGate = answers.map((a) =>
+          a.questId === currentQuest.id ? { ...a, childAnswer: undefined } : a,
+        );
+        persist({
+          ...draft,
+          answers: answersWithoutGate,
+          gateAnswers,
+          followUpQuestId: needsFollowUp(currentQuest, childAnswer)
+            ? currentQuest.id
+            : undefined,
+        });
+        return;
+      }
 
       if (needsFollowUp(currentQuest, childAnswer)) {
         persist({
@@ -138,10 +233,7 @@ export function useQuestDraft(date: string, daily: DailyQuests | undefined) {
   /** 全問回答済みか */
   const isComplete =
     !!daily &&
-    daily.quests.every((q) => {
-      const a = draft.answers.find((x) => x.questId === q.id);
-      return a?.childAnswer !== undefined;
-    }) &&
+    daily.quests.every((q) => isQuestAnswered(q, draft)) &&
     !draft.followUpQuestId;
 
   const displayQuest = isFollowUpMode && currentQuest.conditional
@@ -152,9 +244,13 @@ export function useQuestDraft(date: string, daily: DailyQuests | undefined) {
       }
     : currentQuest;
 
-  const currentAnswer = draft.answers.find(
-    (a) => a.questId === currentQuest?.id,
-  )?.childAnswer;
+  const currentAnswer = isFollowUpMode || !isNonPersistedGateQuest(currentQuest)
+    ? draft.answers.find((a) => a.questId === currentQuest?.id)?.childAnswer
+    : currentQuest
+      ? draft.gateAnswers?.[currentQuest.id]
+      : undefined;
+  const isCurrentQuestAnswered =
+    !!currentQuest && isQuestAnswered(currentQuest, draft);
 
   return {
     draft,
@@ -164,15 +260,12 @@ export function useQuestDraft(date: string, daily: DailyQuests | undefined) {
     goPrev,
     isComplete,
     currentQuest: displayQuest,
+    currentAnswer,
     isFollowUpMode,
     canGoNext:
       !isFollowUpMode &&
-      currentAnswer !== undefined &&
+      isCurrentQuestAnswered &&
       draft.index < (daily?.quests.length ?? 1) - 1,
-    canConfirm:
-      isComplete ||
-      (draft.index === (daily?.quests.length ?? 1) - 1 &&
-        currentAnswer !== undefined &&
-        !draft.followUpQuestId),
+    canConfirm: isComplete,
   };
 }

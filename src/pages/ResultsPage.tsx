@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { postResultsAck } from "@/api/client";
-import { queryKeys, resultsQuery } from "@/api/queries";
+import { homeQuery, queryKeys, resultsQuery } from "@/api/queries";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { LoadingScreen } from "@/components/layout/LoadingScreen";
 import { Button } from "@/components/ui/Button";
@@ -21,10 +21,26 @@ const UNKNOWN_ANSWER_MESSAGE =
   "「分からない」は、その日クエストを意識できていなかった扱いで大きめの減点だよ。次からは思い出して「できた」「できなかった」で答えよう！";
 
 /** 登録タイミング調整の表示ラベル */
-function registrationTimingLabel(adjustment: number): string {
+function registrationTimingLabel(adjustment: number, reason?: string): string {
+  if (reason) return reason;
   if (adjustment > 0) return `定時登録ボーナス +${adjustment}分`;
   if (adjustment < 0) return `登録締切超過 ${adjustment}分`;
   return "";
+}
+
+/**
+ * 定時登録ボーナス内訳の表示スタイルを返す
+ * @param {number} adjustment - 調整分数
+ * @returns {string} className
+ */
+function registrationTimingClassName(adjustment: number): string {
+  if (adjustment > 0) {
+    return "border-2 border-success bg-success/10 text-gray-900";
+  }
+  if (adjustment < 0) {
+    return "border-2 border-danger bg-danger/10 text-gray-900";
+  }
+  return "border-2 border-warning bg-warning/20 text-gray-900";
 }
 
 /**
@@ -35,10 +51,18 @@ export function ResultsPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data, isLoading, error } = useQuery(resultsQuery);
+  const { data: homeData } = useQuery(homeQuery);
   const { data: daily } = useDailyQuests();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const selected = data?.items.find((i) => i.date === selectedDate);
+  const penaltyPreviewOffset =
+    selected && !selected.acknowledged && selected.totalPoints > 0
+      ? Math.min(homeData?.penaltyMinutes ?? 0, selected.totalPoints)
+      : 0;
+  const effectiveDeltaPreview = selected
+    ? selected.totalPoints - penaltyPreviewOffset
+    : 0;
 
   const ackMutation = useMutation({
     mutationFn: (date: string) => postResultsAck(date),
@@ -76,6 +100,7 @@ export function ResultsPage() {
   const items = data?.items ?? [];
   const unacked = items.filter((i) => !i.acknowledged);
   const acked = items.filter((i) => i.acknowledged);
+  const hasMultipleUnacked = unacked.length > 1;
 
   return (
     <AppLayout>
@@ -123,6 +148,14 @@ export function ResultsPage() {
               {selected.totalPoints >= 0 ? "+" : ""}
               {selected.totalPoints} 分
             </p>
+            {!selected.acknowledged && penaltyPreviewOffset > 0 && (
+              <p className="mt-2 text-sm text-muted">
+                {hasMultipleUnacked ? "この結果を先に確認すると、" : ""}
+                超過ペナルティ {penaltyPreviewOffset}分を相殺後、実質{" "}
+                {effectiveDeltaPreview >= 0 ? "+" : ""}
+                {effectiveDeltaPreview}分
+              </p>
+            )}
           </Card>
 
           {selected.details.some((d) => isUnknownChildAnswer(d.childAnswer)) && (
@@ -131,15 +164,24 @@ export function ResultsPage() {
             </div>
           )}
 
-          {selected.registrationTimingAdjustment !== 0 && (
+          {(selected.registrationTimingAdjustment !== 0 ||
+            selected.registrationTimingReason) && (
             <div
-              className={`rounded-default px-4 py-3 text-base ${
-                selected.registrationTimingAdjustment > 0
-                  ? "border-2 border-success bg-success/10 text-gray-900"
-                  : "border-2 border-danger bg-danger/10 text-gray-900"
-              }`}
+              className={`rounded-default px-4 py-3 text-base ${registrationTimingClassName(
+                selected.registrationTimingAdjustment,
+              )}`}
             >
-              {registrationTimingLabel(selected.registrationTimingAdjustment)}
+              {registrationTimingLabel(
+                selected.registrationTimingAdjustment,
+                selected.registrationTimingReason,
+              )}
+            </div>
+          )}
+
+          {!!selected.bedtimePrepPenalty && selected.bedtimePrepPenalty !== 0 && (
+            <div className="rounded-default border-2 border-danger bg-danger/10 px-4 py-3 text-base text-gray-900">
+              {selected.bedtimePrepPenaltyReason ??
+                `寝る準備の虚偽ペナルティ ${selected.bedtimePrepPenalty}分`}
             </div>
           )}
 
@@ -170,7 +212,9 @@ export function ResultsPage() {
 
           <ul className="flex flex-col gap-2">
             {selected.details.map((d) => {
-              const title = resolveQuestTitle(daily, d.questId);
+              const title = resolveQuestTitle(daily, d.questId, {
+                preferFollowUpTitle: true,
+              });
               const isUnknown = isUnknownChildAnswer(d.childAnswer);
               return (
                 <li

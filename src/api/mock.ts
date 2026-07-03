@@ -145,6 +145,22 @@ function validateMockGrades(
   if (!grades) {
     throw new Error("BAD_REQUEST: date と grades が必要です");
   }
+  if (!Array.isArray(grades)) {
+    throw new Error("BAD_REQUEST: grades は配列である必要があります");
+  }
+  const seen = new Set<string>();
+  for (const g of grades) {
+    if (!g || typeof g.questId !== "string") {
+      throw new Error("BAD_REQUEST: grade の形式が不正です");
+    }
+    if (typeof g.actualDone !== "boolean") {
+      throw new Error(`BAD_REQUEST: actualDone は boolean である必要があります questId=${g.questId}`);
+    }
+    if (seen.has(g.questId)) {
+      throw new Error(`BAD_REQUEST: questId が重複しています questId=${g.questId}`);
+    }
+    seen.add(g.questId);
+  }
   const gradeMap = new Map(grades.map((g) => [g.questId, g.actualDone]));
   for (const [questId, childAnswer] of dayAnswers) {
     if (isUnknownChildAnswer(childAnswer)) continue;
@@ -354,7 +370,7 @@ export async function mockApi<T>(
               ? ("graded" as const)
               : ("ungraded" as const),
           ungradedCount: hasAnswers && !isGraded ? 1 : 0,
-          totalPoints: isGraded ? 0 : null,
+          totalPoints: isGraded ? calcMockTotalPoints(date) : null,
         };
       });
       return { dates: list } as T;
@@ -411,6 +427,18 @@ export async function mockApi<T>(
           }));
           const registrationTimingAdjustment =
             calcMockRegistrationTimingAdjustment(date);
+          const submittedAt = store.submittedAtByDate.get(date);
+          const submitted = submittedAt ? new Date(submittedAt) : undefined;
+          const bedtimeHour = store.bedtimeByDate.get(date) ?? 21;
+          const isPastBonusDeadline =
+            submitted !== undefined &&
+            isPastQuestBonusDeadline(date, submitted, bedtimeHour);
+          const registrationTimingReason =
+            registrationTimingAdjustment > 0
+              ? `定時登録ボーナス +${registrationTimingAdjustment}分（寝る準備確認済み）`
+              : isPastBonusDeadline
+                ? "定時登録ボーナスなし（ボーナス締切を過ぎていました）"
+                : "定時登録ボーナスなし（寝る準備が確認できませんでした）";
           const bedtimePrepPenalty = calcMockBedtimePrepPenalty(date);
           const totalPoints = calcMockTotalPoints(date);
           const details = [...dayAnswers.entries()]
@@ -430,10 +458,7 @@ export async function mockApi<T>(
             totalPoints,
             acknowledged: store.acknowledgedDates.has(date),
             registrationTimingAdjustment,
-            registrationTimingReason:
-              registrationTimingAdjustment > 0
-                ? `定時登録ボーナス +${registrationTimingAdjustment}分（寝る準備確認済み）`
-                : "定時登録ボーナスなし（寝る準備が確認できませんでした）",
+            registrationTimingReason,
             bedtimePrepPenalty,
             bedtimePrepPenaltyReason:
               bedtimePrepPenalty !== 0
@@ -459,16 +484,17 @@ export async function mockApi<T>(
       const { date } = body as { date: string };
       const delta = calcMockTotalPoints(date);
       store.acknowledgedDates.add(date);
+      let penaltyOffset = 0;
       if (delta > 0) {
-        const offset = Math.min(store.penaltyMinutes, delta);
-        store.penaltyMinutes -= offset;
-        store.balanceMinutes += delta - offset;
+        penaltyOffset = Math.min(store.penaltyMinutes, delta);
+        store.penaltyMinutes -= penaltyOffset;
+        store.balanceMinutes += delta - penaltyOffset;
       } else if (delta < 0) {
         store.balanceMinutes += delta;
       }
       return {
         appliedDelta: delta,
-        penaltyOffset: 0,
+        penaltyOffset,
         displayBalance: Math.max(0, store.balanceMinutes),
         penaltyMinutes: store.penaltyMinutes,
       } as T;

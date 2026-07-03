@@ -13,7 +13,10 @@ import { Button } from "@/components/ui/Button";
 import { useDailyQuests } from "@/hooks/useDailyQuests";
 import { useQuestDraft } from "@/hooks/useQuestDraft";
 import { todayLocal } from "@/lib/date";
-import { isBeforeQuestRegistrationStart } from "@/lib/deadline";
+import {
+  isBeforeQuestRegistrationStart,
+  isPastQuestRegistrationCutoff,
+} from "@/lib/deadline";
 import { ensureQuestSessionStarted, getBedtimeHourDraft } from "@/lib/sessionStorage";
 
 const CHOICES: { value: ChildAnswer; label: string }[] = [
@@ -78,10 +81,19 @@ export function QuestPage() {
   }, [date]);
 
   useEffect(() => {
-    if (!homeData || homeData.questAction !== "start") return;
+    if (!homeData) return;
+    if (homeData.questAction === "none") {
+      navigate("/", { replace: true });
+      return;
+    }
+    if (homeData.questAction !== "start") return;
     const bedtimeHour =
       getBedtimeHourDraft(date) ?? homeData.bedtimeHour ?? 21;
-    if (isBeforeQuestRegistrationStart(date, new Date(), bedtimeHour)) {
+    const now = new Date();
+    if (
+      isBeforeQuestRegistrationStart(date, now, bedtimeHour) ||
+      isPastQuestRegistrationCutoff(date, now, bedtimeHour)
+    ) {
       navigate("/", { replace: true });
     }
   }, [date, homeData, navigate]);

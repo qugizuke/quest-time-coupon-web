@@ -30,7 +30,10 @@ function buildAnswers(
       questId: q.id,
       childAnswer: savedMap.get(q.id),
     })),
-    index: saved?.index ?? 0,
+    index: Math.min(
+      Math.max(saved?.index ?? 0, 0),
+      Math.max(daily.quests.length - 1, 0),
+    ),
     followUpQuestId: saved?.followUpQuestId,
     gateAnswers: saved?.gateAnswers ?? {},
   };
@@ -218,10 +221,6 @@ export function useQuestDraft(date: string, daily: DailyQuests | undefined) {
       !isFollowUpMode &&
       currentAnswer !== undefined &&
       draft.index < (daily?.quests.length ?? 1) - 1,
-    canConfirm:
-      isComplete ||
-      (draft.index === (daily?.quests.length ?? 1) - 1 &&
-        currentAnswer !== undefined &&
-        !draft.followUpQuestId),
+    canConfirm: isComplete,
   };
 }

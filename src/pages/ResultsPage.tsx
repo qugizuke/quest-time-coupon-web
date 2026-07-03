@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { postResultsAck } from "@/api/client";
-import { queryKeys, resultsQuery } from "@/api/queries";
+import { homeQuery, queryKeys, resultsQuery } from "@/api/queries";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { LoadingScreen } from "@/components/layout/LoadingScreen";
 import { Button } from "@/components/ui/Button";
@@ -51,10 +51,18 @@ export function ResultsPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data, isLoading, error } = useQuery(resultsQuery);
+  const { data: homeData } = useQuery(homeQuery);
   const { data: daily } = useDailyQuests();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const selected = data?.items.find((i) => i.date === selectedDate);
+  const penaltyPreviewOffset =
+    selected && !selected.acknowledged && selected.totalPoints > 0
+      ? Math.min(homeData?.penaltyMinutes ?? 0, selected.totalPoints)
+      : 0;
+  const effectiveDeltaPreview = selected
+    ? selected.totalPoints - penaltyPreviewOffset
+    : 0;
 
   const ackMutation = useMutation({
     mutationFn: (date: string) => postResultsAck(date),
@@ -139,6 +147,13 @@ export function ResultsPage() {
               {selected.totalPoints >= 0 ? "+" : ""}
               {selected.totalPoints} 分
             </p>
+            {!selected.acknowledged && penaltyPreviewOffset > 0 && (
+              <p className="mt-2 text-sm text-muted">
+                超過ペナルティ {penaltyPreviewOffset}分を相殺後、実質{" "}
+                {effectiveDeltaPreview >= 0 ? "+" : ""}
+                {effectiveDeltaPreview}分
+              </p>
+            )}
           </Card>
 
           {selected.details.some((d) => isUnknownChildAnswer(d.childAnswer)) && (

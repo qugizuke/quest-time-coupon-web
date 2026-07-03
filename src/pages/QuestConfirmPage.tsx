@@ -27,11 +27,21 @@ function buildSubmittableAnswers(
 ): { questId: string; childAnswer: ChildAnswer }[] {
   return daily.quests.flatMap((q) => {
     const a = draft.answers.find((x) => x.questId === q.id);
-    if (a?.childAnswer !== undefined) {
+    if (q.conditional?.persistGateAnswer === false) {
+      const gateAnswer = draft.gateAnswers?.[q.id];
+      if (gateAnswer === undefined) {
+        throw new Error(`QuestConfirmPage: ゲート未回答 questId=${q.id}`);
+      }
+      if (gateAnswer !== q.conditional.followUpWhen) {
+        return [];
+      }
+      if (a?.childAnswer === undefined) {
+        throw new Error(`QuestConfirmPage: 追問未回答 questId=${q.id}`);
+      }
       return [{ questId: q.id, childAnswer: a.childAnswer }];
     }
-    if (q.conditional?.persistGateAnswer === false) {
-      return [];
+    if (a?.childAnswer !== undefined) {
+      return [{ questId: q.id, childAnswer: a.childAnswer }];
     }
     throw new Error(`QuestConfirmPage: 未回答 questId=${q.id}`);
   });
@@ -95,8 +105,14 @@ export function QuestConfirmPage() {
       <ul className="mb-6 flex flex-col gap-2">
         {daily.quests.flatMap((q) => {
           const a = draft.answers.find((x) => x.questId === q.id);
-          if (a?.childAnswer === undefined && q.conditional?.persistGateAnswer === false) {
-            return [];
+          if (q.conditional?.persistGateAnswer === false) {
+            const gateAnswer = draft.gateAnswers?.[q.id];
+            if (
+              gateAnswer !== q.conditional.followUpWhen ||
+              a?.childAnswer === undefined
+            ) {
+              return [];
+            }
           }
           return (
             <li

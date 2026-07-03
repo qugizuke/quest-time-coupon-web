@@ -30,7 +30,7 @@ export function QuestDeadlineCountdown({
       <p className="text-base font-bold text-gray-900">定時ボーナス（+15分）まで</p>
       <p className="text-app-xl font-bold tabular-nums text-primary">{countdownFormatted}</p>
       <p className="text-sm text-muted">
-        {bonusDeadlineLabel} までに「クエスト開始」して登録しよう
+        {bonusDeadlineLabel} までに登録し、寝る準備をママが確認できたら付くよ
       </p>
     </div>
   );

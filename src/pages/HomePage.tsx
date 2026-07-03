@@ -136,8 +136,7 @@ export function HomePage() {
             !deadline.showBonusCountdown &&
             !deadline.showRegistrationCountdown && (
               <p className="mt-2 text-sm text-muted">
-                {deadline.bonusDeadlineLabel} までに登録すると +15分！（寝る準備が
-                できている日のみ・{deadline.registrationStartLabel}〜
+                {deadline.bonusDeadlineLabel} までに登録して、寝る準備をママが確認できたら +15分！（{deadline.registrationStartLabel}〜
                 {deadline.registrationCutoffLabel} 受付）
               </p>
             )}

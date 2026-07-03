@@ -10,6 +10,7 @@ import {
   calcBedtimePrepFalseClaimPenalty,
   canApplyBedtimePrepRegistrationBonus,
 } from "@/lib/registrationBonus";
+import { isUnknownChildAnswer } from "@/lib/labels";
 
 interface MockStore {
   balanceMinutes: number;
@@ -100,6 +101,51 @@ function calcMockTotalPoints(date: string): number {
     calcMockBedtimePrepPenalty(date) +
     sumMockAdjustments(date)
   );
+}
+
+/**
+ * モック用の不一致判定を返す
+ * @param {ChildAnswer} childAnswer - 子ども回答
+ * @param {boolean} actualDone - 保護者判定
+ * @returns {boolean} 不一致なら true
+ */
+function isMockMismatch(childAnswer: ChildAnswer, actualDone: boolean): boolean {
+  if (childAnswer === 1) return !actualDone;
+  if (childAnswer === 0) return actualDone;
+  return !actualDone;
+}
+
+/**
+ * モック採点 payload を本番 API と同じ要点で検証する
+ * @param {string} date - 対象日
+ * @param {{ questId: string; actualDone: boolean }[] | undefined} grades - 採点 payload
+ */
+function validateMockGrades(
+  date: string,
+  grades: { questId: string; actualDone: boolean }[] | undefined,
+): void {
+  const dayAnswers = store.answers.get(date);
+  if (!dayAnswers) {
+    throw new Error("NOT_FOUND: 回答がありません");
+  }
+  if (!grades) {
+    throw new Error("BAD_REQUEST: date と grades が必要です");
+  }
+  const gradeMap = new Map(grades.map((g) => [g.questId, g.actualDone]));
+  for (const [questId, childAnswer] of dayAnswers) {
+    if (isUnknownChildAnswer(childAnswer)) continue;
+    if (!gradeMap.has(questId)) {
+      throw new Error(`BAD_REQUEST: 未採点 questId=${questId}`);
+    }
+  }
+  for (const g of grades) {
+    if (!dayAnswers.has(g.questId)) {
+      throw new Error(`BAD_REQUEST: 未知の questId=${g.questId}`);
+    }
+    if (isUnknownChildAnswer(dayAnswers.get(g.questId)!)) {
+      throw new Error(`BAD_REQUEST: 分からない回答は採点不要 questId=${g.questId}`);
+    }
+  }
 }
 
 /**
@@ -240,6 +286,7 @@ export async function mockApi<T>(
         if (store.gradedDates.has(date)) {
           throw new Error("ALREADY_GRADED: 再採点はできません");
         }
+        validateMockGrades(date, grades);
         store.gradedDates.add(date);
         store.grades.set(
           date,
@@ -268,8 +315,9 @@ export async function mockApi<T>(
 
     case "results": {
       const gradedItems = [...store.gradedDates]
-        .filter((d) => !store.acknowledgedDates.has(d))
         .map((date) => {
+          const dayAnswers = store.answers.get(date) ?? new Map<string, ChildAnswer>();
+          const dayGrades = store.grades.get(date) ?? new Map<string, boolean>();
           const adjustments = (store.adjustmentsByDate.get(date) ?? []).map((a) => ({
             kind: a.kind,
             code: a.code,
@@ -280,10 +328,22 @@ export async function mockApi<T>(
             calcMockRegistrationTimingAdjustment(date);
           const bedtimePrepPenalty = calcMockBedtimePrepPenalty(date);
           const totalPoints = calcMockTotalPoints(date);
+          const details = [...dayAnswers.entries()]
+            .filter(([questId]) => questId !== BEDTIME_PREP_QUEST_ID)
+            .map(([questId, childAnswer]) => {
+              const actualDone = dayGrades.get(questId) ?? false;
+              return {
+                questId,
+                childAnswer,
+                actualDone,
+                finalPoints: 0,
+                mismatch: isMockMismatch(childAnswer, actualDone),
+              };
+            });
           return {
             date,
             totalPoints,
-            acknowledged: false,
+            acknowledged: store.acknowledgedDates.has(date),
             registrationTimingAdjustment,
             registrationTimingReason:
               registrationTimingAdjustment > 0
@@ -295,15 +355,14 @@ export async function mockApi<T>(
                 ? `寝る準備の虚偽ペナルティ ${bedtimePrepPenalty}分`
                 : undefined,
             adjustments,
-            details: [],
+            details,
           };
         });
       const missedItems = [...store.missedRegistrationDates]
-        .filter((d) => !store.acknowledgedDates.has(d))
         .map((date) => ({
           date,
           totalPoints: MISSED_REGISTRATION_PENALTY,
-          acknowledged: false,
+          acknowledged: store.acknowledgedDates.has(date),
           registrationTimingAdjustment: MISSED_REGISTRATION_PENALTY,
           adjustments: [],
           details: [],

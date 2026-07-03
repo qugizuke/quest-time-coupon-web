@@ -195,7 +195,9 @@ export function ResultsPage() {
 
           <ul className="flex flex-col gap-2">
             {selected.details.map((d) => {
-              const title = resolveQuestTitle(daily, d.questId);
+              const title = resolveQuestTitle(daily, d.questId, {
+                preferFollowUpTitle: true,
+              });
               const isUnknown = isUnknownChildAnswer(d.childAnswer);
               return (
                 <li

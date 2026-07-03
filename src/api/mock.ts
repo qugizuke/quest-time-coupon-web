@@ -338,6 +338,9 @@ export async function mockApi<T>(
       if (!isValidOptionalBedtimeHour(bedtimeHour)) {
         throw new Error(`BAD_REQUEST: bedtimeHour が不正です bedtimeHour=${String(bedtimeHour)}`);
       }
+      if (bedtimeHour !== 21 && !isWeekendEve(date)) {
+        throw new Error("BAD_REQUEST: 休日前日以外は bedtimeHour を変更できません");
+      }
       if (store.missedRegistrationDates.has(date)) {
         throw new Error("ALREADY_RESULT: 結果作成済みのため設定できません");
       }
@@ -357,6 +360,9 @@ export async function mockApi<T>(
       validateMockAnswers(answers);
       if (!isValidOptionalBedtimeHour(bedtimeHour)) {
         throw new Error(`BAD_REQUEST: bedtimeHour が不正です bedtimeHour=${String(bedtimeHour)}`);
+      }
+      if (bedtimeHour !== undefined && bedtimeHour !== 21 && !isWeekendEve(date)) {
+        throw new Error("BAD_REQUEST: 休日前日以外は bedtimeHour を変更できません");
       }
       if (store.gradedDates.has(date)) {
         throw new Error("ALREADY_GRADED: 採点済みのため上書きできません");

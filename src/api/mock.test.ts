@@ -89,6 +89,32 @@ describe("mockApi answers 受付タイミング", () => {
       }),
     ).rejects.toThrow("回答済みの登録ゲートは変更できません");
   });
+
+  it("retry では保存済み bedtime を上書きしない", async () => {
+    const date = "2026-06-20";
+    vi.setSystemTime(new Date(2026, 5, 20, 20, 30, 0));
+
+    await mockApi("answers", {
+      method: "POST",
+      body: JSON.stringify({ date, answers: sampleAnswers, bedtimeHour: 21 }),
+    });
+
+    await mockApi("answers", {
+      method: "POST",
+      body: JSON.stringify({
+        date,
+        answers: sampleAnswers.map((answer) =>
+          answer.questId === "sleep-on-time-yesterday"
+            ? { ...answer, childAnswer: 0 as const }
+            : answer,
+        ),
+        bedtimeHour: 23,
+      }),
+    });
+
+    const home = await mockApi<{ bedtimeHour: number }>("home", undefined, { date });
+    expect(home.bedtimeHour).toBe(21);
+  });
 });
 
 describe("mockApi registrationSetting 競合ガード", () => {

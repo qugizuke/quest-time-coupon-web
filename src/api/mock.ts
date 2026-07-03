@@ -441,9 +441,7 @@ export async function mockApi<T>(
       store.answers.set(date, map);
       store.submittedAtByDate.set(date, submittedAt);
       store.missedRegistrationDates.delete(date);
-      if (bedtimeHour != null) {
-        store.bedtimeByDate.set(date, bedtimeHour);
-      }
+      store.bedtimeByDate.set(date, hour);
       return {
         submittedAt,
         overwritten: !isNewRegistration,

@@ -3,13 +3,19 @@
  * @description 回答一覧の最終確認と登録。
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { postAnswers } from "@/api/client";
 import { homeQuery, queryKeys } from "@/api/queries";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { LoadingScreen } from "@/components/layout/LoadingScreen";
 import { Button } from "@/components/ui/Button";
 import { useDailyQuests } from "@/hooks/useDailyQuests";
 import { todayLocal } from "@/lib/date";
+import {
+  isBeforeQuestRegistrationStart,
+  isPastQuestRegistrationCutoff,
+} from "@/lib/deadline";
 import { childAnswerLabel } from "@/lib/labels";
 import { getQuestDraft, clearQuestDraft, getBedtimeHourDraft } from "@/lib/sessionStorage";
 import { isWeekendEve } from "@/lib/deadline";
@@ -84,7 +90,7 @@ export function QuestConfirmPage() {
   const queryClient = useQueryClient();
   const date = todayLocal();
   const { data: daily } = useDailyQuests();
-  const { data: homeData } = useQuery(homeQuery);
+  const { data: homeData, isLoading: isHomeLoading } = useQuery(homeQuery);
   const draft = getQuestDraft(date);
   let confirmationItems:
     | { questId: string; title: string; childAnswer: ChildAnswer }[]
@@ -101,6 +107,23 @@ export function QuestConfirmPage() {
           : "QuestConfirmPage: 下書きが不完全です";
     }
   }
+
+  useEffect(() => {
+    if (!homeData) return;
+    if (homeData.questAction === "none") {
+      navigate("/", { replace: true });
+      return;
+    }
+    if (homeData.questAction !== "start") return;
+    const bedtimeHour = homeData.bedtimeHour ?? getBedtimeHourDraft(date) ?? 21;
+    const now = new Date();
+    if (
+      isBeforeQuestRegistrationStart(date, now, bedtimeHour) ||
+      isPastQuestRegistrationCutoff(date, now, bedtimeHour)
+    ) {
+      navigate("/", { replace: true });
+    }
+  }, [date, homeData, navigate]);
 
   const mutation = useMutation({
     mutationFn: () => {
@@ -119,6 +142,10 @@ export function QuestConfirmPage() {
       navigate("/");
     },
   });
+
+  if (isHomeLoading) {
+    return <LoadingScreen />;
+  }
 
   if (!draft || !daily || !confirmationItems || draftError) {
     return (

@@ -14,6 +14,30 @@ type DraftState = {
 };
 
 /**
+ * 旧形式の下書きから gateAnswers を補完する
+ * @param {DailyQuests} daily - クエスト定義
+ * @param {Map<string, ChildAnswer | undefined>} savedMap - 旧 answers マップ
+ * @param {Record<string, ChildAnswer> | undefined} savedGateAnswers - 保存済み gateAnswers
+ * @returns {Record<string, ChildAnswer>} 補完済み gateAnswers
+ */
+function buildGateAnswers(
+  daily: DailyQuests,
+  savedMap: Map<string, ChildAnswer | undefined>,
+  savedGateAnswers: Record<string, ChildAnswer> | undefined,
+): Record<string, ChildAnswer> {
+  const gateAnswers = { ...(savedGateAnswers ?? {}) };
+  for (const quest of daily.quests) {
+    if (!isNonPersistedGateQuest(quest) || gateAnswers[quest.id] !== undefined) {
+      continue;
+    }
+    const legacyAnswer = savedMap.get(quest.id);
+    if (legacyAnswer === undefined) continue;
+    gateAnswers[quest.id] = quest.conditional?.followUpWhen ?? 1;
+  }
+  return gateAnswers;
+}
+
+/**
  * クエスト定義と下書きから answers 配列を構築する
  * @param {DailyQuests} daily - クエスト定義
  * @param {DraftState | null} saved - Session Storage
@@ -25,6 +49,7 @@ function buildAnswers(
   const savedMap = new Map(
     (saved?.answers ?? []).map((a) => [a.questId, a.childAnswer]),
   );
+  const gateAnswers = buildGateAnswers(daily, savedMap, saved?.gateAnswers);
   return {
     answers: daily.quests.map((q) => ({
       questId: q.id,
@@ -35,7 +60,7 @@ function buildAnswers(
       Math.max(daily.quests.length - 1, 0),
     ),
     followUpQuestId: saved?.followUpQuestId,
-    gateAnswers: saved?.gateAnswers ?? {},
+    gateAnswers,
   };
 }
 

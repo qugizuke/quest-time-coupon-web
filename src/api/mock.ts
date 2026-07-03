@@ -351,6 +351,9 @@ export async function mockApi<T>(
       if (isPastQuestRegistrationCutoff(date, new Date(), currentHour)) {
         throw new Error("BAD_REQUEST: 登録受付締切を過ぎているため設定できません");
       }
+      if (isPastQuestRegistrationCutoff(date, new Date(), bedtimeHour)) {
+        throw new Error("BAD_REQUEST: 変更先の登録受付締切を過ぎているため設定できません");
+      }
       store.bedtimeByDate.set(date, bedtimeHour);
       return { date, bedtimeHour } as T;
     }

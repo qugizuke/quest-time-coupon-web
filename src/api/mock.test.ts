@@ -108,4 +108,23 @@ describe("mockApi registrationSetting 競合ガード", () => {
       }),
     ).rejects.toThrow("登録受付締切を過ぎているため設定できません");
   });
+
+  it("変更先の締切を過ぎた早い bedtime へ変更できない", async () => {
+    const date = "2026-06-13";
+    vi.setSystemTime(new Date(2026, 5, 13, 20, 30, 0));
+
+    await mockApi("registrationSetting", {
+      method: "POST",
+      body: JSON.stringify({ date, bedtimeHour: 23 }),
+    });
+
+    vi.setSystemTime(new Date(2026, 5, 13, 21, 30, 0));
+
+    await expect(
+      mockApi("registrationSetting", {
+        method: "POST",
+        body: JSON.stringify({ date, bedtimeHour: 21 }),
+      }),
+    ).rejects.toThrow("変更先の登録受付締切を過ぎているため設定できません");
+  });
 });

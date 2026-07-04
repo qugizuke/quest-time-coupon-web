@@ -329,22 +329,23 @@ export async function mockApi<T>(
 
   switch (action) {
     case "home": {
-      const dayAnswers = store.answers.get(today);
+      const date = query?.date ?? today;
+      const dayAnswers = store.answers.get(date);
       const hasAnswers = !!dayAnswers && dayAnswers.size > 0;
-      const isGraded = store.gradedDates.has(today);
-      const isAcked = store.acknowledgedDates.has(today);
-      const bedtimeHour = store.bedtimeByDate.get(today);
-      const pastCutoff = isPastQuestRegistrationCutoff(today, new Date(), bedtimeHour);
+      const isGraded = store.gradedDates.has(date);
+      const isAcked = store.acknowledgedDates.has(date);
+      const bedtimeHour = store.bedtimeByDate.get(date);
+      const pastCutoff = isPastQuestRegistrationCutoff(date, new Date(), bedtimeHour);
 
-      if (pastCutoff && !hasAnswers && !store.missedRegistrationDates.has(today)) {
-        store.missedRegistrationDates.add(today);
+      if (pastCutoff && !hasAnswers && !store.missedRegistrationDates.has(date)) {
+        store.missedRegistrationDates.add(date);
       }
 
       let todayStatus: HomeData["todayStatus"] = "unanswered";
       let questAction: HomeData["questAction"] = "start";
 
       if (!hasAnswers) {
-        if (store.missedRegistrationDates.has(today)) {
+        if (store.missedRegistrationDates.has(date)) {
           todayStatus = isAcked ? "completed" : "pending_ack";
           questAction = "none";
         } else {
@@ -370,13 +371,13 @@ export async function mockApi<T>(
       return {
         displayBalance: Math.max(0, store.balanceMinutes),
         penaltyMinutes: store.penaltyMinutes,
-        today,
+        today: date,
         todayStatus,
         questAction,
         unacknowledgedCount,
         canStartTimer: store.balanceMinutes > 0,
         bedtimeHour,
-        isWeekendEve: isWeekendEve(today),
+        isWeekendEve: isWeekendEve(date),
       } as T;
     }
 
@@ -385,8 +386,8 @@ export async function mockApi<T>(
       if (!isValidOptionalBedtimeHour(bedtimeHour)) {
         throw new Error(`BAD_REQUEST: bedtimeHour が不正です bedtimeHour=${String(bedtimeHour)}`);
       }
-      if (bedtimeHour !== 21 && !isWeekendEve(date)) {
-        throw new Error("BAD_REQUEST: 休日前日以外は bedtimeHour を変更できません");
+      if (!isWeekendEve(date)) {
+        throw new Error("BAD_REQUEST: 休日前日のみ bedtimeHour を設定できます");
       }
       if (store.missedRegistrationDates.has(date) || store.gradedDates.has(date)) {
         throw new Error("ALREADY_RESULT: 結果作成済みのため設定できません");

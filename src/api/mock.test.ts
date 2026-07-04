@@ -253,4 +253,16 @@ describe("mockApi registrationSetting 競合ガード", () => {
 
     expect(result.bedtimeHour).toBe(22);
   });
+
+  it("平日は21時指定でも registrationSetting を受け付けない", async () => {
+    const date = "2026-07-01";
+    vi.setSystemTime(new Date(2026, 6, 1, 20, 30, 0));
+
+    await expect(
+      mockApi("registrationSetting", {
+        method: "POST",
+        body: JSON.stringify({ date, bedtimeHour: 21 }),
+      }),
+    ).rejects.toThrow("休日前日のみ bedtimeHour を設定できます");
+  });
 });

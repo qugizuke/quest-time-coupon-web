@@ -13,6 +13,7 @@ import {
   isPastQuestBonusDeadline,
   isPastQuestRegistrationCutoff,
   isQuestRegistrationOpen,
+  resolveQuestDeadlineBedtimeHour,
 } from "@/lib/deadline";
 
 describe("getQuestBonusDeadline", () => {
@@ -61,6 +62,12 @@ describe("getQuestRegistrationCutoff", () => {
     expect(d.getHours()).toBe(22);
     expect(d.getMinutes()).toBe(0);
   });
+
+  it("休日前夜で未選択なら23:00", () => {
+    const d = getQuestRegistrationCutoff("2026-07-03");
+    expect(d.getHours()).toBe(23);
+    expect(d.getMinutes()).toBe(0);
+  });
 });
 
 describe("isBeforeQuestRegistrationStart", () => {
@@ -76,6 +83,16 @@ describe("isBeforeQuestRegistrationStart", () => {
     expect(isBeforeQuestRegistrationStart(date, new Date(2026, 5, 7, 20, 0, 0), 21)).toBe(
       false,
     );
+  });
+});
+
+describe("resolveQuestDeadlineBedtimeHour", () => {
+  it("通常日の未選択は21時", () => {
+    expect(resolveQuestDeadlineBedtimeHour("2026-07-01")).toBe(21);
+  });
+
+  it("休日前夜の未選択は23時", () => {
+    expect(resolveQuestDeadlineBedtimeHour("2026-07-03")).toBe(23);
   });
 });
 
@@ -109,12 +126,30 @@ describe("isPastQuestRegistrationCutoff", () => {
       isPastQuestRegistrationCutoff("2026-06-07", new Date(2026, 5, 7, 22, 0, 1), 22),
     ).toBe(true);
   });
+
+  it("休日前夜の未選択は21:01では締切後ではない", () => {
+    expect(
+      isPastQuestRegistrationCutoff("2026-07-03", new Date(2026, 6, 3, 21, 0, 1)),
+    ).toBe(false);
+  });
+
+  it("休日前夜の未選択は23:00:01で締切後", () => {
+    expect(
+      isPastQuestRegistrationCutoff("2026-07-03", new Date(2026, 6, 3, 23, 0, 1)),
+    ).toBe(true);
+  });
 });
 
 describe("format labels", () => {
   it("就寝22時のラベル", () => {
-    expect(formatQuestRegistrationStartLabel(22)).toBe("21:00");
+    expect(formatQuestRegistrationStartLabel("2026-06-07", 22)).toBe("21:00");
     expect(formatQuestBonusDeadlineLabel("2026-06-07", 22)).toBe("21:30");
-    expect(formatQuestRegistrationCutoffLabel(22)).toBe("22:00");
+    expect(formatQuestRegistrationCutoffLabel("2026-06-07", 22)).toBe("22:00");
+  });
+
+  it("休日前夜の未選択ラベル", () => {
+    expect(formatQuestRegistrationStartLabel("2026-07-03")).toBe("22:00");
+    expect(formatQuestRegistrationCutoffLabel("2026-07-03")).toBe("23:00");
+    expect(formatQuestBonusDeadlineLabel("2026-07-03")).toBe("22:30");
   });
 });

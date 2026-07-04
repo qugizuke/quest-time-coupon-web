@@ -115,7 +115,7 @@ export function QuestConfirmPage() {
       return;
     }
     if (homeData.questAction !== "start") return;
-    const bedtimeHour = getBedtimeHourDraft(date) ?? homeData.bedtimeHour ?? 21;
+    const bedtimeHour = getBedtimeHourDraft(date) ?? homeData.bedtimeHour;
     const now = new Date();
     if (
       isBeforeQuestRegistrationStart(date, now, bedtimeHour) ||
@@ -132,7 +132,7 @@ export function QuestConfirmPage() {
       }
       const answers = buildSubmittableAnswers(daily, draft);
       const bedtimeHour: BedtimeHour | undefined = isWeekendEve(date)
-        ? (getBedtimeHourDraft(date) ?? homeData?.bedtimeHour ?? 21)
+        ? (getBedtimeHourDraft(date) ?? homeData?.bedtimeHour)
         : undefined;
       return postAnswers({ date, answers, bedtimeHour });
     },
@@ -167,16 +167,16 @@ export function QuestConfirmPage() {
       </h1>
       <ul className="mb-6 flex flex-col gap-2">
         {confirmationItems.map((item) => (
-            <li
-              key={item.questId}
-              className="flex justify-between rounded-default bg-white px-4 py-3 shadow-sm"
-            >
-              <span>{item.title}</span>
-              <span className="font-medium">
-                {childAnswerLabel(item.childAnswer)}
-              </span>
-            </li>
-          ))}
+          <li
+            key={item.questId}
+            className="flex justify-between rounded-default bg-white px-4 py-3 shadow-sm"
+          >
+            <span>{item.title}</span>
+            <span className="font-medium">
+              {childAnswerLabel(item.childAnswer)}
+            </span>
+          </li>
+        ))}
       </ul>
       {mutation.error && (
         <p className="mb-4 text-danger">

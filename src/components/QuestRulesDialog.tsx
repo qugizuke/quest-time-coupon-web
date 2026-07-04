@@ -22,30 +22,30 @@ interface RuleSection {
 
 /**
  * クエストルール本文（5分単位・v5 仕様）
- * @param {BedtimeHour} bedtimeHour - 就寝時刻（時）
+ * @param {BedtimeHour | undefined} bedtimeHour - 就寝時刻（時）
  * @param {boolean} isRestDayEve - 休日前日か
  * @returns {RuleSection[]} セクション一覧
  */
 function buildQuestRuleSections(
-  bedtimeHour: BedtimeHour,
+  bedtimeHour: BedtimeHour | undefined,
   isRestDayEve: boolean,
 ): RuleSection[] {
   const today = todayLocal();
-  const startLabel = formatQuestRegistrationStartLabel(bedtimeHour);
+  const startLabel = formatQuestRegistrationStartLabel(today, bedtimeHour);
   const bonusLabel = formatQuestBonusDeadlineLabel(today, bedtimeHour);
-  const cutoffLabel = formatQuestRegistrationCutoffLabel(bedtimeHour);
-  const bedtimeLabel = formatQuestRegistrationCutoffLabel(bedtimeHour);
+  const cutoffLabel = formatQuestRegistrationCutoffLabel(today, bedtimeHour);
+  const bedtimeLabel = formatQuestRegistrationCutoffLabel(today, bedtimeHour);
 
   const registrationItems = isRestDayEve
     ? [
-        "休日前日は「今日の寝る時間」を選べる（21:00 / 22:00 / 23:00）",
-        `受付は ${startLabel}〜${cutoffLabel}（寝る時間の1時間前から）`,
-        `${bonusLabel} までに登録すると定時ボーナス +15分！（寝る時間の30分前まで）`,
-      ]
+      "休日前日は「今日の寝る時間」を選べる（21:00 / 22:00 / 23:00）",
+      `受付は ${startLabel}〜${cutoffLabel}（寝る時間の1時間前から）`,
+      `${bonusLabel} までに登録すると定時ボーナス +15分！（寝る時間の30分前まで）`,
+    ]
     : [
-        `受付は ${startLabel}〜${cutoffLabel}（寝る時間 ${bedtimeLabel} の1時間前から）`,
-        `${bonusLabel} までに登録すると定時ボーナス +15分！（寝る時間の30分前まで）`,
-      ];
+      `受付は ${startLabel}〜${cutoffLabel}（寝る時間 ${bedtimeLabel} の1時間前から）`,
+      `${bonusLabel} までに登録すると定時ボーナス +15分！（寝る時間の30分前まで）`,
+    ];
 
   return [
     {
@@ -116,7 +116,7 @@ interface QuestRulesDialogProps {
 export function QuestRulesDialog({
   open,
   onClose,
-  bedtimeHour = 21,
+  bedtimeHour,
   isRestDayEve = false,
 }: QuestRulesDialogProps) {
   const sections = useMemo(

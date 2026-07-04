@@ -164,11 +164,18 @@ export function useQuestDraft(date: string, daily: DailyQuests | undefined) {
         );
         const gateAnswers = isNonPersistedGateQuest(currentQuest)
           ? {
-              ...(draft.gateAnswers ?? {}),
-              [currentQuest.id]: currentQuest.conditional?.followUpWhen ?? 1,
-            }
+            ...(draft.gateAnswers ?? {}),
+            [currentQuest.id]: currentQuest.conditional?.followUpWhen ?? 1,
+          }
           : draft.gateAnswers;
-        persist({ ...draft, answers, gateAnswers, followUpQuestId: undefined });
+        const nextIndex = Math.min(draft.index + 1, daily.quests.length - 1);
+        persist({
+          ...draft,
+          index: nextIndex,
+          answers,
+          gateAnswers,
+          followUpQuestId: undefined,
+        });
         return;
       }
 
@@ -238,10 +245,10 @@ export function useQuestDraft(date: string, daily: DailyQuests | undefined) {
 
   const displayQuest = isFollowUpMode && currentQuest.conditional
     ? {
-        ...currentQuest,
-        title: currentQuest.conditional.followUpTitle,
-        hint: undefined,
-      }
+      ...currentQuest,
+      title: currentQuest.conditional.followUpTitle,
+      hint: undefined,
+    }
     : currentQuest;
 
   const currentAnswer = isFollowUpMode || !isNonPersistedGateQuest(currentQuest)

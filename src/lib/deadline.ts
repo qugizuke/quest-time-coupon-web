@@ -18,6 +18,9 @@ export const QUEST_REGISTRATION_CUTOFF_HOUR = 21;
 /** @type {number} 登録受付締切の分 */
 export const QUEST_REGISTRATION_CUTOFF_MINUTE = 0;
 
+/** @type {number} 休日前夜の未選択デフォルト就寝時刻（時） */
+export const WEEKEND_EVE_DEFAULT_BEDTIME_HOUR = 23;
+
 /** @type {number} ボーナス締切カウントダウン表示開始の時（平日デフォルト） */
 export const QUEST_COUNTDOWN_START_HOUR = 20;
 
@@ -44,13 +47,29 @@ export function isWeekendEve(date: string): boolean {
 }
 
 /**
+ * 締切計算用の就寝時刻を返す
+ * @param {string} date - YYYY-MM-DD
+ * @param {number | undefined} bedtimeHour - 明示指定の就寝時刻（時）
+ * @returns {BedtimeHour} 締切計算に使う就寝時刻
+ */
+export function resolveQuestDeadlineBedtimeHour(
+  date: string,
+  bedtimeHour?: number,
+): BedtimeHour {
+  if (bedtimeHour !== undefined) {
+    return normalizeBedtimeHour(bedtimeHour);
+  }
+  return isWeekendEve(date) ? WEEKEND_EVE_DEFAULT_BEDTIME_HOUR : 21;
+}
+
+/**
  * 指定日の定時ボーナス締切を返す（就寝30分前）
  * @param {string} date - YYYY-MM-DD
  * @param {number} [bedtimeHour] - 就寝時刻（時）
  * @returns {Date} ボーナス締切
  */
 export function getQuestBonusDeadline(date: string, bedtimeHour?: number): Date {
-  const hour = normalizeBedtimeHour(bedtimeHour);
+  const hour = resolveQuestDeadlineBedtimeHour(date, bedtimeHour);
   const [y, m, d] = date.split("-").map(Number);
   const bedtime = new Date(y, m - 1, d, hour, 0, 0, 0);
   return new Date(bedtime.getTime() - 30 * 60 * 1000);
@@ -63,7 +82,7 @@ export function getQuestBonusDeadline(date: string, bedtimeHour?: number): Date 
  * @returns {Date} 受付開始
  */
 export function getQuestRegistrationStart(date: string, bedtimeHour?: number): Date {
-  const hour = normalizeBedtimeHour(bedtimeHour);
+  const hour = resolveQuestDeadlineBedtimeHour(date, bedtimeHour);
   const [y, m, d] = date.split("-").map(Number);
   return new Date(y, m - 1, d, hour - 1, 0, 0, 0);
 }
@@ -75,7 +94,7 @@ export function getQuestRegistrationStart(date: string, bedtimeHour?: number): D
  * @returns {Date} 登録締切
  */
 export function getQuestRegistrationCutoff(date: string, bedtimeHour?: number): Date {
-  const hour = normalizeBedtimeHour(bedtimeHour);
+  const hour = resolveQuestDeadlineBedtimeHour(date, bedtimeHour);
   const [y, m, d] = date.split("-").map(Number);
   return new Date(y, m - 1, d, hour, 0, 0, 0);
 }
@@ -257,20 +276,28 @@ export function formatQuestBonusDeadlineLabel(
 
 /**
  * 登録受付締切の表示ラベル
+ * @param {string} date - 対象日
  * @param {number} [bedtimeHour] - 就寝時刻（時）
  * @returns {string} 例: "21:00"
  */
-export function formatQuestRegistrationCutoffLabel(bedtimeHour?: number): string {
-  const hour = String(normalizeBedtimeHour(bedtimeHour)).padStart(2, "0");
+export function formatQuestRegistrationCutoffLabel(
+  date: string,
+  bedtimeHour?: number,
+): string {
+  const hour = String(resolveQuestDeadlineBedtimeHour(date, bedtimeHour)).padStart(2, "0");
   return `${hour}:00`;
 }
 
 /**
  * 登録受付開始の表示ラベル
+ * @param {string} date - 対象日
  * @param {number} [bedtimeHour] - 就寝時刻（時）
  * @returns {string} 例: "20:00"
  */
-export function formatQuestRegistrationStartLabel(bedtimeHour?: number): string {
-  const hour = normalizeBedtimeHour(bedtimeHour);
+export function formatQuestRegistrationStartLabel(
+  date: string,
+  bedtimeHour?: number,
+): string {
+  const hour = resolveQuestDeadlineBedtimeHour(date, bedtimeHour);
   return `${String(hour - 1).padStart(2, "0")}:00`;
 }

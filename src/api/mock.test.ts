@@ -36,6 +36,39 @@ describe("mockApi answers 受付タイミング", () => {
     ).rejects.toThrow("登録受付締切を過ぎているため回答を保存できません");
   });
 
+  it("休日前夜の未選択は21時台でも未登録ペナルティにならない", async () => {
+    vi.setSystemTime(new Date(2026, 6, 24, 21, 30, 0));
+
+    const home = await mockApi<{ todayStatus: string; questAction: string }>("home");
+
+    expect(home.todayStatus).toBe("unanswered");
+    expect(home.questAction).toBe("start");
+  });
+
+  it("休日前夜の未選択は22時台なら新規登録できる", async () => {
+    const date = "2026-07-03";
+    vi.setSystemTime(new Date(2026, 6, 3, 22, 30, 0));
+
+    const result = await mockApi<{ submittedAt: string; overwritten: boolean }>("answers", {
+      method: "POST",
+      body: JSON.stringify({ date, answers: sampleAnswers }),
+    });
+
+    expect(result.overwritten).toBe(false);
+  });
+
+  it("休日前夜の未選択は23時超で新規登録を拒否する", async () => {
+    const date = "2026-07-10";
+    vi.setSystemTime(new Date(2026, 6, 10, 23, 0, 1));
+
+    await expect(
+      mockApi("answers", {
+        method: "POST",
+        body: JSON.stringify({ date, answers: sampleAnswers }),
+      }),
+    ).rejects.toThrow("登録受付締切を過ぎているため回答を保存できません");
+  });
+
   it("既存回答の retry は締切後も保存できる", async () => {
     const date = "2026-06-07-retry";
     vi.setSystemTime(new Date(2026, 5, 7, 20, 30, 0));
@@ -207,5 +240,17 @@ describe("mockApi registrationSetting 競合ガード", () => {
         body: JSON.stringify({ date, bedtimeHour: 21 }),
       }),
     ).rejects.toThrow("変更先の登録受付締切を過ぎているため設定できません");
+  });
+
+  it("休日前夜で未選択なら21時台でも就寝時刻を設定できる", async () => {
+    const date = "2026-07-17";
+    vi.setSystemTime(new Date(2026, 6, 17, 21, 30, 0));
+
+    const result = await mockApi<{ date: string; bedtimeHour: number }>("registrationSetting", {
+      method: "POST",
+      body: JSON.stringify({ date, bedtimeHour: 22 }),
+    });
+
+    expect(result.bedtimeHour).toBe(22);
   });
 });

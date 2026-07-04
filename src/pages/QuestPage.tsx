@@ -87,8 +87,7 @@ export function QuestPage() {
       return;
     }
     if (homeData.questAction !== "start") return;
-    const bedtimeHour =
-      getBedtimeHourDraft(date) ?? homeData.bedtimeHour ?? 21;
+    const bedtimeHour = getBedtimeHourDraft(date) ?? homeData.bedtimeHour;
     const now = new Date();
     if (
       isBeforeQuestRegistrationStart(date, now, bedtimeHour) ||

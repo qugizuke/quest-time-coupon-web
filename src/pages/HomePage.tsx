@@ -18,7 +18,7 @@ import { Card } from "@/components/ui/Card";
 import { useQuestDeadlineClock } from "@/hooks/useQuestDeadlineClock";
 import { isWeekendEve } from "@/lib/deadline";
 import { todayLocal } from "@/lib/date";
-import { setBedtimeHourDraft } from "@/lib/sessionStorage";
+import { clearBedtimeHourDraft, setBedtimeHourDraft } from "@/lib/sessionStorage";
 import type { BedtimeHour } from "@/types/api";
 
 const STATUS_LABEL = {
@@ -50,16 +50,23 @@ export function HomePage() {
   const { data, isLoading, error } = useQuery(homeQuery);
   const today = todayLocal();
   const showBedtimePicker = isWeekendEve(today);
-  const [bedtimeHour, setBedtimeHour] = useState<BedtimeHour>(21);
-  const [confirmedBedtimeHour, setConfirmedBedtimeHour] = useState<BedtimeHour>(21);
+  const [bedtimeHour, setBedtimeHour] = useState<BedtimeHour | undefined>(undefined);
+  const [confirmedBedtimeHour, setConfirmedBedtimeHour] = useState<BedtimeHour | undefined>(
+    undefined,
+  );
 
   useEffect(() => {
-    if (data?.bedtimeHour) {
-      setBedtimeHour(data.bedtimeHour);
-      setConfirmedBedtimeHour(data.bedtimeHour);
+    if (!data) {
+      return;
+    }
+    setBedtimeHour(data.bedtimeHour);
+    setConfirmedBedtimeHour(data.bedtimeHour);
+    if (data.bedtimeHour === undefined) {
+      clearBedtimeHourDraft(today);
+    } else {
       setBedtimeHourDraft(today, data.bedtimeHour);
     }
-  }, [data?.bedtimeHour, today]);
+  }, [data, today]);
 
   const registrationMutation = useMutation({
     mutationFn: (hour: BedtimeHour) =>
@@ -74,7 +81,11 @@ export function HomePage() {
     onError: () => {
       const fallbackHour = confirmedBedtimeHour;
       setBedtimeHour(fallbackHour);
-      setBedtimeHourDraft(today, fallbackHour);
+      if (fallbackHour === undefined) {
+        clearBedtimeHourDraft(today);
+      } else {
+        setBedtimeHourDraft(today, fallbackHour);
+      }
     },
   });
 

@@ -9,6 +9,7 @@ import {
   isPastQuestBonusDeadline,
   isPastQuestRegistrationCutoff,
   isWeekendEve,
+  resolveQuestDeadlineBedtimeHour,
 } from "@/lib/deadline";
 import {
   BEDTIME_PREP_QUEST_ID,
@@ -77,7 +78,7 @@ function calcMockRegistrationTimingAdjustment(date: string): number {
   const submittedAt = store.submittedAtByDate.get(date);
   if (!submittedAt) return 0;
   const submitted = new Date(submittedAt);
-  const bedtimeHour = store.bedtimeByDate.get(date) ?? 21;
+  const bedtimeHour = store.bedtimeByDate.get(date);
   if (isPastQuestBonusDeadline(date, submitted, bedtimeHour)) return 0;
   return canApplyBedtimePrepRegistrationBonus(mockBedtimePrepEvaluation(date))
     ? REGISTRATION_ON_TIME_BONUS
@@ -332,7 +333,7 @@ export async function mockApi<T>(
       const hasAnswers = !!dayAnswers && dayAnswers.size > 0;
       const isGraded = store.gradedDates.has(today);
       const isAcked = store.acknowledgedDates.has(today);
-      const bedtimeHour = store.bedtimeByDate.get(today) ?? 21;
+      const bedtimeHour = store.bedtimeByDate.get(today);
       const pastCutoff = isPastQuestRegistrationCutoff(today, new Date(), bedtimeHour);
 
       if (pastCutoff && !hasAnswers && !store.missedRegistrationDates.has(today)) {
@@ -393,7 +394,7 @@ export async function mockApi<T>(
       if (store.answers.has(date) || store.submittedAtByDate.has(date)) {
         throw new Error("ALREADY_ANSWERED: 回答後は就寝時刻を変更できません");
       }
-      const currentHour = store.bedtimeByDate.get(date) ?? 21;
+      const currentHour = store.bedtimeByDate.get(date);
       if (isPastQuestRegistrationCutoff(date, new Date(), currentHour)) {
         throw new Error("BAD_REQUEST: 登録受付締切を過ぎているため設定できません");
       }
@@ -420,7 +421,8 @@ export async function mockApi<T>(
       if (store.gradedDates.has(date)) {
         throw new Error("ALREADY_GRADED: 採点済みのため上書きできません");
       }
-      const hour = store.bedtimeByDate.get(date) ?? bedtimeHour ?? 21;
+      const savedHour = store.bedtimeByDate.get(date);
+      const hour = savedHour ?? bedtimeHour;
       const existingAnswers = store.answers.get(date);
       const isNewRegistration = !existingAnswers;
       if (isNewRegistration) {
@@ -442,7 +444,10 @@ export async function mockApi<T>(
       store.answers.set(date, map);
       store.submittedAtByDate.set(date, submittedAt);
       store.missedRegistrationDates.delete(date);
-      store.bedtimeByDate.set(date, hour);
+      store.bedtimeByDate.set(
+        date,
+        savedHour ?? resolveQuestDeadlineBedtimeHour(date, bedtimeHour),
+      );
       return {
         submittedAt,
         overwritten: !isNewRegistration,
@@ -497,10 +502,10 @@ export async function mockApi<T>(
       const dayAnswers = store.answers.get(date);
       const items = dayAnswers
         ? [...dayAnswers.entries()].map(([questId, childAnswer]) => ({
-            questId,
-            childAnswer,
-            actualDone: null,
-          }))
+          questId,
+          childAnswer,
+          actualDone: null,
+        }))
         : [];
       return {
         date,

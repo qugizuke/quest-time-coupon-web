@@ -86,7 +86,7 @@ export function useQuestDeadlineClock(
     beforeRegistrationStart,
     pastBonusDeadline,
     bonusDeadlineLabel: formatQuestBonusDeadlineLabel(date, bedtimeHour),
-    registrationStartLabel: formatQuestRegistrationStartLabel(bedtimeHour),
-    registrationCutoffLabel: formatQuestRegistrationCutoffLabel(bedtimeHour),
+    registrationStartLabel: formatQuestRegistrationStartLabel(date, bedtimeHour),
+    registrationCutoffLabel: formatQuestRegistrationCutoffLabel(date, bedtimeHour),
   };
 }

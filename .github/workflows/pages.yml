@@ -1,3 +1,9 @@
+# Deploy to GitHub Pages（旧経路）
+#
+# 本番ホスティングの正は Firebase App Hosting（main マージで自動デプロイ）。
+# 本 workflow は過去の GitHub Pages 用。App Hosting と二重になるため、
+# CEO 判断で無効化（削除 or on: コメントアウト）を推奨。エージェントは勝手に削除しない。
+# 詳細: README.md / CONTRIBUTING.md / docs/firebase-setup.md
 name: Deploy to GitHub Pages
 
 on:

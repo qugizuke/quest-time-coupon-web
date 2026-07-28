@@ -35,7 +35,7 @@ npm run dev
 
 ## API 接続（Cloud Functions）
 
-バックエンドは **Firebase Cloud Functions v2**（`asia-northeast1`）。GAS Web App は移行元で、`VITE_GAS_URL` は移行期の後方互換フォールバックとしてのみ残している（**正は `VITE_API_URL`**）。
+バックエンドは **Firebase Cloud Functions v2**（`asia-northeast1`）。API ベース URL は **`VITE_API_URL` のみ**（旧 `VITE_GAS_URL` フォールバックは廃止）。
 
 | 環境変数 | 役割 |
 | --- | --- |

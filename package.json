@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": "22 || 24"
+  },
   "scripts": {
     "dev": "vite",
     "build": "npm run copy-quests && npm run copy-adjustments && tsc -b && vite build",

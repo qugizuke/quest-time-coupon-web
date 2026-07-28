@@ -93,7 +93,6 @@ describe("client リクエスト組み立て", () => {
 
   it("VITE_API_URL 未設定なら設定箇所を示すエラーを投げる", async () => {
     vi.stubEnv("VITE_API_URL", "");
-    vi.stubEnv("VITE_GAS_URL", "");
     vi.stubEnv("VITE_MOCK_API", "false");
     const fetchMock = stubFetch(jsonResponse({ ok: true, data: {} }));
 
@@ -105,19 +104,16 @@ describe("client リクエスト組み立て", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("VITE_API_URL 未設定でも VITE_GAS_URL があれば後方互換で使う", async () => {
+  it("VITE_API_URL 未設定なら旧 VITE_GAS_URL があってもフォールバックしない", async () => {
     vi.stubEnv("VITE_API_URL", undefined);
     vi.stubEnv("VITE_GAS_URL", "https://script.google.com/macros/s/legacy/exec");
     vi.stubEnv("VITE_MOCK_API", "false");
     const fetchMock = stubFetch(jsonResponse({ ok: true, data: {} }));
 
     const { fetchHome } = await importClient();
-    await fetchHome("2026-07-28");
 
-    const [url] = fetchMock.mock.calls[0];
-    expect(url).toBe(
-      "https://script.google.com/macros/s/legacy/exec?action=home&date=2026-07-28",
-    );
+    await expect(fetchHome("2026-07-28")).rejects.toThrow(/VITE_API_URL が未設定です/);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("API がエラーを返したら code とメッセージを含めて投げる", async () => {

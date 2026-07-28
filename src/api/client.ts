@@ -13,17 +13,16 @@ import { todayLocal } from "@/lib/date";
 
 /**
  * API のベース URL を解決する
- * @description 正は `VITE_API_URL`（例: `https://<region>-<project>.cloudfunctions.net/api`）。
- *   旧 GAS 環境からの移行途中で `.env` が更新されていない場合に限り、
- *   後方互換として `VITE_GAS_URL` を使う。
+ * @description `VITE_API_URL`（例: `https://<region>-<project>.cloudfunctions.net/api`）のみを使う。
+ *   旧 `VITE_GAS_URL` へのフォールバックは廃止（設定漏れを無言で GAS へ流さない）。
  * @returns {string} 末尾スラッシュを除いたベース URL（未設定なら空文字）
  */
 function resolveApiBaseUrl(): string {
-  const candidates = [import.meta.env.VITE_API_URL, import.meta.env.VITE_GAS_URL];
-  const configured = candidates.find(
-    (candidate) => typeof candidate === "string" && candidate.trim() !== "",
-  );
-  return (configured ?? "").trim().replace(/\/+$/, "");
+  const configured = import.meta.env.VITE_API_URL;
+  if (typeof configured !== "string" || configured.trim() === "") {
+    return "";
+  }
+  return configured.trim().replace(/\/+$/, "");
 }
 
 const API_BASE_URL = resolveApiBaseUrl();

@@ -49,17 +49,13 @@ env:
       - BUILD
 
   # API 共有キー（Functions 側 `API_SECRET` と同じ値）。
-  # 平文で commit しないため、Cloud Secret Manager 経由で渡す。
-  # 未設定のままでも起動・配信は成功するが、API 呼び出しは 401 になる。
-  #
-  # 有効化手順（CEO / 権限保持者が 1 度だけ実施）:
-  #   1. npx -y firebase-tools@latest apphosting:secrets:set VITE_API_KEY \
-  #        --project quest-time-coupon-95106
-  #   2. npx -y firebase-tools@latest apphosting:secrets:grantaccess VITE_API_KEY \
-  #        --backend quest-time-coupon-web --project quest-time-coupon-95106
-  #   3. 下記 2 行のコメントを外して main へマージ（= 再ロールアウト）
-  #
-  # - variable: VITE_API_KEY
-  #   secret: VITE_API_KEY
-  #   availability:
-  #     - BUILD
+  # 平文で commit せず、Cloud Secret Manager 経由で渡す。
+  # 事前に以下を 1 度実行済みであること:
+  #   npx -y firebase-tools@latest apphosting:secrets:set VITE_API_KEY \
+  #     --project quest-time-coupon-95106
+  #   npx -y firebase-tools@latest apphosting:secrets:grantaccess VITE_API_KEY \
+  #     --backend quest-time-coupon-web --project quest-time-coupon-95106
+  - variable: VITE_API_KEY
+    secret: VITE_API_KEY
+    availability:
+      - BUILD

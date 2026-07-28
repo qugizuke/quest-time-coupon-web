@@ -1,29 +1,60 @@
 /**
- * @file GAS API クライアント
- * @description action ベースの GET/POST。VITE_MOCK_API=true 時はモックを返す。
+ * @file Firebase Cloud Functions API クライアント
+ * @description action ベースの GET/POST。`VITE_API_URL`（`api` 関数のベース URL）へ
+ *   `?action=<name>` を付けてリクエストし、`{ ok, data, error }` 形のレスポンスから
+ *   `data` を取り出す。`VITE_MOCK_API=true` のときのみモックを返す。
+ * @limitation 認証はヘッダー `X-Api-Key` による共有シークレット方式（家庭用のため
+ *   Firebase Auth は使わない）。`VITE_*` はビルド時にバンドルへ埋め込まれるため、
+ *   キーはブラウザから参照可能である点を前提に運用する。
  */
 import type { ApiResponse, ChildAnswer, GradeAdjustment, HomeData } from "@/types/api";
 import { mockApi } from "@/api/mock";
 import { todayLocal } from "@/lib/date";
 
-const GAS_URL = import.meta.env.VITE_GAS_URL ?? "";
+/**
+ * API のベース URL を解決する
+ * @description 正は `VITE_API_URL`（例: `https://<region>-<project>.cloudfunctions.net/api`）。
+ *   旧 GAS 環境からの移行途中で `.env` が更新されていない場合に限り、
+ *   後方互換として `VITE_GAS_URL` を使う。
+ * @returns {string} 末尾スラッシュを除いたベース URL（未設定なら空文字）
+ */
+function resolveApiBaseUrl(): string {
+  const candidates = [import.meta.env.VITE_API_URL, import.meta.env.VITE_GAS_URL];
+  const configured = candidates.find(
+    (candidate) => typeof candidate === "string" && candidate.trim() !== "",
+  );
+  return (configured ?? "").trim().replace(/\/+$/, "");
+}
+
+const API_BASE_URL = resolveApiBaseUrl();
 const API_KEY = import.meta.env.VITE_API_KEY ?? "";
 const USE_MOCK = import.meta.env.VITE_MOCK_API === "true";
 
 /**
- * GAS Web App は OPTIONS（CORS プリフライト）非対応のため、
- * JSON 本体でも Content-Type は text/plain にする（Simple Request）。
+ * POST 本体は JSON。Cloud Functions は CORS プリフライト（OPTIONS）に対応するため、
+ * GAS 版で必要だった `text/plain` 回避策は不要になった。
  */
-const GAS_POST_HEADERS = {
-  "Content-Type": "text/plain;charset=utf-8",
+const JSON_POST_HEADERS = {
+  "Content-Type": "application/json",
 } as const;
 
 /**
+ * 認証ヘッダーを構築する
+ * @description クエリ `?key=` は Cloud Logging のリクエスト URL に残るため使わず、
+ *   ヘッダー `X-Api-Key` のみで送る（Functions 側は両対応）。
+ * @returns {Record<string, string>} キー未設定なら空オブジェクト
+ */
+function buildAuthHeaders(): Record<string, string> {
+  return API_KEY ? { "X-Api-Key": API_KEY } : {};
+}
+
+/**
  * API リクエストを実行する
- * @param {string} action - action 名
+ * @param {string} action - action 名（例: `home` / `answers`）
  * @param {RequestInit} [init] - fetch オプション
  * @param {Record<string, string>} [query] - 追加クエリ
- * @returns {Promise<T>} data 部分
+ * @returns {Promise<T>} レスポンスの data 部分
+ * @throws {Error} ベース URL 未設定、通信失敗、JSON 解析失敗、API がエラーを返した場合
  */
 async function request<T>(
   action: string,
@@ -34,16 +65,31 @@ async function request<T>(
     return mockApi<T>(action, init, query);
   }
 
-  if (!GAS_URL) {
+  if (!API_BASE_URL) {
     throw new Error(
-      "request: VITE_GAS_URL が未設定です。.env を確認してください。",
+      `request: VITE_API_URL が未設定です（action=${action}）。` +
+        "ローカルは .env、本番は apphosting.yaml / Firebase Console を確認してください。",
     );
   }
 
-  const params = new URLSearchParams({ action, key: API_KEY, ...query });
-  const url = `${GAS_URL}?${params.toString()}`;
-  const response = await fetch(url, { redirect: "follow", ...init });
-  const json = (await response.json()) as ApiResponse<T>;
+  const params = new URLSearchParams({ action, ...query });
+  const url = `${API_BASE_URL}?${params.toString()}`;
+  const response = await fetch(url, {
+    redirect: "follow",
+    ...init,
+    headers: { ...buildAuthHeaders(), ...init?.headers },
+  });
+
+  let json: ApiResponse<T>;
+  try {
+    json = (await response.json()) as ApiResponse<T>;
+  } catch (cause) {
+    const reason = cause instanceof Error ? cause.message : String(cause);
+    throw new Error(
+      `request: レスポンスの JSON 解析に失敗しました（action=${action}, ` +
+        `status=${response.status} ${response.statusText}, url=${url}）: ${reason}`,
+    );
+  }
 
   if (!json.ok || json.data === undefined) {
     const code = json.error?.code ?? "UNKNOWN";
@@ -67,7 +113,7 @@ export function postAnswers(payload: {
 }): Promise<{ submittedAt: string; overwritten: boolean }> {
   return request("answers", {
     method: "POST",
-    headers: GAS_POST_HEADERS,
+    headers: JSON_POST_HEADERS,
     body: JSON.stringify(payload),
   });
 }
@@ -79,12 +125,12 @@ export function postRegistrationSetting(payload: {
 }): Promise<{ date: string; bedtimeHour: number }> {
   return request("registrationSetting", {
     method: "POST",
-    headers: GAS_POST_HEADERS,
+    headers: JSON_POST_HEADERS,
     body: JSON.stringify(payload),
   });
 }
 
-/** POST results 一覧 */
+/** GET results 一覧 */
 export function fetchResults(): Promise<{
   items: Array<{
     date: string;
@@ -121,7 +167,7 @@ export function postResultsAck(date: string): Promise<{
 }> {
   return request("resultsAck", {
     method: "POST",
-    headers: GAS_POST_HEADERS,
+    headers: JSON_POST_HEADERS,
     body: JSON.stringify({ date }),
   });
 }
@@ -159,7 +205,7 @@ export function postGrade(payload: {
 }): Promise<{ gradedAt: string }> {
   return request("grade", {
     method: "POST",
-    headers: GAS_POST_HEADERS,
+    headers: JSON_POST_HEADERS,
     body: JSON.stringify(payload),
   });
 }
@@ -174,7 +220,7 @@ export function postTimerStop(payload: {
 }): Promise<{ displayBalance: number }> {
   return request("timerStop", {
     method: "POST",
-    headers: GAS_POST_HEADERS,
+    headers: JSON_POST_HEADERS,
     body: JSON.stringify(payload),
   });
 }

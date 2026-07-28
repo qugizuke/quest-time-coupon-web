@@ -5,3 +5,9 @@ dist/
 !.env.example
 .DS_Store
 *.local
+
+# Firebase CLI のローカルキャッシュ（Classic Hosting は不採用のため設定ファイルも置かない）
+.firebase/
+
+# 動作確認時のスクリーンショット置き場
+.verify-screenshots/

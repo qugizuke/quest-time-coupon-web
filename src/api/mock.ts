@@ -1,6 +1,6 @@
 /**
  * @file モック API
- * @description GAS 未接続時の開発用インメモリ API（v5 対応）。
+ * @description API（Cloud Functions）未接続時の開発用インメモリ API（v5 対応）。
  */
 import type { ChildAnswer, GradeAdjustment, HomeData } from "@/types/api";
 import { todayLocal } from "@/lib/date";

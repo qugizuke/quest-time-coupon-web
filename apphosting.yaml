@@ -1,0 +1,65 @@
+# Firebase App Hosting 設定（backend: quest-time-coupon-web / live branch: main）
+#
+# 概要:
+#   Vite でビルドした SPA（dist/）を superstatic で配信する。
+#   App Hosting は Cloud Run 上でアプリを起動するため、`npm start` で
+#   $PORT を listen するプロセスが必要（静的ファイルを置くだけでは起動しない）。
+#
+# 主な仕様:
+#   - build: `npm run build` → dist/
+#   - run:   `npm start`（superstatic が dist を SPA フォールバック付きで配信）
+#   - 環境変数は Vite のビルド時に JS バンドルへ埋め込まれるため availability は BUILD
+#
+# 制限事項:
+#   - `VITE_*` はビルド時に埋め込まれ、ブラウザから参照可能になる。
+#     秘匿が必要な値をここに置いてはならない（下記 VITE_API_KEY のコメント参照）。
+#   - 本ファイルの変更は次回ロールアウト（main へのマージ）から反映される。
+
+# Cloud Run の実行設定（家庭用・低トラフィック前提で最小構成）
+runConfig:
+  cpu: 1
+  memoryMiB: 512
+  minInstances: 0
+  maxInstances: 2
+  concurrency: 80
+
+# ビルド／起動コマンドを明示する（フレームワーク自動検出に依存しない）
+scripts:
+  buildCommand: npm run build
+  runCommand: npm start
+
+# superstatic は実行時に node_modules を必要とするため、成果物を一切間引かない
+outputFiles:
+  serverApp:
+    include:
+      - .
+
+env:
+  # Cloud Functions v2（asia-northeast1）の `api` 関数のベース URL。末尾スラッシュなし。
+  # クライアントは `${VITE_API_URL}?action=...` を呼ぶ（疎通確認は `${VITE_API_URL}/ping`）。
+  - variable: VITE_API_URL
+    value: https://asia-northeast1-quest-time-coupon-95106.cloudfunctions.net/api
+    availability:
+      - BUILD
+
+  # 本番はモックを使わない（Firestore + Functions の実データを参照する）
+  - variable: VITE_MOCK_API
+    value: "false"
+    availability:
+      - BUILD
+
+  # API 共有キー（Functions 側 `API_SECRET` と同じ値）。
+  # 平文で commit しないため、Cloud Secret Manager 経由で渡す。
+  # 未設定のままでも起動・配信は成功するが、API 呼び出しは 401 になる。
+  #
+  # 有効化手順（CEO / 権限保持者が 1 度だけ実施）:
+  #   1. npx -y firebase-tools@latest apphosting:secrets:set VITE_API_KEY \
+  #        --project quest-time-coupon-95106
+  #   2. npx -y firebase-tools@latest apphosting:secrets:grantaccess VITE_API_KEY \
+  #        --backend quest-time-coupon-web --project quest-time-coupon-95106
+  #   3. 下記 2 行のコメントを外して main へマージ（= 再ロールアウト）
+  #
+  # - variable: VITE_API_KEY
+  #   secret: VITE_API_KEY
+  #   availability:
+  #     - BUILD

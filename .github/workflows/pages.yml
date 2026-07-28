@@ -1,3 +1,9 @@
+# Deploy to GitHub Pages（旧経路）
+#
+# 本番ホスティングの正は Firebase App Hosting（main マージで自動デプロイ）。
+# 本 workflow は過去の GitHub Pages 用。App Hosting と二重になるため、
+# CEO 判断で無効化（削除 or on: コメントアウト）を推奨。エージェントは勝手に削除しない。
+# 詳細: README.md / CONTRIBUTING.md / docs/firebase-setup.md
 name: Deploy to GitHub Pages
 
 on:
@@ -33,13 +39,14 @@ jobs:
       - name: Build
         env:
           GITHUB_PAGES: "true"
-          VITE_GAS_URL: ${{ secrets.VITE_GAS_URL }}
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
           VITE_API_KEY: ${{ secrets.VITE_API_KEY }}
           VITE_MOCK_API: "false"
         run: |
-          if [ -z "$VITE_GAS_URL" ] || [ -z "$VITE_API_KEY" ]; then
-            echo "ERROR: VITE_GAS_URL / VITE_API_KEY が未設定です。"
+          if [ -z "$VITE_API_URL" ] || [ -z "$VITE_API_KEY" ]; then
+            echo "ERROR: VITE_API_URL / VITE_API_KEY が未設定です。"
             echo "Settings → Secrets and variables → Actions を確認してください。"
+            echo "（旧 VITE_GAS_URL は廃止。Cloud Functions の api URL を VITE_API_URL に設定）"
             exit 1
           fi
           npm run build

@@ -1,6 +1,7 @@
 /**
  * @file API 型定義
- * @description GAS Web App レスポンスの共有型。
+ * @description API レスポンスの共有型。`{ ok, data, error }` 形は
+ *   GAS Web App から Cloud Functions へ移行しても同一契約を維持する。
  */
 
 /** 子どもの回答値 */

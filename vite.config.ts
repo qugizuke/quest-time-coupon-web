@@ -1,8 +1,11 @@
 /**
  * @file Vite ビルド設定
  * @description React SPA の開発サーバー・本番ビルドを構成する。
- *   JSON 定義を public へコピーし、GitHub Pages 向けに dist を出力する。
- * @limitation GAS URL はビルド時環境変数 VITE_GAS_URL / VITE_API_KEY が必要
+ *   JSON 定義を public へコピーし、dist を出力する。
+ *   本番ホスティングの正は Firebase App Hosting（base は通常 `/`）。
+ *   `GITHUB_PAGES=true` 時のみ旧 GitHub Pages 用の base を付与する。
+ * @limitation API 接続にはビルド時環境変数 VITE_API_URL / VITE_API_KEY が必要
+ *   （本番は apphosting.yaml、ローカルは .env で与える）
  */
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";

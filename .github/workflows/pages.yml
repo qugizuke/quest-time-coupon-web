@@ -39,13 +39,14 @@ jobs:
       - name: Build
         env:
           GITHUB_PAGES: "true"
-          VITE_GAS_URL: ${{ secrets.VITE_GAS_URL }}
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
           VITE_API_KEY: ${{ secrets.VITE_API_KEY }}
           VITE_MOCK_API: "false"
         run: |
-          if [ -z "$VITE_GAS_URL" ] || [ -z "$VITE_API_KEY" ]; then
-            echo "ERROR: VITE_GAS_URL / VITE_API_KEY が未設定です。"
+          if [ -z "$VITE_API_URL" ] || [ -z "$VITE_API_KEY" ]; then
+            echo "ERROR: VITE_API_URL / VITE_API_KEY が未設定です。"
             echo "Settings → Secrets and variables → Actions を確認してください。"
+            echo "（旧 VITE_GAS_URL は廃止。Cloud Functions の api URL を VITE_API_URL に設定）"
             exit 1
           fi
           npm run build

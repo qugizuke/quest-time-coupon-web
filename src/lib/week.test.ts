@@ -7,6 +7,7 @@ import {
   getMondayOfWeek,
   getMondayWithOffset,
   getWeekDates,
+  getWeekOffsetBetween,
 } from "./week";
 
 describe("week", () => {
@@ -36,5 +37,11 @@ describe("week", () => {
 
   it("週ラベルを返す", () => {
     expect(formatWeekLabel("2026-07-27")).toBe("7月27日の週");
+  });
+
+  it("基準日と対象日の週オフセットを返す", () => {
+    expect(getWeekOffsetBetween("2026-07-30", "2026-07-28")).toBe(0);
+    expect(getWeekOffsetBetween("2026-07-30", "2026-07-20")).toBe(-1);
+    expect(getWeekOffsetBetween("2026-07-30", "2026-08-05")).toBe(1);
   });
 });

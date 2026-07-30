@@ -27,6 +27,9 @@ const MOCK_VACATION_KEY = "qtc:mock:vacation";
 /** @type {string} モック免除フラグ（localStorage） */
 const MOCK_EXEMPT_KEY = "qtc:mock:exempt";
 
+/** @type {number} 未登録ペナルティ（分） */
+const MISSED_REGISTRATION_PENALTY = -60;
+
 interface MockStore {
   balanceMinutes: number;
   penaltyMinutes: number;
@@ -36,6 +39,8 @@ interface MockStore {
   rejectedDates: Set<string>;
   acknowledgedDates: Set<string>;
   missedRegistrationDates: Set<string>;
+  /** resultsAck で残高へ反映した appliedDelta（後付け免除の復元用） */
+  appliedDeltaByDate: Map<string, number>;
   bedtimeByDate: Map<string, number>;
   wakeUpByDate: Map<string, WakeUpTime>;
   submittedAtByDate: Map<string, string>;
@@ -59,6 +64,7 @@ const store: MockStore = {
   rejectedDates: new Set(),
   acknowledgedDates: new Set(),
   missedRegistrationDates: new Set(),
+  appliedDeltaByDate: new Map(),
   bedtimeByDate: new Map(),
   wakeUpByDate: new Map(),
   submittedAtByDate: new Map(),
@@ -105,6 +111,8 @@ function resolveMockVacationMode(date?: string): boolean {
  * モックの免除日判定
  * @param {string} date - YYYY-MM-DD
  * @returns {boolean} 免除日なら true
+ * @limitation localStorage の当日免除フラグ（`qtc:mock:exempt`）は
+ *   `date === todayLocal()` のときだけ有効。過去日の resultsAck を誤拒否しない。
  */
 function resolveMockExemptDay(date: string): boolean {
   if (store.exemptDatesOverride) {
@@ -117,7 +125,167 @@ function resolveMockExemptDay(date: string): boolean {
   ) {
     return true;
   }
-  return readMockFlag(MOCK_EXEMPT_KEY);
+  // 当日フラグは「今日」のみ（過去の未確認 ack をブロックしない）
+  return readMockFlag(MOCK_EXEMPT_KEY) && date === todayLocal();
+}
+
+/**
+ * 期間内の全日を YYYY-MM-DD 配列で返す
+ * @param {string} startDate - 開始
+ * @param {string} endDate - 終了
+ * @returns {string[]} 日付一覧
+ */
+function expandInclusiveDateRange(startDate: string, endDate: string): string[] {
+  if (!startDate || !endDate || startDate > endDate) return [];
+  const [sy, sm, sd] = startDate.split("-").map(Number);
+  const [ey, em, ed] = endDate.split("-").map(Number);
+  const cursor = new Date(sy, sm - 1, sd);
+  const end = new Date(ey, em - 1, ed);
+  const dates: string[] = [];
+  while (cursor <= end) {
+    const y = cursor.getFullYear();
+    const m = String(cursor.getMonth() + 1).padStart(2, "0");
+    const d = String(cursor.getDate()).padStart(2, "0");
+    dates.push(`${y}-${m}-${d}`);
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return dates;
+}
+
+/**
+ * 免除期間配列から全日セットを作る
+ * @param {Array<{ startDate: string; endDate: string }>} periods - 期間一覧
+ * @returns {Set<string>} 日付セット
+ */
+function collectExemptDatesFromPeriods(
+  periods: Array<{ startDate: string; endDate: string }>,
+): Set<string> {
+  const dates = new Set<string>();
+  for (const period of periods) {
+    for (const date of expandInclusiveDateRange(period.startDate, period.endDate)) {
+      dates.add(date);
+    }
+  }
+  return dates;
+}
+
+/**
+ * results に載せる免除日一覧を収集する（今日以前のみ・契約: Result は当日以前）
+ * @returns {string[]} 免除日 YYYY-MM-DD
+ */
+function collectMockExemptDatesForResults(): string[] {
+  const today = todayLocal();
+  const dates = new Set<string>();
+  if (store.exemptDatesOverride) {
+    for (const date of store.exemptDatesOverride) {
+      dates.add(date);
+    }
+  }
+  for (const date of collectExemptDatesFromPeriods(store.exemptionPeriods)) {
+    dates.add(date);
+  }
+  if (!store.exemptDatesOverride && readMockFlag(MOCK_EXEMPT_KEY)) {
+    dates.add(today);
+  }
+  return [...dates].filter((date) => date <= today);
+}
+
+/**
+ * 未登録結果を免除へ置換し、ack 済みなら残高を冪等に復元する（契約 T9）
+ * @param {string} date - YYYY-MM-DD
+ * @returns {"changed" | "skipped" | "noop"} 処理区分
+ */
+function convertUnregisteredToExempt(date: string): "changed" | "skipped" | "noop" {
+  if (store.gradedDates.has(date) || store.rejectedDates.has(date)) {
+    return "skipped";
+  }
+  if (!store.missedRegistrationDates.has(date)) {
+    return "noop";
+  }
+  if (store.acknowledgedDates.has(date)) {
+    const applied =
+      store.appliedDeltaByDate.get(date) ?? MISSED_REGISTRATION_PENALTY;
+    store.balanceMinutes -= applied;
+    store.appliedDeltaByDate.delete(date);
+  }
+  store.missedRegistrationDates.delete(date);
+  store.acknowledgedDates.delete(date);
+  return "changed";
+}
+
+/**
+ * 後付け免除の被覆追加（契約 T9・今日以前）
+ * @param {Iterable<string>} newlyCoveredDates - 新たに免除へ入った日
+ * @returns {{ changedDates: string[]; skippedDates: string[] }} 集計
+ */
+function applyExemptionCoverage(newlyCoveredDates: Iterable<string>): {
+  changedDates: string[];
+  skippedDates: string[];
+} {
+  const today = todayLocal();
+  const changedDates: string[] = [];
+  const skippedDates: string[] = [];
+  for (const date of newlyCoveredDates) {
+    if (date > today) continue;
+    const outcome = convertUnregisteredToExempt(date);
+    if (outcome === "skipped") {
+      skippedDates.push(date);
+      continue;
+    }
+    if (outcome === "changed") {
+      changedDates.push(date);
+      continue;
+    }
+    // result なし → exempt を results 合成で出す（初回被覆は changed）
+    if (
+      !store.gradedDates.has(date) &&
+      !store.rejectedDates.has(date) &&
+      !store.answers.has(date)
+    ) {
+      changedDates.push(date);
+    }
+  }
+  return { changedDates, skippedDates };
+}
+
+/**
+ * 免除被覆解除（契約 T9 uncover・今日以前の exempt 相当）
+ * @param {Iterable<string>} uncoveredDates - 期間外になった日
+ * @returns {{ changedDates: string[]; skippedDates: string[] }} 集計
+ */
+function applyExemptionUncover(uncoveredDates: Iterable<string>): {
+  changedDates: string[];
+  skippedDates: string[];
+} {
+  const today = todayLocal();
+  const changedDates: string[] = [];
+  const skippedDates: string[] = [];
+  for (const date of uncoveredDates) {
+    if (date > today) continue;
+    if (store.gradedDates.has(date) || store.rejectedDates.has(date)) {
+      skippedDates.push(date);
+      continue;
+    }
+    if (store.missedRegistrationDates.has(date)) {
+      skippedDates.push(date);
+      continue;
+    }
+    if (store.answers.has(date)) {
+      skippedDates.push(date);
+      continue;
+    }
+    if (date === today) {
+      // 当日 exempt 取消 → result なし（未登録は作らない）
+      changedDates.push(date);
+      continue;
+    }
+    // 過去の exempt（answers 空）→ unregistered へ置換
+    store.missedRegistrationDates.add(date);
+    store.acknowledgedDates.delete(date);
+    store.appliedDeltaByDate.delete(date);
+    changedDates.push(date);
+  }
+  return { changedDates, skippedDates };
 }
 
 /**
@@ -136,9 +304,9 @@ export function setMockHomeModeFlags(opts: {
   }
   if (opts.exemptDates !== undefined) {
     store.exemptDatesOverride = new Set(opts.exemptDates);
-    // 免除へ切り替えた日の stale な未登録ペナルティを削除する
+    // 免除へ切り替えた日の stale な未登録ペナルティを削除し、ack 済みなら残高復元
     for (const date of opts.exemptDates) {
-      store.missedRegistrationDates.delete(date);
+      convertUnregisteredToExempt(date);
     }
   }
 }
@@ -165,6 +333,7 @@ export function resetMockStore(): void {
   store.rejectedDates.clear();
   store.acknowledgedDates.clear();
   store.missedRegistrationDates.clear();
+  store.appliedDeltaByDate.clear();
   store.bedtimeByDate.clear();
   store.wakeUpByDate.clear();
   store.submittedAtByDate.clear();
@@ -236,9 +405,6 @@ function countTimerBlock(): number {
 
 /** @type {number} 定時登録ボーナス（分） */
 const REGISTRATION_ON_TIME_BONUS = 15;
-
-/** @type {number} 未登録ペナルティ（分） */
-const MISSED_REGISTRATION_PENALTY = -60;
 
 /**
  * 就寝時刻 payload が有効か
@@ -1015,6 +1181,7 @@ export async function mockApi<T>(
     case "questExemptions": {
       if (init?.method === "POST") {
         const op = (body as { op?: string }).op;
+        const beforeDates = collectExemptDatesFromPeriods(store.exemptionPeriods);
         if (op === "add") {
           const { startDate, endDate } = body as {
             startDate: string;
@@ -1071,11 +1238,22 @@ export async function mockApi<T>(
         } else {
           throw new Error(`BAD_REQUEST: op が不正です op=${String(op)}`);
         }
+        const afterDates = collectExemptDatesFromPeriods(store.exemptionPeriods);
+        const newlyCovered: string[] = [];
+        const uncovered: string[] = [];
+        for (const date of afterDates) {
+          if (!beforeDates.has(date)) newlyCovered.push(date);
+        }
+        for (const date of beforeDates) {
+          if (!afterDates.has(date)) uncovered.push(date);
+        }
+        const covered = applyExemptionCoverage(newlyCovered);
+        const uncoveredResult = applyExemptionUncover(uncovered);
         return {
           periods: store.exemptionPeriods,
           updatedAt: new Date().toISOString(),
-          changedDates: [],
-          skippedDates: [],
+          changedDates: [...covered.changedDates, ...uncoveredResult.changedDates],
+          skippedDates: [...covered.skippedDates, ...uncoveredResult.skippedDates],
         } as T;
       }
       return {
@@ -1147,23 +1325,51 @@ export async function mockApi<T>(
         requiresAck: true,
         blocksTimer: !store.acknowledgedDates.has(date),
       }));
-      const missedItems = [...store.missedRegistrationDates].map((date) => ({
-        date,
-        totalPoints: MISSED_REGISTRATION_PENALTY,
-        acknowledged: store.acknowledgedDates.has(date),
-        reasonCode: "unregistered" as const,
-        registrationTimingAdjustment: MISSED_REGISTRATION_PENALTY,
-        registrationTimingReason: `登録締切までにクエストを登録しなかったため ${MISSED_REGISTRATION_PENALTY}分`,
-        adjustments: [],
-        details: [],
-        requiresAck: true,
-        blocksTimer: false,
-      }));
-      return { items: [...gradedItems, ...rejectedItems, ...missedItems] } as T;
+      const exemptDateSet = new Set(collectMockExemptDatesForResults());
+      const missedItems = [...store.missedRegistrationDates]
+        .filter((date) => !exemptDateSet.has(date))
+        .map((date) => ({
+          date,
+          totalPoints: MISSED_REGISTRATION_PENALTY,
+          acknowledged: store.acknowledgedDates.has(date),
+          reasonCode: "unregistered" as const,
+          registrationTimingAdjustment: MISSED_REGISTRATION_PENALTY,
+          registrationTimingReason: `登録締切までにクエストを登録しなかったため ${MISSED_REGISTRATION_PENALTY}分`,
+          adjustments: [],
+          details: [],
+          requiresAck: true,
+          blocksTimer: false,
+        }));
+      const occupied = new Set([
+        ...store.gradedDates,
+        ...store.rejectedDates,
+        ...[...store.missedRegistrationDates].filter(
+          (date) => !exemptDateSet.has(date),
+        ),
+      ]);
+      const exemptItems = [...exemptDateSet]
+        .filter((date) => !occupied.has(date))
+        .map((date) => ({
+          date,
+          totalPoints: 0,
+          acknowledged: true,
+          reasonCode: "exempt" as const,
+          registrationTimingAdjustment: 0,
+          adjustments: [],
+          details: [],
+          requiresAck: false,
+          blocksTimer: false,
+        }));
+      return {
+        items: [...gradedItems, ...rejectedItems, ...missedItems, ...exemptItems],
+      } as T;
     }
 
     case "resultsAck": {
       const { date } = body as { date: string };
+      if (resolveMockExemptDay(date)) {
+        throw new Error("FORBIDDEN_STATE: 免除日の結果は確認不要です");
+      }
       if (
         !store.gradedDates.has(date) &&
         !store.missedRegistrationDates.has(date) &&
@@ -1187,6 +1393,7 @@ export async function mockApi<T>(
       } else if (delta < 0) {
         store.balanceMinutes += delta;
       }
+      store.appliedDeltaByDate.set(date, delta - penaltyOffset);
       return {
         appliedDelta: delta - penaltyOffset,
         penaltyOffset,

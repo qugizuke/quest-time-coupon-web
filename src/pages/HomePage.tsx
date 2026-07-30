@@ -192,7 +192,7 @@ export function HomePage() {
         </Card>
 
         {data.unacknowledgedCount > 0 && (
-          <Banner onClick={() => navigate("/results")}>
+          <Banner onClick={() => navigate("/results?unacked=1")}>
             採点結果を確認する（未確認あり）
           </Banner>
         )}

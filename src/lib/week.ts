@@ -1,6 +1,6 @@
 /**
  * @file 週ユーティリティ
- * @description 月曜始まりの週ページング（保護者 grades 一覧用）。
+ * @description 月曜始まりの週ページング（子ども `/results`・保護者 `/parent/grades` 共用）。
  * @limitation ブラウザのローカルタイムゾーンを使用する。
  */
 
@@ -77,4 +77,17 @@ export function getWeekDates(monday: string): string[] {
 export function formatWeekLabel(monday: string): string {
   const d = parseIsoDateLocal(monday);
   return `${d.getMonth() + 1}月${d.getDate()}日の週`;
+}
+
+/**
+ * 基準日から対象日までの週オフセットを返す（対象側の月曜 − 基準側の月曜）
+ * @param {string} baseDate - 基準日 YYYY-MM-DD（通常は今日）
+ * @param {string} targetDate - 対象日 YYYY-MM-DD
+ * @returns {number} 週オフセット（負=過去、0=同週）
+ */
+export function getWeekOffsetBetween(baseDate: string, targetDate: string): number {
+  const baseMonday = parseIsoDateLocal(getMondayOfWeek(baseDate));
+  const targetMonday = parseIsoDateLocal(getMondayOfWeek(targetDate));
+  const diffMs = targetMonday.getTime() - baseMonday.getTime();
+  return Math.round(diffMs / (7 * 24 * 60 * 60 * 1000));
 }

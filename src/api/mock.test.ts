@@ -5,7 +5,10 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearMockHomeModeFlags, mockApi, resetMockStore, setMockHomeModeFlags } from "./mock";
-import { clearParentLocalSettings } from "@/lib/parentLocalSettings";
+import {
+  clearParentLocalSettings,
+  MOCK_EXEMPT_FLAG_KEY,
+} from "@/lib/parentLocalSettings";
 import type { ChildAnswer, HomeData } from "@/types/api";
 
 const sampleAnswers: { questId: string; childAnswer: ChildAnswer }[] = [
@@ -559,12 +562,14 @@ describe("mockApi questExemptions 後付け救済・未来日除外", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     clearMockHomeModeFlags();
+    clearParentLocalSettings();
     resetMockStore();
   });
 
   afterEach(() => {
     vi.useRealTimers();
     clearMockHomeModeFlags();
+    clearParentLocalSettings();
     resetMockStore();
   });
 
@@ -690,5 +695,50 @@ describe("mockApi questExemptions 後付け救済・未来日除外", () => {
     expect(dates).toContain("2026-07-30");
     expect(dates.some((d) => d > "2026-07-30")).toBe(false);
     expect(dates).not.toContain(future);
+  });
+
+  it("当日免除フラグ中でも過去の未確認結果を確認できる", async () => {
+    const pastDate = "2026-07-28";
+    const today = "2026-07-30";
+
+    // 過去日に未登録（未確認）結果を作る
+    vi.setSystemTime(new Date(2026, 6, 28, 21, 30, 0));
+    await mockApi<HomeData>("home", undefined, { date: pastDate });
+
+    // 当日は localStorage フラグのみで免除（exemptDatesOverride は使わない）
+    vi.setSystemTime(new Date(2026, 6, 30, 12, 0, 0));
+    clearParentLocalSettings();
+    localStorage.setItem(MOCK_EXEMPT_FLAG_KEY, "1");
+
+    const homeToday = await mockApi<HomeData>("home");
+    expect(homeToday.today).toBe(today);
+    expect(homeToday.isExemptToday).toBe(true);
+
+    const results = await mockApi<{
+      items: Array<{
+        date: string;
+        reasonCode: string;
+        requiresAck: boolean;
+        acknowledged: boolean;
+      }>;
+    }>("results");
+    const past = results.items.find((i) => i.date === pastDate);
+    expect(past?.reasonCode).toBe("unregistered");
+    expect(past?.requiresAck).toBe(true);
+    expect(past?.acknowledged).toBe(false);
+
+    const ack = await mockApi<{ appliedDelta: number }>("resultsAck", {
+      method: "POST",
+      body: JSON.stringify({ date: pastDate }),
+    });
+    expect(ack.appliedDelta).toBe(-60);
+
+    // 当日（免除）自体の ack は引き続き拒否
+    await expect(
+      mockApi("resultsAck", {
+        method: "POST",
+        body: JSON.stringify({ date: today }),
+      }),
+    ).rejects.toThrow("免除日の結果は確認不要です");
   });
 });

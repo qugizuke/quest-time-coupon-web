@@ -111,6 +111,8 @@ function resolveMockVacationMode(date?: string): boolean {
  * モックの免除日判定
  * @param {string} date - YYYY-MM-DD
  * @returns {boolean} 免除日なら true
+ * @limitation localStorage の当日免除フラグ（`qtc:mock:exempt`）は
+ *   `date === todayLocal()` のときだけ有効。過去日の resultsAck を誤拒否しない。
  */
 function resolveMockExemptDay(date: string): boolean {
   if (store.exemptDatesOverride) {
@@ -123,7 +125,8 @@ function resolveMockExemptDay(date: string): boolean {
   ) {
     return true;
   }
-  return readMockFlag(MOCK_EXEMPT_KEY);
+  // 当日フラグは「今日」のみ（過去の未確認 ack をブロックしない）
+  return readMockFlag(MOCK_EXEMPT_KEY) && date === todayLocal();
 }
 
 /**

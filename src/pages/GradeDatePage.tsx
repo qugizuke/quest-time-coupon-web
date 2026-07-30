@@ -1,11 +1,12 @@
 /**
  * @file GradeDatePage
- * @description 保護者が1日分を採点する画面（`/parent/grades/:date`）。任意加減点対応。
+ * @description 保護者採点詳細（◯✗・採点拒否ダイアログ・任意加減点）。
+ *   レイアウト: 日付→登録時刻→拒否上部→設問→加減点→確定下部。
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { postGrade } from "@/api/client";
+import { postGrade, postGradeReject } from "@/api/client";
 import { gradeQuery, queryKeys } from "@/api/queries";
 import { ParentPageFrame } from "@/components/layout/ParentPageFrame";
 import { LoadingScreen } from "@/components/layout/LoadingScreen";
@@ -13,6 +14,11 @@ import { Button } from "@/components/ui/Button";
 import { useGradeAdjustmentDefinitions } from "@/hooks/useGradeAdjustmentDefinitions";
 import { useDailyQuests } from "@/hooks/useDailyQuests";
 import { formatDateJa } from "@/lib/date";
+import {
+  isNegativeChildAnswer,
+  isParentGradableAnswer,
+  resolveActualDoneForSubmit,
+} from "@/lib/gradeUi";
 import { childAnswerLabel, isUnknownChildAnswer } from "@/lib/labels";
 import { resolveQuestTitle } from "@/lib/questLabels";
 import type { AdjustmentDefinition, DailyQuests, GradeAdjustment } from "@/types/api";
@@ -20,10 +26,26 @@ import type { AdjustmentDefinition, DailyQuests, GradeAdjustment } from "@/types
 const BONUS_MINUTE_OPTIONS = [10, 20, 30, 40, 50, 60];
 const PENALTY_MINUTE_OPTIONS = [-10, -20, -30, -40, -50, -60];
 
+/** 採点拒否ダイアログ本文（仕様正・一字一句） */
+const REJECT_DIALOG_BODY =
+  "今日のクエストは採点せず、-60分にします。\nこの操作は取り消せません。";
+
 interface AdjustmentRow {
   id: string;
   code: string;
   minutes: number;
+}
+
+/**
+ * 登録時刻を「○時○分」形式で返す
+ * @param {string | null} submittedAt - ISO 日時
+ * @returns {string} 表示文言
+ */
+function formatSubmittedClock(submittedAt: string | null): string {
+  if (!submittedAt) return "—";
+  const d = new Date(submittedAt);
+  if (Number.isNaN(d.getTime())) return "—";
+  return `${d.getHours()}時${String(d.getMinutes()).padStart(2, "0")}分`;
 }
 
 /**
@@ -106,6 +128,19 @@ function isRegistrationGateQuest(
 }
 
 /**
+ * 条件付き宿題追問か
+ * @param {DailyQuests | undefined} daily - クエスト定義
+ * @param {string} questId - クエスト ID
+ * @returns {boolean} 条件付きなら true
+ */
+function isConditionalQuest(
+  daily: DailyQuests | undefined,
+  questId: string,
+): boolean {
+  return daily?.quests.find((q) => q.id === questId)?.scoringRole === "conditional";
+}
+
+/**
  * 採点画面
  * @returns {JSX.Element} ページ
  */
@@ -125,15 +160,17 @@ export function GradeDatePage() {
   const [usesAdjustments, setUsesAdjustments] = useState(false);
   const [adjustmentRows, setAdjustmentRows] = useState<AdjustmentRow[]>([]);
   const [unknownAdjustmentCodes, setUnknownAdjustmentCodes] = useState<string[]>([]);
+  const [rejectOpen, setRejectOpen] = useState(false);
 
   const adjustmentItems = adjustmentDefinitions?.items ?? [];
+  const readOnly = Boolean(gradeData?.isGraded || gradeData?.isExempt);
 
   useEffect(() => {
     if (!gradeData || !adjustmentDefinitions) return;
     setGrades((prev) => {
       const next = { ...prev };
       for (const item of gradeData.items) {
-        if (isUnknownChildAnswer(item.childAnswer)) continue;
+        if (!isParentGradableAnswer(item.childAnswer)) continue;
         if (item.actualDone !== null && next[item.questId] === undefined) {
           next[item.questId] = item.actualDone;
         }
@@ -149,7 +186,7 @@ export function GradeDatePage() {
   }, [gradeData, adjustmentDefinitions]);
 
   const gradableItems = useMemo(
-    () => gradeData?.items.filter((item) => !isUnknownChildAnswer(item.childAnswer)) ?? [],
+    () => gradeData?.items.filter((item) => isParentGradableAnswer(item.childAnswer)) ?? [],
     [gradeData],
   );
 
@@ -160,12 +197,20 @@ export function GradeDatePage() {
   const mutation = useMutation({
     mutationFn: () => {
       if (!gradeData) throw new Error("GradeDatePage: データがありません");
-      const payload = gradableItems.map((item) => {
-        const actualDone = grades[item.questId];
-        if (actualDone === undefined) {
-          throw new Error(`GradeDatePage: 未採点 questId=${item.questId}`);
+      const payload = gradeData.items.flatMap((item) => {
+        try {
+          const actualDone = resolveActualDoneForSubmit(
+            item.childAnswer,
+            grades[item.questId],
+          );
+          if (actualDone === undefined) return [];
+          return [{ questId: item.questId, actualDone }];
+        } catch (error) {
+          throw new Error(
+            `GradeDatePage: 未採点 questId=${item.questId} ` +
+              `(${error instanceof Error ? error.message : String(error)})`,
+          );
         }
-        return { questId: item.questId, actualDone };
       });
       const definitionMap = new Map(adjustmentItems.map((def) => [def.code, def]));
       const adjustmentPayload: GradeAdjustment[] = usesAdjustments
@@ -190,6 +235,17 @@ export function GradeDatePage() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.gradeDates });
       void queryClient.invalidateQueries({ queryKey: queryKeys.home });
+      navigate("/parent/grades");
+    },
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: () => postGradeReject(date),
+    onSuccess: () => {
+      setRejectOpen(false);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.gradeDates });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.home });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.results });
       navigate("/parent/grades");
     },
   });
@@ -255,15 +311,39 @@ export function GradeDatePage() {
     return <LoadingScreen />;
   }
 
+  if (gradeData.isExempt) {
+    return (
+      <ParentPageFrame>
+        <h1 className="mb-2 text-app-lg font-bold">採点 {formatDateJa(date)}</h1>
+        <p className="mb-4 text-muted">免除日のため採点対象外です。</p>
+        <Button variant="secondary" fullWidth onClick={() => navigate("/parent/grades")}>
+          一覧に戻る
+        </Button>
+      </ParentPageFrame>
+    );
+  }
+
+  const clock = formatSubmittedClock(gradeData.submittedAt);
+
   return (
     <ParentPageFrame>
-      <h1 className="mb-2 text-app-lg font-bold">
-        採点 {formatDateJa(date)}
-      </h1>
-      <p className="mb-4 text-sm text-muted">
-        実際にできた / できなかった を選んでください。
-        「分からない」と答えたものは採点不要です（虚偽の次に重い減点が自動でつきます）。
+      <h1 className="mb-2 text-app-lg font-bold">採点 {formatDateJa(date)}</h1>
+      <p className="mb-2 text-sm text-ink">
+        今日は {clock} に登録されました。
       </p>
+      {gradeData.isRejected && (
+        <p className="mb-4 rounded-default bg-danger-soft px-3 py-2 text-sm text-danger">
+          この日は採点拒否（-60分）済みです。
+        </p>
+      )}
+
+      {!readOnly && (
+        <div className="mb-4">
+          <Button variant="danger" fullWidth onClick={() => setRejectOpen(true)}>
+            採点拒否
+          </Button>
+        </div>
+      )}
 
       <ul className="flex flex-col gap-4">
         {gradeData.items.map((item) => {
@@ -271,44 +351,71 @@ export function GradeDatePage() {
             preferFollowUpTitle: true,
           });
           const isUnknown = isUnknownChildAnswer(item.childAnswer);
+          const isNegative = isNegativeChildAnswer(item.childAnswer);
+          const isGradable = isParentGradableAnswer(item.childAnswer);
           const selected = grades[item.questId];
           const isRegistrationGate = isRegistrationGateQuest(daily, item.questId);
+          const isConditional = isConditionalQuest(daily, item.questId);
           const appliesFalseClaimPenalty =
             isRegistrationGate && item.childAnswer === 1 && selected === false;
+          const followUpTitle =
+            daily?.quests.find((q) => q.id === item.questId)?.conditional?.followUpTitle ??
+            title;
+
           return (
-            <li key={item.questId} className="rounded-default bg-white p-4 shadow-sm">
+            <li
+              key={item.questId}
+              className="rounded-default border-[3px] border-border bg-surface p-4 shadow-[var(--shadow-card)]"
+            >
               <p className="font-medium">{title}</p>
               {isRegistrationGate && (
-                <p className="mt-1 text-sm text-warning">
-                  ボーナス判定用（点数なし）。できたと答えたのにできていなかった場合、-30分。
+                <>
+                  <p className="mt-2 text-sm text-ink">
+                    今日は {clock} に登録されました。
+                    クエスト登録までに寝る準備は終わっていましたか？
+                  </p>
+                  <p className="mt-1 text-sm text-muted">
+                    {gradeData.withinBonusDeadline
+                      ? "◯なら定時登録ボーナス +15分の対象です。✗の場合、虚偽として -30分になります。"
+                      : "ボーナスタイム外の登録のため、定時ボーナスは付きません。✗の場合、虚偽として -30分になります。"}
+                  </p>
+                </>
+              )}
+              {isConditional && isGradable && (
+                <p className="mt-2 text-sm text-ink">
+                  子どもは『{followUpTitle}』と答えました。実際はテキパキできていましたか？
                 </p>
               )}
-              <p className="mb-3 text-sm text-muted">
+              <p className="mb-3 mt-2 text-sm text-muted">
                 子どもの回答: {childAnswerLabel(item.childAnswer)}
               </p>
-              {isUnknown ? (
+              {isUnknown || isNegative ? (
                 <p className="text-sm text-warning">
-                  採点不要（自動で減点）
+                  {isUnknown
+                    ? "採点不要（表示のみ・自動で減点扱い）"
+                    : "表示のみ（否定回答・自動未達）"}
                 </p>
               ) : (
                 <div className="flex gap-2">
                   <Button
                     className="flex-1"
                     variant={selected === true ? "primary" : "secondary"}
+                    disabled={readOnly}
                     onClick={() =>
                       setGrades((g) => ({ ...g, [item.questId]: true }))
                     }
                   >
-                    実際にできた
+                    ◯
                   </Button>
                   <Button
                     className="flex-1"
                     variant={selected === false ? "primary" : "secondary"}
+                    disabled={readOnly}
                     onClick={() =>
                       setGrades((g) => ({ ...g, [item.questId]: false }))
                     }
                   >
-                    実際にできなかった
+                    ✗
                   </Button>
                 </div>
               )}
@@ -322,112 +429,122 @@ export function GradeDatePage() {
         })}
       </ul>
 
-      <section className="mt-6 rounded-default bg-white p-4 shadow-sm">
-        <h2 className="mb-3 font-medium">
-          ボーナスまたはペナルティタイムを追加しますか？
-        </h2>
-        <div className="mb-4 flex gap-4">
-          <label className="flex items-center gap-2">
-            <input
-              type="radio"
-              name="uses-adjustments"
-              checked={usesAdjustments}
-              onChange={() => handleUsesAdjustmentsChange(true)}
-            />
-            <span>はい</span>
-          </label>
-          <label className="flex items-center gap-2">
-            <input
-              type="radio"
-              name="uses-adjustments"
-              checked={!usesAdjustments}
-              onChange={() => handleUsesAdjustmentsChange(false)}
-            />
-            <span>いいえ</span>
-          </label>
-        </div>
+      {!gradeData.isRejected && (
+        <section className="mt-6 rounded-default border-[3px] border-border bg-surface p-4 shadow-[var(--shadow-card)]">
+          <h2 className="mb-3 font-medium">
+            ボーナスまたはペナルティタイムを追加しますか？
+          </h2>
+          <div className="mb-4 flex gap-4">
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="uses-adjustments"
+                checked={usesAdjustments}
+                disabled={readOnly}
+                onChange={() => handleUsesAdjustmentsChange(true)}
+              />
+              <span>はい</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="uses-adjustments"
+                checked={!usesAdjustments}
+                disabled={readOnly}
+                onChange={() => handleUsesAdjustmentsChange(false)}
+              />
+              <span>いいえ</span>
+            </label>
+          </div>
 
-        {usesAdjustments && (
-          <div className="flex flex-col gap-3">
-            {unknownAdjustmentCodes.length > 0 && (
-              <p className="rounded-default bg-warning/20 px-3 py-2 text-sm text-gray-900">
-                定義から削除された加減点項目は編集対象から外しています:{" "}
-                {unknownAdjustmentCodes.join(", ")}
-              </p>
-            )}
-            {adjustmentRows.map((row) => {
-              const selectedCodes = new Set(
-                adjustmentRows.filter((r) => r.id !== row.id).map((r) => r.code),
-              );
-              const currentDef = adjustmentItems.find((def) => def.code === row.code);
-              const minuteOptions =
-                currentDef?.kind === "penalty"
-                  ? PENALTY_MINUTE_OPTIONS
-                  : BONUS_MINUTE_OPTIONS;
-              return (
-                <div
-                  key={row.id}
-                  className="flex flex-col gap-2 rounded-default border border-gray-200 p-3"
-                >
-                  <select
-                    className="rounded-default border border-gray-300 px-3 py-2"
-                    value={row.code}
-                    onChange={(e) => {
-                      const nextDef = adjustmentItems.find(
-                        (def) => def.code === e.target.value,
-                      );
-                      updateAdjustmentRow(row.id, {
-                        code: e.target.value,
-                        minutes: nextDef ? defaultMinutesFor(nextDef) : row.minutes,
-                      });
-                    }}
+          {usesAdjustments && (
+            <div className="flex flex-col gap-3">
+              {unknownAdjustmentCodes.length > 0 && (
+                <p className="rounded-default bg-warning/20 px-3 py-2 text-sm text-gray-900">
+                  定義から削除された加減点項目は編集対象から外しています:{" "}
+                  {unknownAdjustmentCodes.join(", ")}
+                </p>
+              )}
+              {adjustmentRows.map((row) => {
+                const selectedCodes = new Set(
+                  adjustmentRows.filter((r) => r.id !== row.id).map((r) => r.code),
+                );
+                const currentDef = adjustmentItems.find((def) => def.code === row.code);
+                const minuteOptions =
+                  currentDef?.kind === "penalty"
+                    ? PENALTY_MINUTE_OPTIONS
+                    : BONUS_MINUTE_OPTIONS;
+                return (
+                  <div
+                    key={row.id}
+                    className="flex flex-col gap-2 rounded-default border border-border-soft p-3"
                   >
-                    {adjustmentItems.map((def) => (
-                      <option
-                        key={def.code}
-                        value={def.code}
-                        disabled={selectedCodes.has(def.code)}
-                      >
-                        {def.label}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="flex gap-2">
                     <select
-                      className="min-w-0 flex-1 rounded-default border border-gray-300 px-3 py-2"
-                      value={row.minutes}
-                      onChange={(e) =>
-                        updateAdjustmentRow(row.id, { minutes: Number(e.target.value) })
-                      }
+                      className="rounded-default border border-border-soft px-3 py-2"
+                      value={row.code}
+                      disabled={readOnly}
+                      onChange={(e) => {
+                        const nextDef = adjustmentItems.find(
+                          (def) => def.code === e.target.value,
+                        );
+                        updateAdjustmentRow(row.id, {
+                          code: e.target.value,
+                          minutes: nextDef ? defaultMinutesFor(nextDef) : row.minutes,
+                        });
+                      }}
                     >
-                      {minuteOptions.map((m) => (
-                        <option key={m} value={m}>
-                          {formatMinuteOption(m)}
+                      {adjustmentItems.map((def) => (
+                        <option
+                          key={def.code}
+                          value={def.code}
+                          disabled={selectedCodes.has(def.code)}
+                        >
+                          {def.label}
                         </option>
                       ))}
                     </select>
-                    <Button
-                      variant="secondary"
-                      className="px-4 text-base"
-                      onClick={() => removeAdjustmentRow(row.id)}
-                    >
-                      削除
-                    </Button>
+                    <div className="flex gap-2">
+                      <select
+                        className="min-w-0 flex-1 rounded-default border border-border-soft px-3 py-2"
+                        value={row.minutes}
+                        disabled={readOnly}
+                        onChange={(e) =>
+                          updateAdjustmentRow(row.id, { minutes: Number(e.target.value) })
+                        }
+                      >
+                        {minuteOptions.map((m) => (
+                          <option key={m} value={m}>
+                            {formatMinuteOption(m)}
+                          </option>
+                        ))}
+                      </select>
+                      {!readOnly && (
+                        <Button
+                          variant="secondary"
+                          className="px-4 text-base"
+                          onClick={() => removeAdjustmentRow(row.id)}
+                        >
+                          削除
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-            <Button
-              variant="secondary"
-              fullWidth
-              onClick={handleAddAdjustmentRow}
-              disabled={!canAddAdjustment}
-            >
-              さらに追加
-            </Button>
-          </div>
-        )}
-      </section>
+                );
+              })}
+              {!readOnly && (
+                <Button
+                  variant="secondary"
+                  fullWidth
+                  onClick={handleAddAdjustmentRow}
+                  disabled={!canAddAdjustment}
+                >
+                  さらに追加
+                </Button>
+              )}
+            </div>
+          )}
+        </section>
+      )}
 
       {mutation.error && (
         <p className="mt-4 text-danger">
@@ -436,17 +553,68 @@ export function GradeDatePage() {
       )}
 
       <div className="mt-6 flex flex-col gap-3">
-        <Button
-          fullWidth
-          onClick={() => mutation.mutate()}
-          disabled={mutation.isPending || !isComplete}
-        >
-          採点を確定
-        </Button>
+        {!readOnly && (
+          <Button
+            fullWidth
+            onClick={() => mutation.mutate()}
+            disabled={mutation.isPending || !isComplete}
+          >
+            採点を確定
+          </Button>
+        )}
         <Button variant="secondary" fullWidth onClick={() => navigate("/parent/grades")}>
           一覧に戻る
         </Button>
       </div>
+
+      {rejectOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          role="presentation"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 bg-overlay backdrop-blur-sm"
+            aria-label="ダイアログを閉じる"
+            onClick={() => setRejectOpen(false)}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="grade-reject-title"
+            className="relative z-10 w-full max-w-lg rounded-card border-4 border-border-soft bg-surface p-4 shadow-[var(--shadow-card)]"
+          >
+            <h2 id="grade-reject-title" className="mb-3 text-app-lg font-bold text-ink">
+              採点拒否
+            </h2>
+            <p className="mb-4 whitespace-pre-line text-ink">{REJECT_DIALOG_BODY}</p>
+            {rejectMutation.error && (
+              <p className="mb-3 text-sm text-danger">
+                {rejectMutation.error instanceof Error
+                  ? rejectMutation.error.message
+                  : "拒否に失敗しました"}
+              </p>
+            )}
+            <div className="flex gap-2">
+              <Button
+                className="flex-1"
+                variant="secondary"
+                onClick={() => setRejectOpen(false)}
+              >
+                キャンセル
+              </Button>
+              <Button
+                className="flex-1"
+                variant="danger"
+                disabled={rejectMutation.isPending}
+                onClick={() => rejectMutation.mutate()}
+              >
+                -60分にする
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </ParentPageFrame>
   );
 }

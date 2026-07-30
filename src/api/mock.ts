@@ -12,21 +12,39 @@ import {
   isWeekendEve,
   resolveQuestDeadlineBedtimeHour,
 } from "@/lib/deadline";
-import { canChildSaveBedtime } from "@/lib/homeMode";
+import {
+  canChildSaveBedtime,
+  evaluateParentBedtimeChange,
+  getParentBedtimeChangeDeadline,
+} from "@/lib/homeMode";
 import {
   BEDTIME_PREP_QUEST_ID,
   calcBedtimePrepFalseClaimPenalty,
   canApplyBedtimePrepRegistrationBonus,
 } from "@/lib/registrationBonus";
 import { isUnknownChildAnswer } from "@/lib/labels";
+import { isParentGradableAnswer } from "@/lib/gradeUi";
+import {
+  getReopenUntil,
+  hasUsedRegistrationReopen,
+  isExemptOn,
+  isVacationActiveOn,
+  markRegistrationReopenUsed,
+  MOCK_EXEMPT_FLAG_KEY,
+  MOCK_VACATION_FLAG_KEY,
+  setReopenUntil,
+} from "@/lib/parentLocalSettings";
 import daily from "../../quests/daily.json";
 import adjustmentDefinitions from "../../adjustments/grade.json";
 
 /** @type {string} モック長期休みフラグ（localStorage） */
-const MOCK_VACATION_KEY = "qtc:mock:vacation";
+const MOCK_VACATION_KEY = MOCK_VACATION_FLAG_KEY;
 
 /** @type {string} モック免除フラグ（localStorage） */
-const MOCK_EXEMPT_KEY = "qtc:mock:exempt";
+const MOCK_EXEMPT_KEY = MOCK_EXEMPT_FLAG_KEY;
+
+/** @type {number} 採点拒否の点数 */
+const GRADE_REJECT_POINTS = -60;
 
 interface MockStore {
   balanceMinutes: number;
@@ -34,12 +52,15 @@ interface MockStore {
   answers: Map<string, Map<string, ChildAnswer>>;
   grades: Map<string, Map<string, boolean>>;
   gradedDates: Set<string>;
+  rejectedDates: Set<string>;
   acknowledgedDates: Set<string>;
   missedRegistrationDates: Set<string>;
   bedtimeByDate: Map<string, number>;
   wakeUpByDate: Map<string, WakeUpTime>;
   submittedAtByDate: Map<string, string>;
   adjustmentsByDate: Map<string, GradeAdjustment[]>;
+  /** 再開受付の終了時刻（Date） */
+  reopenUntilByDate: Map<string, Date>;
   /** テスト用オーバーライド（undefined なら localStorage） */
   vacationModeOverride?: boolean;
   /** テスト用免除日セット（未設定なら localStorage の当日免除） */
@@ -52,12 +73,14 @@ const store: MockStore = {
   answers: new Map(),
   grades: new Map(),
   gradedDates: new Set(),
+  rejectedDates: new Set(),
   acknowledgedDates: new Set(),
   missedRegistrationDates: new Set(),
   bedtimeByDate: new Map(),
   wakeUpByDate: new Map(),
   submittedAtByDate: new Map(),
   adjustmentsByDate: new Map(),
+  reopenUntilByDate: new Map(),
 };
 
 /**
@@ -78,9 +101,12 @@ function readMockFlag(key: string): boolean {
  * モックの長期休みモードを返す
  * @returns {boolean} モード中なら true
  */
-function resolveMockVacationMode(): boolean {
+function resolveMockVacationMode(date: string = todayLocal()): boolean {
   if (store.vacationModeOverride !== undefined) {
     return store.vacationModeOverride;
+  }
+  if (isVacationActiveOn(date)) {
+    return true;
   }
   return readMockFlag(MOCK_VACATION_KEY);
 }
@@ -94,7 +120,10 @@ function resolveMockExemptDay(date: string): boolean {
   if (store.exemptDatesOverride) {
     return store.exemptDatesOverride.has(date);
   }
-  return readMockFlag(MOCK_EXEMPT_KEY);
+  if (isExemptOn(date)) {
+    return true;
+  }
+  return date === todayLocal() && readMockFlag(MOCK_EXEMPT_KEY);
 }
 
 /**
@@ -139,12 +168,14 @@ export function resetMockStore(): void {
   store.answers.clear();
   store.grades.clear();
   store.gradedDates.clear();
+  store.rejectedDates.clear();
   store.acknowledgedDates.clear();
   store.missedRegistrationDates.clear();
   store.bedtimeByDate.clear();
   store.wakeUpByDate.clear();
   store.submittedAtByDate.clear();
   store.adjustmentsByDate.clear();
+  store.reopenUntilByDate.clear();
   clearMockHomeModeFlags();
 }
 
@@ -166,6 +197,28 @@ function isValidOptionalBedtimeHour(bedtimeHour: number | undefined): boolean {
     bedtimeHour === 22 ||
     bedtimeHour === 23
   );
+}
+
+/**
+ * 再開受付終了時刻をメモリ／localStorage から復元する
+ * @param {string} date - YYYY-MM-DD
+ * @returns {Date | undefined} 有効な終了時刻
+ */
+function resolveReopenUntil(date: string): Date | undefined {
+  const cached = store.reopenUntilByDate.get(date);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const iso = getReopenUntil(date);
+  if (!iso) {
+    return undefined;
+  }
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) {
+    return undefined;
+  }
+  store.reopenUntilByDate.set(date, parsed);
+  return parsed;
 }
 
 /**
@@ -253,6 +306,9 @@ function sumMockAdjustments(date: string): number {
  * @returns {number} totalPoints
  */
 function calcMockTotalPoints(date: string): number {
+  if (store.rejectedDates.has(date)) {
+    return GRADE_REJECT_POINTS;
+  }
   return (
     calcMockRegistrationTimingAdjustment(date) +
     calcMockBedtimePrepPenalty(date) +
@@ -306,7 +362,7 @@ function validateMockGrades(
   }
   const gradeMap = new Map(grades.map((g) => [g.questId, g.actualDone]));
   for (const [questId, childAnswer] of dayAnswers) {
-    if (isUnknownChildAnswer(childAnswer)) continue;
+    if (!isParentGradableAnswer(childAnswer)) continue;
     if (!gradeMap.has(questId)) {
       throw new Error(`BAD_REQUEST: 未採点 questId=${questId}`);
     }
@@ -315,8 +371,11 @@ function validateMockGrades(
     if (!dayAnswers.has(g.questId)) {
       throw new Error(`BAD_REQUEST: 未知の questId=${g.questId}`);
     }
-    if (isUnknownChildAnswer(dayAnswers.get(g.questId)!)) {
-      throw new Error(`BAD_REQUEST: 分からない回答は採点不要 questId=${g.questId}`);
+    const childAnswer = dayAnswers.get(g.questId)!;
+    if (!isParentGradableAnswer(childAnswer)) {
+      throw new Error(
+        `BAD_REQUEST: 肯定回答以外は採点不要 questId=${g.questId} childAnswer=${String(childAnswer)}`,
+      );
     }
   }
 }
@@ -438,7 +497,7 @@ export async function mockApi<T>(
       const isAcked = store.acknowledgedDates.has(date);
       const bedtimeHour = store.bedtimeByDate.get(date) as HomeData["bedtimeHour"];
       const isExemptDay = resolveMockExemptDay(date);
-      const isVacationMode = resolveMockVacationMode();
+      const isVacationMode = resolveMockVacationMode(date);
       const pastCutoff = isPastQuestRegistrationCutoff(date, new Date(), bedtimeHour);
 
       // 免除日は未登録ペナルティ対象外（切替前の stale も削除）
@@ -506,7 +565,7 @@ export async function mockApi<T>(
         throw new Error(`BAD_REQUEST: bedtimeHour が不正です bedtimeHour=${String(bedtimeHour)}`);
       }
       const isExemptDay = resolveMockExemptDay(date);
-      const isVacationMode = resolveMockVacationMode();
+      const isVacationMode = resolveMockVacationMode(date);
       const isWeekendEveDay = isWeekendEve(date);
       if (
         !canChildSaveBedtime({
@@ -555,7 +614,7 @@ export async function mockApi<T>(
       if (resolveMockExemptDay(date)) {
         throw new Error("BAD_REQUEST: 免除日は回答を登録できません");
       }
-      const isVacationMode = resolveMockVacationMode();
+      const isVacationMode = resolveMockVacationMode(date);
       if (
         bedtimeHour !== undefined &&
         bedtimeHour !== 21 &&
@@ -578,7 +637,10 @@ export async function mockApi<T>(
         if (isBeforeQuestRegistrationStart(date, new Date(), hour)) {
           throw new Error("BAD_REQUEST: 登録受付開始前のため回答を保存できません");
         }
-        if (isPastQuestRegistrationCutoff(date, new Date(), hour)) {
+        const reopenUntil = resolveReopenUntil(date);
+        const reopenActive =
+          reopenUntil !== undefined && reopenUntil.getTime() > Date.now();
+        if (!reopenActive && isPastQuestRegistrationCutoff(date, new Date(), hour)) {
           throw new Error("BAD_REQUEST: 登録受付締切を過ぎているため回答を保存できません");
         }
       } else {
@@ -607,19 +669,30 @@ export async function mockApi<T>(
       const dates = new Set<string>([
         ...store.answers.keys(),
         ...store.gradedDates,
+        ...store.rejectedDates,
+        ...store.missedRegistrationDates,
       ]);
       const list = [...dates].sort().reverse().map((date) => {
         const hasAnswers = store.answers.has(date);
-        const isGraded = store.gradedDates.has(date);
+        const isGraded =
+          store.gradedDates.has(date) || store.rejectedDates.has(date);
+        const isExempt = resolveMockExemptDay(date);
+        let status: "ungraded" | "graded" | "unanswered" | "exempt";
+        if (isExempt) {
+          status = "exempt";
+        } else if (!hasAnswers) {
+          status = "unanswered";
+        } else if (isGraded) {
+          status = "graded";
+        } else {
+          status = "ungraded";
+        }
         return {
           date,
-          status: !hasAnswers
-            ? ("unanswered" as const)
-            : isGraded
-              ? ("graded" as const)
-              : ("ungraded" as const),
-          ungradedCount: hasAnswers && !isGraded ? 1 : 0,
+          status,
+          ungradedCount: hasAnswers && !isGraded && !isExempt ? 1 : 0,
           totalPoints: isGraded ? calcMockTotalPoints(date) : null,
+          isRejected: store.rejectedDates.has(date),
         };
       });
       return { dates: list } as T;
@@ -632,16 +705,23 @@ export async function mockApi<T>(
           grades?: { questId: string; actualDone: boolean }[];
           adjustments?: GradeAdjustment[];
         };
-        if (store.gradedDates.has(date)) {
+        if (resolveMockExemptDay(date)) {
+          throw new Error("BAD_REQUEST: 免除日は採点できません");
+        }
+        if (store.gradedDates.has(date) || store.rejectedDates.has(date)) {
           throw new Error("ALREADY_GRADED: 再採点はできません");
         }
         validateMockGrades(date, grades);
         validateMockAdjustments(adjustments ?? []);
+        const dayAnswers = store.answers.get(date)!;
+        const gradeMap = new Map((grades ?? []).map((g) => [g.questId, g.actualDone]));
+        for (const [questId, childAnswer] of dayAnswers) {
+          if (isParentGradableAnswer(childAnswer)) continue;
+          if (isUnknownChildAnswer(childAnswer)) continue;
+          gradeMap.set(questId, false);
+        }
         store.gradedDates.add(date);
-        store.grades.set(
-          date,
-          new Map((grades ?? []).map((g) => [g.questId, g.actualDone])),
-        );
+        store.grades.set(date, gradeMap);
         if (adjustments?.length) {
           store.adjustmentsByDate.set(date, adjustments);
         }
@@ -649,18 +729,131 @@ export async function mockApi<T>(
       }
       const date = query?.date ?? today;
       const dayAnswers = store.answers.get(date);
+      const dayGrades = store.grades.get(date);
+      const isGraded =
+        store.gradedDates.has(date) || store.rejectedDates.has(date);
       const items = dayAnswers
         ? [...dayAnswers.entries()].map(([questId, childAnswer]) => ({
           questId,
           childAnswer,
-          actualDone: null,
+          actualDone: dayGrades?.get(questId) ?? null,
         }))
         : [];
+      const submittedAt = store.submittedAtByDate.get(date) ?? null;
+      const bedtimeHour = store.bedtimeByDate.get(date);
+      const withinBonusDeadline =
+        submittedAt != null
+          ? !isPastQuestBonusDeadline(date, new Date(submittedAt), bedtimeHour)
+          : false;
       return {
         date,
         items,
         adjustments: store.adjustmentsByDate.get(date) ?? [],
+        submittedAt,
+        isGraded,
+        isRejected: store.rejectedDates.has(date),
+        isExempt: resolveMockExemptDay(date),
+        withinBonusDeadline,
       } as T;
+    }
+
+    case "gradeReject": {
+      const { date } = body as { date: string };
+      if (!date) {
+        throw new Error("BAD_REQUEST: date が必要です");
+      }
+      if (resolveMockExemptDay(date)) {
+        throw new Error("BAD_REQUEST: 免除日は採点拒否できません");
+      }
+      if (!store.answers.has(date)) {
+        throw new Error("NOT_FOUND: 回答がありません");
+      }
+      if (store.gradedDates.has(date) || store.rejectedDates.has(date)) {
+        throw new Error("ALREADY_GRADED: 再採点はできません");
+      }
+      store.rejectedDates.add(date);
+      store.gradedDates.add(date);
+      store.grades.set(date, new Map());
+      store.adjustmentsByDate.set(date, []);
+      return {
+        reasonCode: "grade_rejected",
+        totalPoints: GRADE_REJECT_POINTS,
+        gradedAt: new Date().toISOString(),
+      } as T;
+    }
+
+    case "registrationReopen": {
+      const { date, until } = body as { date: string; until: string };
+      if (!date || !until) {
+        throw new Error(
+          `BAD_REQUEST: date と until が必要です date=${String(date)} until=${String(until)}`,
+        );
+      }
+      if (resolveMockExemptDay(date)) {
+        throw new Error("BAD_REQUEST: 免除日は登録再開できません");
+      }
+      if (hasUsedRegistrationReopen(date)) {
+        throw new Error("ALREADY_USED: 本日の登録再開は使用済みです");
+      }
+      if (store.answers.has(date)) {
+        throw new Error("FORBIDDEN_STATE: 登録済みのため再開できません");
+      }
+      if (store.gradedDates.has(date) || store.rejectedDates.has(date)) {
+        throw new Error("FORBIDDEN_STATE: 結果作成済みのため再開できません");
+      }
+      const untilDate = new Date(until);
+      if (Number.isNaN(untilDate.getTime())) {
+        throw new Error(`BAD_REQUEST: until が不正です until=${until}`);
+      }
+      if (untilDate.getTime() <= Date.now()) {
+        throw new Error("BAD_REQUEST: until は現在より後である必要があります");
+      }
+      store.missedRegistrationDates.delete(date);
+      store.reopenUntilByDate.set(date, untilDate);
+      markRegistrationReopenUsed(date);
+      setReopenUntil(date, untilDate.toISOString());
+      return { date, until: untilDate.toISOString() } as T;
+    }
+
+    case "parentBedtime": {
+      const { date, bedtimeHour } = body as { date: string; bedtimeHour: number };
+      if (!isValidOptionalBedtimeHour(bedtimeHour) || bedtimeHour === undefined) {
+        throw new Error(
+          `BAD_REQUEST: bedtimeHour は 21/22/23 のみです bedtimeHour=${String(bedtimeHour)}`,
+        );
+      }
+      const now = new Date();
+      const currentHour = store.bedtimeByDate.get(date);
+      const evaluation = evaluateParentBedtimeChange({
+        date,
+        today,
+        isExemptDay: resolveMockExemptDay(date),
+        isVacationMode: resolveMockVacationMode(date),
+        isWeekendEveDay: isWeekendEve(date),
+        hasAnswers: store.answers.has(date) || store.submittedAtByDate.has(date),
+        hasResult:
+          store.gradedDates.has(date) ||
+          store.rejectedDates.has(date) ||
+          store.missedRegistrationDates.has(date),
+        bedtimeHour: currentHour,
+        now,
+      });
+      if (!evaluation.allowed) {
+        if (evaluation.reason === "has_result") {
+          throw new Error(`ALREADY_RESULT: ${evaluation.message}`);
+        }
+        if (evaluation.reason === "has_answers") {
+          throw new Error(`ALREADY_ANSWERED: ${evaluation.message}`);
+        }
+        throw new Error(`FORBIDDEN_STATE: ${evaluation.message}`);
+      }
+      if (now.getTime() >= getParentBedtimeChangeDeadline(date, bedtimeHour).getTime()) {
+        throw new Error(
+          "FORBIDDEN_STATE: 変更先の就寝1時間前を過ぎているため変更できません",
+        );
+      }
+      store.bedtimeByDate.set(date, bedtimeHour);
+      return { date, bedtimeHour } as T;
     }
 
     case "results": {

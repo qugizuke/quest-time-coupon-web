@@ -182,9 +182,10 @@ export function postResultsAck(date: string): Promise<{
 export function fetchGradeDates(): Promise<{
   dates: Array<{
     date: string;
-    status: "ungraded" | "graded" | "unanswered";
+    status: "ungraded" | "graded" | "unanswered" | "exempt";
     ungradedCount: number;
     totalPoints: number | null;
+    isRejected?: boolean;
   }>;
 }> {
   return request("gradeDates", { method: "GET" });
@@ -199,6 +200,11 @@ export function fetchGrade(date: string): Promise<{
     actualDone: boolean | null;
   }>;
   adjustments: GradeAdjustment[];
+  submittedAt: string | null;
+  isGraded: boolean;
+  isRejected: boolean;
+  isExempt: boolean;
+  withinBonusDeadline: boolean;
 }> {
   return request("grade", { method: "GET" }, { date });
 }
@@ -210,6 +216,55 @@ export function postGrade(payload: {
   adjustments?: GradeAdjustment[];
 }): Promise<{ gradedAt: string }> {
   return request("grade", {
+    method: "POST",
+    headers: JSON_POST_HEADERS,
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * POST gradeReject（採点拒否 → -60）
+ * @param {string} date - YYYY-MM-DD
+ * @returns {Promise<{ reasonCode: string; totalPoints: number; gradedAt: string }>} 結果
+ */
+export function postGradeReject(date: string): Promise<{
+  reasonCode: string;
+  totalPoints: number;
+  gradedAt: string;
+}> {
+  return request("gradeReject", {
+    method: "POST",
+    headers: JSON_POST_HEADERS,
+    body: JSON.stringify({ date }),
+  });
+}
+
+/**
+ * POST registrationReopen（登録受付再開）
+ * @param {{ date: string; until: string }} payload - 日付と終了時刻 ISO
+ * @returns {Promise<{ date: string; until: string }>} 再開枠
+ */
+export function postRegistrationReopen(payload: {
+  date: string;
+  until: string;
+}): Promise<{ date: string; until: string }> {
+  return request("registrationReopen", {
+    method: "POST",
+    headers: JSON_POST_HEADERS,
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * POST parentBedtime（保護者による当日就寝変更）
+ * @param {{ date: string; bedtimeHour: 21 | 22 | 23 }} payload - 日付と就寝時刻
+ * @returns {Promise<{ date: string; bedtimeHour: number }>} 保存結果
+ */
+export function postParentBedtime(payload: {
+  date: string;
+  bedtimeHour: 21 | 22 | 23;
+}): Promise<{ date: string; bedtimeHour: number }> {
+  return request("parentBedtime", {
     method: "POST",
     headers: JSON_POST_HEADERS,
     body: JSON.stringify(payload),

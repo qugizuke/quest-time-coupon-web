@@ -25,9 +25,17 @@ function buildHome(overrides: Partial<HomeData> = {}): HomeData {
     questAction: "none",
     unacknowledgedCount: 0,
     canStartTimer: true,
+    timerBlockCount: 0,
+    isLongVacation: false,
+    isExemptToday: false,
+    isWeekendEve: false,
+    registrationReopen: null,
+    wakePromiseYesterday: null,
+    bedtimeEditableUntil: null,
+    questDeadlineAt: null,
+    bonusDeadlineAt: null,
     isExemptDay: false,
     isVacationMode: false,
-    isWeekendEve: false,
     ...overrides,
   };
 }
@@ -70,6 +78,7 @@ describe("TimerPage", () => {
     renderTimer(
       buildHome({
         unacknowledgedCount: 1,
+        timerBlockCount: 1,
         canStartTimer: false,
         displayBalance: 60,
       }),

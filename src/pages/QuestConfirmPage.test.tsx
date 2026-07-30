@@ -49,9 +49,17 @@ function buildHome(overrides: Partial<HomeData> = {}): HomeData {
     questAction: "start",
     unacknowledgedCount: 0,
     canStartTimer: true,
+    timerBlockCount: 0,
+    isLongVacation: false,
+    isExemptToday: false,
+    isWeekendEve: false,
+    registrationReopen: null,
+    wakePromiseYesterday: null,
+    bedtimeEditableUntil: null,
+    questDeadlineAt: null,
+    bonusDeadlineAt: null,
     isExemptDay: false,
     isVacationMode: false,
-    isWeekendEve: false,
     ...overrides,
   };
 }
@@ -100,7 +108,6 @@ describe("QuestConfirmPage", () => {
   it("休日前夜は起床 UI を表示する", () => {
     renderConfirm(
       buildHome({
-        isWeekendEve: true,
         isVacationMode: false,
       }),
     );
@@ -117,7 +124,6 @@ describe("QuestConfirmPage", () => {
     renderConfirm(
       buildHome({
         isVacationMode: true,
-        isWeekendEve: false,
       }),
     );
 
@@ -132,7 +138,6 @@ describe("QuestConfirmPage", () => {
     renderConfirm(
       buildHome({
         isVacationMode: false,
-        isWeekendEve: false,
       }),
     );
 

@@ -2,7 +2,7 @@
  * @file Card コンポーネント
  * @description 白／クリーム地表＋茶枠のカード（Figma v6: 角丸 24px）。
  */
-import type { ReactNode } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 
 /**
  * @typedef {object} CardProps
@@ -10,7 +10,7 @@ import type { ReactNode } from "react";
  * @property {string} [className] - 追加クラス
  * @property {"default" | "warm" | "hero"} [tone] - 面のトーン
  */
-interface CardProps {
+interface CardProps extends HTMLAttributes<HTMLDivElement> {
   /** @type {ReactNode} 子要素 */
   children: ReactNode;
   /** @type {string} 追加クラス */
@@ -30,10 +30,16 @@ const toneClass = {
  * @param {CardProps} props - props
  * @returns {JSX.Element} カード
  */
-export function Card({ children, className = "", tone = "default" }: CardProps) {
+export function Card({
+  children,
+  className = "",
+  tone = "default",
+  ...rest
+}: CardProps) {
   return (
     <div
       className={`rounded-card p-6 ${toneClass[tone]} ${className}`.trim()}
+      {...rest}
     >
       {children}
     </div>

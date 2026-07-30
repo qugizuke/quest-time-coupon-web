@@ -151,14 +151,7 @@ export function evaluateParentBedtimeChange(opts: {
       message: "回答提出後は就寝時刻を変更できません",
     };
   }
-  // 長期休み: 子ども期限（正午）後〜就寝1時間前
-  if (opts.isVacationMode && isBeforeVacationBedtimeCutoff(opts.date, now)) {
-    return {
-      allowed: false,
-      reason: "before_child_deadline",
-      message: "正午までは子ども側で設定してください（保護者変更は正午以降）",
-    };
-  }
+  // 契約 §3.7: parent は正午期限の対象外（回答/result 無し・対象日・就寝1時間前まで）
   const deadline = getParentBedtimeChangeDeadline(opts.date, opts.bedtimeHour);
   if (now.getTime() >= deadline.getTime()) {
     return {

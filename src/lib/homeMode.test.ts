@@ -164,15 +164,15 @@ describe("evaluateParentBedtimeChange", () => {
     ).toBe("past_parent_deadline");
   });
 
-  it("長期休みは正午以降〜就寝1時間前", () => {
+  it("長期休みは正午前でも parent 変更可（正午は child 期限のみ）", () => {
     expect(
       evaluateParentBedtimeChange({
         ...base,
         isWeekendEveDay: false,
         isVacationMode: true,
         now: new Date(2026, 6, 3, 10, 0, 0),
-      }).reason,
-    ).toBe("before_child_deadline");
+      }).allowed,
+    ).toBe(true);
     expect(
       evaluateParentBedtimeChange({
         ...base,

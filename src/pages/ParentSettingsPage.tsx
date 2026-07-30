@@ -1,13 +1,24 @@
 /**
  * @file ParentSettingsPage
  * @description 保護者設定（長期休み・免除期間・当日就寝 21/22/23）。
+ *   長期休み・免除は longVacation / questExemptions API（id なし・期間キー）。
+ *   就寝編集可否は parentHome.canEditBedtimeAsParent を正とする。
  *   Figma 差分は仕様勝ち: 就寝に 22:30 なし、D12 ボーナス増加文言なし。
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { postParentBedtime } from "@/api/client";
-import { homeQuery, queryKeys } from "@/api/queries";
+import {
+  postLongVacation,
+  postQuestExemptions,
+  postRegistrationSetting,
+} from "@/api/client";
+import {
+  longVacationQuery,
+  parentHomeQuery,
+  queryKeys,
+  questExemptionsQuery,
+} from "@/api/queries";
 import { ParentPageFrame } from "@/components/layout/ParentPageFrame";
 import { LoadingScreen } from "@/components/layout/LoadingScreen";
 import { Button } from "@/components/ui/Button";
@@ -15,17 +26,7 @@ import { Card } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { todayLocal } from "@/lib/date";
 import { evaluateParentBedtimeChange } from "@/lib/homeMode";
-import {
-  addExemptPeriod,
-  getExemptPeriods,
-  getVacationPeriod,
-  removeExemptPeriod,
-  setVacationPeriod,
-  updateExemptPeriodEnd,
-  type ExemptPeriod,
-  type VacationPeriod,
-} from "@/lib/parentLocalSettings";
-import type { BedtimeHour } from "@/types/api";
+import type { BedtimeHour, ExemptionPeriod } from "@/types/api";
 
 /** 就寝候補（仕様正・22:30 不可） */
 const BEDTIME_OPTIONS: BedtimeHour[] = [21, 22, 23];
@@ -35,6 +36,17 @@ const VACATION_HELP =
   "長期休み期間中は、就寝・起床のルールが毎日適用されます。基本ボーナス時間は増加しません。";
 
 /**
+ * 免除期間のキー（契約: id なし・startDate+endDate）
+ * @param {Pick<ExemptionPeriod, "startDate" | "endDate">} period - 期間
+ * @returns {string} キー
+ */
+function exemptionKey(
+  period: Pick<ExemptionPeriod, "startDate" | "endDate">,
+): string {
+  return `${period.startDate}|${period.endDate}`;
+}
+
+/**
  * 保護者設定
  * @returns {JSX.Element} ページ
  */
@@ -42,133 +54,218 @@ export function ParentSettingsPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const today = todayLocal();
-  const { data: home, isLoading, error } = useQuery(homeQuery);
 
-  const [vacationDraft, setVacationDraft] = useState<VacationPeriod>(() => {
-    const current = getVacationPeriod();
-    return current ?? { startDate: today, endDate: today };
+  const {
+    data: parentHome,
+    isLoading: parentHomeLoading,
+    error: parentHomeError,
+  } = useQuery(parentHomeQuery);
+  const {
+    data: longVacation,
+    isLoading: vacationLoading,
+    error: vacationError,
+  } = useQuery(longVacationQuery);
+  const {
+    data: exemptions,
+    isLoading: exemptionsLoading,
+    error: exemptionsError,
+  } = useQuery(questExemptionsQuery);
+
+  const [vacationDraft, setVacationDraft] = useState({
+    startDate: today,
+    endDate: today,
   });
   const [exemptStart, setExemptStart] = useState(today);
   const [exemptEnd, setExemptEnd] = useState(today);
-  const [exemptList, setExemptList] = useState<ExemptPeriod[]>(() => getExemptPeriods());
-  const [vacation, setVacation] = useState<VacationPeriod | null>(() => getVacationPeriod());
   const [message, setMessage] = useState("");
   const [bedtimeHour, setBedtimeHour] = useState<BedtimeHour>(21);
 
   useEffect(() => {
-    if (home?.bedtimeHour === 21 || home?.bedtimeHour === 22 || home?.bedtimeHour === 23) {
-      setBedtimeHour(home.bedtimeHour);
+    if (
+      longVacation?.startDate &&
+      longVacation?.endDate
+    ) {
+      setVacationDraft({
+        startDate: longVacation.startDate,
+        endDate: longVacation.endDate,
+      });
     }
-  }, [home?.bedtimeHour]);
+  }, [longVacation?.startDate, longVacation?.endDate]);
 
+  useEffect(() => {
+    if (
+      parentHome?.bedtimeHour === 21 ||
+      parentHome?.bedtimeHour === 22 ||
+      parentHome?.bedtimeHour === 23
+    ) {
+      setBedtimeHour(parentHome.bedtimeHour);
+    }
+  }, [parentHome?.bedtimeHour]);
+
+  const vacationConfigured = Boolean(
+    longVacation?.startDate && longVacation?.endDate,
+  );
+  const exemptList = exemptions?.periods ?? [];
+
+  /**
+   * サーバの canEditBedtimeAsParent を正とし、ブロック文言のみローカル補助
+   */
   const bedtimeChange = useMemo(() => {
-    if (!home) {
+    if (!parentHome) {
       return {
         allowed: false,
-        reason: "not_today" as const,
         message: "読み込み中です",
       };
     }
-    const hasAnswers = home.todayStatus === "answered_ungraded";
+    if (parentHome.canEditBedtimeAsParent) {
+      return { allowed: true, message: "" };
+    }
+    const status = parentHome.todayRegistrationStatus;
+    const hasAnswers =
+      status === "registered" ||
+      status === "graded" ||
+      status === "result_pending_ack";
     const hasResult =
-      home.todayStatus === "pending_ack" || home.todayStatus === "completed";
-    return evaluateParentBedtimeChange({
+      status === "graded" || status === "result_pending_ack";
+    // 対象日フラグは parentHome に無いため、長期休み or 許可されていたら対象日扱いで文言を取る
+    const local = evaluateParentBedtimeChange({
       date: today,
       today,
-      isExemptDay: Boolean(home.isExemptDay),
-      isVacationMode: Boolean(home.isVacationMode),
-      isWeekendEveDay: Boolean(home.isWeekendEve),
+      isExemptDay: parentHome.isExemptToday,
+      isVacationMode: parentHome.isLongVacation,
+      isWeekendEveDay: !parentHome.isLongVacation,
       hasAnswers,
       hasResult,
-      bedtimeHour: home.bedtimeHour,
+      bedtimeHour: parentHome.bedtimeHour,
     });
-  }, [home, today]);
+    if (
+      local.reason === "not_target_day" ||
+      (!parentHome.isExemptToday &&
+        !parentHome.isLongVacation &&
+        !hasAnswers &&
+        !hasResult &&
+        local.reason !== "past_parent_deadline")
+    ) {
+      return {
+        allowed: false,
+        message: "休日前日または長期休みモード中のみ就寝時刻を変更できます",
+      };
+    }
+    return {
+      allowed: false,
+      message: local.message || "現在は就寝時刻を変更できません",
+    };
+  }, [parentHome, today]);
+
+  const invalidateParentSettings = (): void => {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.parentHome });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.home });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.longVacation });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.questExemptions });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.gradeDates });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.results });
+  };
 
   const bedtimeMutation = useMutation({
     mutationFn: (hour: BedtimeHour) =>
-      postParentBedtime({ date: today, bedtimeHour: hour }),
+      postRegistrationSetting({
+        date: today,
+        bedtimeHour: hour,
+        actor: "parent",
+      }),
     onSuccess: (saved) => {
       setBedtimeHour(saved.bedtimeHour as BedtimeHour);
       setMessage("就寝時刻を保存しました");
-      void queryClient.invalidateQueries({ queryKey: queryKeys.home });
+      invalidateParentSettings();
     },
     onError: (err) => {
       setMessage(err instanceof Error ? err.message : "就寝の保存に失敗しました");
     },
   });
 
-  /**
-   * 長期休みを保存する
-   * @returns {void}
-   */
-  function handleSaveVacation(): void {
-    try {
-      setVacationPeriod(vacationDraft, today);
-      setVacation(getVacationPeriod());
+  const vacationMutation = useMutation({
+    mutationFn: (payload: { startDate: string; endDate: string }) =>
+      postLongVacation(payload),
+    onSuccess: () => {
       setMessage("長期休みモードを保存しました");
-      void queryClient.invalidateQueries({ queryKey: queryKeys.home });
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : "長期休みの保存に失敗しました");
-    }
-  }
+      invalidateParentSettings();
+    },
+    onError: (err) => {
+      setMessage(
+        err instanceof Error ? err.message : "長期休みの保存に失敗しました",
+      );
+    },
+  });
 
-  /**
-   * 長期休みを終了する
-   * @returns {void}
-   */
-  function handleEndVacation(): void {
-    setVacationPeriod(null, today);
-    setVacation(null);
-    setMessage("長期休みモードを終了しました");
-    void queryClient.invalidateQueries({ queryKey: queryKeys.home });
-  }
+  const endVacationMutation = useMutation({
+    mutationFn: () => postLongVacation({ startDate: "", endDate: "" }),
+    onSuccess: () => {
+      setMessage("長期休みモードを終了しました");
+      invalidateParentSettings();
+    },
+    onError: (err) => {
+      setMessage(
+        err instanceof Error ? err.message : "長期休みの終了に失敗しました",
+      );
+    },
+  });
 
-  /**
-   * 免除期間を追加する
-   * @returns {void}
-   */
-  function handleAddExempt(): void {
-    try {
-      addExemptPeriod({ startDate: exemptStart, endDate: exemptEnd }, today);
-      setExemptList(getExemptPeriods());
+  const addExemptMutation = useMutation({
+    mutationFn: () =>
+      postQuestExemptions({
+        op: "add",
+        startDate: exemptStart,
+        endDate: exemptEnd,
+      }),
+    onSuccess: () => {
       setMessage("免除期間を追加しました");
-      void queryClient.invalidateQueries({ queryKey: queryKeys.home });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.gradeDates });
-    } catch (err) {
+      invalidateParentSettings();
+    },
+    onError: (err) => {
       setMessage(err instanceof Error ? err.message : "免除の追加に失敗しました");
-    }
-  }
+    },
+  });
 
-  /**
-   * 免除期間を削除する
-   * @param {string} id - 期間 ID
-   * @returns {void}
-   */
-  function handleRemoveExempt(id: string): void {
-    removeExemptPeriod(id, today);
-    setExemptList(getExemptPeriods());
-    setMessage("免除期間を削除しました");
-    void queryClient.invalidateQueries({ queryKey: queryKeys.home });
-    void queryClient.invalidateQueries({ queryKey: queryKeys.gradeDates });
-  }
+  const removeExemptMutation = useMutation({
+    mutationFn: (period: Pick<ExemptionPeriod, "startDate" | "endDate">) =>
+      postQuestExemptions({
+        op: "remove",
+        startDate: period.startDate,
+        endDate: period.endDate,
+      }),
+    onSuccess: () => {
+      setMessage("免除期間を削除しました");
+      invalidateParentSettings();
+    },
+    onError: (err) => {
+      setMessage(err instanceof Error ? err.message : "免除の削除に失敗しました");
+    },
+  });
 
-  /**
-   * 免除終了日を変更する
-   * @param {string} id - 期間 ID
-   * @param {string} endDate - 終了日
-   * @returns {void}
-   */
-  function handleUpdateExemptEnd(id: string, endDate: string): void {
-    try {
-      updateExemptPeriodEnd(id, endDate, today);
-      setExemptList(getExemptPeriods());
+  const updateExemptMutation = useMutation({
+    mutationFn: (payload: {
+      startDate: string;
+      endDate: string;
+      newEndDate: string;
+    }) =>
+      postQuestExemptions({
+        op: "updateEnd",
+        startDate: payload.startDate,
+        endDate: payload.endDate,
+        newEndDate: payload.newEndDate,
+      }),
+    onSuccess: () => {
       setMessage("免除期間を更新しました");
-      void queryClient.invalidateQueries({ queryKey: queryKeys.home });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.gradeDates });
-    } catch (err) {
+      invalidateParentSettings();
+    },
+    onError: (err) => {
       setMessage(err instanceof Error ? err.message : "免除の更新に失敗しました");
-    }
-  }
+    },
+  });
+
+  const isLoading =
+    parentHomeLoading || vacationLoading || exemptionsLoading;
+  const error = parentHomeError ?? vacationError ?? exemptionsError;
 
   if (isLoading) {
     return <LoadingScreen />;
@@ -193,11 +290,11 @@ export function ParentSettingsPage() {
         </p>
       )}
 
-      <Card className="mb-4">
+      <Card className="mb-4" data-testid="long-vacation-card">
         <div className="mb-2 flex items-center justify-between gap-3">
           <h2 className="font-bold text-ink">長期休みモード</h2>
-          <StatusBadge tone={vacation ? "info" : "muted"}>
-            {vacation ? "設定あり" : "未設定"}
+          <StatusBadge tone={vacationConfigured ? "info" : "muted"}>
+            {vacationConfigured ? "設定あり" : "未設定"}
           </StatusBadge>
         </div>
         <p className="mb-3 text-sm text-muted">{VACATION_HELP}</p>
@@ -226,18 +323,32 @@ export function ParentSettingsPage() {
           </label>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
-          <Button className="flex-1" onClick={handleSaveVacation}>
-            {vacation ? "期間を変更" : "設定する"}
+          <Button
+            className="flex-1"
+            disabled={vacationMutation.isPending}
+            onClick={() =>
+              vacationMutation.mutate({
+                startDate: vacationDraft.startDate,
+                endDate: vacationDraft.endDate,
+              })
+            }
+          >
+            {vacationConfigured ? "期間を変更" : "設定する"}
           </Button>
-          {vacation && (
-            <Button className="flex-1" variant="secondary" onClick={handleEndVacation}>
+          {vacationConfigured && (
+            <Button
+              className="flex-1"
+              variant="secondary"
+              disabled={endVacationMutation.isPending}
+              onClick={() => endVacationMutation.mutate()}
+            >
               終了
             </Button>
           )}
         </div>
       </Card>
 
-      <Card className="mb-4">
+      <Card className="mb-4" data-testid="quest-exemptions-card">
         <h2 className="mb-2 font-bold text-ink">クエスト免除</h2>
         <p className="mb-3 text-sm text-muted">
           期間の追加・削除・終了日変更ができます（メモなし）。
@@ -262,7 +373,13 @@ export function ParentSettingsPage() {
             />
           </label>
         </div>
-        <Button className="mb-4" fullWidth variant="secondary" onClick={handleAddExempt}>
+        <Button
+          className="mb-4"
+          fullWidth
+          variant="secondary"
+          disabled={addExemptMutation.isPending}
+          onClick={() => addExemptMutation.mutate()}
+        >
           期間を追加
         </Button>
         {exemptList.length === 0 ? (
@@ -271,8 +388,9 @@ export function ParentSettingsPage() {
           <ul className="flex flex-col gap-3">
             {exemptList.map((period) => (
               <li
-                key={period.id}
+                key={exemptionKey(period)}
                 className="rounded-default border border-border-soft p-3"
+                data-testid={`exempt-period-${exemptionKey(period)}`}
               >
                 <p className="mb-2 text-sm font-medium">
                   {period.startDate} 〜 {period.endDate}
@@ -286,7 +404,11 @@ export function ParentSettingsPage() {
                       defaultValue={period.endDate}
                       onBlur={(e) => {
                         if (e.target.value !== period.endDate) {
-                          handleUpdateExemptEnd(period.id, e.target.value);
+                          updateExemptMutation.mutate({
+                            startDate: period.startDate,
+                            endDate: period.endDate,
+                            newEndDate: e.target.value,
+                          });
                         }
                       }}
                     />
@@ -294,7 +416,13 @@ export function ParentSettingsPage() {
                   <Button
                     variant="danger"
                     className="sm:w-auto"
-                    onClick={() => handleRemoveExempt(period.id)}
+                    disabled={removeExemptMutation.isPending}
+                    onClick={() =>
+                      removeExemptMutation.mutate({
+                        startDate: period.startDate,
+                        endDate: period.endDate,
+                      })
+                    }
                   >
                     削除
                   </Button>
@@ -310,7 +438,7 @@ export function ParentSettingsPage() {
         {bedtimeChange.allowed ? (
           <>
             <p className="mb-3 text-sm text-muted">
-              候補は 21 / 22 / 23 のみです（仕様勝ち・22:30 なし）。子ども期限後〜就寝1時間前まで変更できます。
+              候補は 21 / 22 / 23 のみです（仕様勝ち・22:30 なし）。回答提出前かつ就寝1時間前まで変更できます。
             </p>
             <div className="mb-3 flex gap-2">
               {BEDTIME_OPTIONS.map((hour) => (
@@ -328,6 +456,7 @@ export function ParentSettingsPage() {
               fullWidth
               disabled={bedtimeMutation.isPending}
               onClick={() => bedtimeMutation.mutate(bedtimeHour)}
+              data-testid="bedtime-save"
             >
               就寝時刻を保存
             </Button>
@@ -335,7 +464,7 @@ export function ParentSettingsPage() {
         ) : (
           <p className="text-sm text-muted" data-testid="bedtime-change-blocked">
             {bedtimeChange.message ||
-              "現在は就寝時刻を変更できません（子ども期限後〜就寝1時間前のみ）。"}
+              "現在は就寝時刻を変更できません（回答提出前〜就寝1時間前のみ）。"}
           </p>
         )}
       </Card>

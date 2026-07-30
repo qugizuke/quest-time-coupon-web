@@ -205,7 +205,7 @@ describe("mockApi registrationSetting 競合ガード", () => {
     await expect(
       mockApi("registrationSetting", {
         method: "POST",
-        body: JSON.stringify({ date, bedtimeHour: 23 }),
+        body: JSON.stringify({ date, bedtimeHour: 23, actor: "child"}),
       }),
     ).rejects.toThrow("回答後は就寝時刻を変更できません");
   });
@@ -216,7 +216,7 @@ describe("mockApi registrationSetting 競合ガード", () => {
 
     await mockApi("registrationSetting", {
       method: "POST",
-      body: JSON.stringify({ date, bedtimeHour: 21 }),
+      body: JSON.stringify({ date, bedtimeHour: 21, actor: "child"}),
     });
 
     vi.setSystemTime(new Date(2026, 5, 13, 21, 30, 0));
@@ -224,7 +224,7 @@ describe("mockApi registrationSetting 競合ガード", () => {
     await expect(
       mockApi("registrationSetting", {
         method: "POST",
-        body: JSON.stringify({ date, bedtimeHour: 23 }),
+        body: JSON.stringify({ date, bedtimeHour: 23, actor: "child"}),
       }),
     ).rejects.toThrow("登録受付締切を過ぎているため設定できません");
   });
@@ -235,7 +235,7 @@ describe("mockApi registrationSetting 競合ガード", () => {
 
     await mockApi("registrationSetting", {
       method: "POST",
-      body: JSON.stringify({ date, bedtimeHour: 23 }),
+      body: JSON.stringify({ date, bedtimeHour: 23, actor: "child"}),
     });
 
     vi.setSystemTime(new Date(2026, 5, 13, 21, 30, 0));
@@ -243,7 +243,7 @@ describe("mockApi registrationSetting 競合ガード", () => {
     await expect(
       mockApi("registrationSetting", {
         method: "POST",
-        body: JSON.stringify({ date, bedtimeHour: 21 }),
+        body: JSON.stringify({ date, bedtimeHour: 21, actor: "child"}),
       }),
     ).rejects.toThrow("変更先の登録受付締切を過ぎているため設定できません");
   });
@@ -254,7 +254,7 @@ describe("mockApi registrationSetting 競合ガード", () => {
 
     const result = await mockApi<{ date: string; bedtimeHour: number }>("registrationSetting", {
       method: "POST",
-      body: JSON.stringify({ date, bedtimeHour: 22 }),
+      body: JSON.stringify({ date, bedtimeHour: 22, actor: "child" }),
     });
 
     expect(result.bedtimeHour).toBe(22);
@@ -267,7 +267,7 @@ describe("mockApi registrationSetting 競合ガード", () => {
     await expect(
       mockApi("registrationSetting", {
         method: "POST",
-        body: JSON.stringify({ date, bedtimeHour: 21 }),
+        body: JSON.stringify({ date, bedtimeHour: 21, actor: "child"}),
       }),
     ).rejects.toThrow(
       "休日前日または長期休み（正午まで）のみ bedtimeHour を設定できます",
@@ -287,7 +287,9 @@ describe("mockApi home 免除・長期休み", () => {
   it("免除日は questAction=none と isExemptDay=true", async () => {
     setMockHomeModeFlags({ exemptDates: ["2026-07-30"] });
     const home = await mockApi<HomeData>("home", undefined, { date: "2026-07-30" });
+    expect(home.isExemptToday).toBe(true);
     expect(home.isExemptDay).toBe(true);
+    expect(home.todayStatus).toBe("exempt");
     expect(home.questAction).toBe("none");
     expect(home.isVacationMode).toBe(false);
   });
@@ -307,7 +309,7 @@ describe("mockApi home 免除・長期休み", () => {
 
     const result = await mockApi<{ bedtimeHour: number }>("registrationSetting", {
       method: "POST",
-      body: JSON.stringify({ date, bedtimeHour: 22 }),
+      body: JSON.stringify({ date, bedtimeHour: 22, actor: "child" }),
     });
     expect(result.bedtimeHour).toBe(22);
     vi.useRealTimers();
@@ -323,7 +325,7 @@ describe("mockApi home 免除・長期休み", () => {
           answers: sampleAnswers,
         }),
       }),
-    ).rejects.toThrow("免除日は回答を登録できません");
+    ).rejects.toThrow("FORBIDDEN_STATE: 免除日は回答を登録できません");
   });
 
   it("締切超過後に免除へ切り替えると未確認ブロックが解除される", async () => {
@@ -333,7 +335,9 @@ describe("mockApi home 免除・長期休み", () => {
 
     const before = await mockApi<HomeData>("home", undefined, { date });
     expect(before.unacknowledgedCount).toBeGreaterThan(0);
-    expect(before.canStartTimer).toBe(false);
+    // unregistered は timerBlock 対象外（契約 §2.4）
+    expect(before.timerBlockCount).toBe(0);
+    expect(before.canStartTimer).toBe(true);
 
     setMockHomeModeFlags({ exemptDates: [date] });
     const after = await mockApi<HomeData>("home", undefined, { date });
@@ -396,7 +400,7 @@ describe("mockApi grade 否定・わからない混在", () => {
       items: { questId: string; actualDone: boolean | null }[];
     }>("grade", undefined, { date });
     const byId = new Map(detail.items.map((item) => [item.questId, item.actualDone]));
-    expect(byId.get("sleep-on-time-yesterday")).toBe(false);
+    expect(byId.get("sleep-on-time-yesterday")).toBeNull();
     expect(byId.get("brush-teeth-gargle-am")).toBeNull();
     expect(byId.get("save-water-hot-water")).toBe(false);
   });
@@ -437,7 +441,7 @@ describe("mockApi grade 否定・わからない混在", () => {
   });
 });
 
-describe("mockApi parentBedtime 制約", () => {
+describe("mockApi registrationSetting actor=parent 制約", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     clearMockHomeModeFlags();
@@ -457,9 +461,9 @@ describe("mockApi parentBedtime 制約", () => {
     vi.setSystemTime(new Date(2026, 7, 11, 13, 0, 0));
     setMockHomeModeFlags({ vacationMode: true });
 
-    const saved = await mockApi<{ bedtimeHour: number }>("parentBedtime", {
+    const saved = await mockApi<{ bedtimeHour: number }>("registrationSetting", {
       method: "POST",
-      body: JSON.stringify({ date, bedtimeHour: 22 }),
+      body: JSON.stringify({ date, bedtimeHour: 22, actor: "parent" }),
     });
     expect(saved.bedtimeHour).toBe(22);
   });
@@ -470,9 +474,9 @@ describe("mockApi parentBedtime 制約", () => {
     setMockHomeModeFlags({ vacationMode: true, exemptDates: [date] });
 
     await expect(
-      mockApi("parentBedtime", {
+      mockApi("registrationSetting", {
         method: "POST",
-        body: JSON.stringify({ date, bedtimeHour: 22 }),
+        body: JSON.stringify({ date, bedtimeHour: 22, actor: "parent" }),
       }),
     ).rejects.toThrow("免除日");
   });
@@ -482,9 +486,9 @@ describe("mockApi parentBedtime 制約", () => {
     vi.setSystemTime(new Date(2026, 7, 11, 13, 0, 0));
     setMockHomeModeFlags({ vacationMode: true });
 
-    await mockApi("parentBedtime", {
+    await mockApi("registrationSetting", {
       method: "POST",
-      body: JSON.stringify({ date, bedtimeHour: 23 }),
+      body: JSON.stringify({ date, bedtimeHour: 23, actor: "parent" }),
     });
 
     vi.setSystemTime(new Date(2026, 7, 11, 22, 15, 0));
@@ -493,12 +497,13 @@ describe("mockApi parentBedtime 制約", () => {
       body: JSON.stringify({ date, answers: sampleAnswers }),
     });
 
+    vi.setSystemTime(new Date(2026, 7, 11, 13, 0, 0));
     await expect(
-      mockApi("parentBedtime", {
+      mockApi("registrationSetting", {
         method: "POST",
-        body: JSON.stringify({ date, bedtimeHour: 22 }),
+        body: JSON.stringify({ date, bedtimeHour: 22, actor: "parent" }),
       }),
-    ).rejects.toThrow("回答提出後");
+    ).rejects.toThrow(/ALREADY_ANSWERED|回答後/);
   });
 
   it("就寝1時間前以降は拒否する", async () => {
@@ -507,30 +512,28 @@ describe("mockApi parentBedtime 制約", () => {
     setMockHomeModeFlags({ vacationMode: true });
 
     await expect(
-      mockApi("parentBedtime", {
+      mockApi("registrationSetting", {
         method: "POST",
-        body: JSON.stringify({ date, bedtimeHour: 21 }),
+        body: JSON.stringify({ date, bedtimeHour: 21, actor: "parent" }),
       }),
-    ).rejects.toThrow("就寝1時間前");
+    ).rejects.toThrow("FORBIDDEN_STATE");
   });
 });
 
-describe("mockApi registrationReopen リロード耐性", () => {
+describe("mockApi registrationReopen 受付再開", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     clearMockHomeModeFlags();
-    clearParentLocalSettings();
     resetMockStore();
   });
 
   afterEach(() => {
     vi.useRealTimers();
     clearMockHomeModeFlags();
-    clearParentLocalSettings();
     resetMockStore();
   });
 
-  it("再開後にメモリストアを消しても localStorage から復元して回答できる", async () => {
+  it("再開枠内なら締切後も回答できる", async () => {
     const date = "2026-06-07";
     vi.setSystemTime(new Date(2026, 5, 7, 21, 30, 0));
 
@@ -538,12 +541,10 @@ describe("mockApi registrationReopen リロード耐性", () => {
       method: "POST",
       body: JSON.stringify({
         date,
-        until: new Date(2026, 5, 7, 22, 30, 0).toISOString(),
+        endsAt: "2026-06-07T22:30:00+09:00",
       }),
     });
 
-    // リロード相当: メモリ上の再開枠だけ消す（localStorage は残す）
-    resetMockStore();
     vi.setSystemTime(new Date(2026, 5, 7, 21, 45, 0));
 
     const result = await mockApi<{ submittedAt: string }>("answers", {

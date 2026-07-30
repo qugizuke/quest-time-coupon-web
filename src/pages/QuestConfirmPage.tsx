@@ -172,7 +172,7 @@ export function QuestConfirmPage() {
         date,
         answers,
         bedtimeHour,
-        wakeUpTime: showWakeUp ? wakeUpTime : undefined,
+        wakePromise: showWakeUp ? { wakeTime: wakeUpTime } : undefined,
       });
     },
     onSuccess: () => {

@@ -25,9 +25,17 @@ function buildHome(overrides: Partial<HomeData> = {}): HomeData {
     questAction: "start",
     unacknowledgedCount: 0,
     canStartTimer: true,
+    timerBlockCount: 0,
+    isLongVacation: false,
+    isExemptToday: false,
+    isWeekendEve: false,
+    registrationReopen: null,
+    wakePromiseYesterday: null,
+    bedtimeEditableUntil: null,
+    questDeadlineAt: null,
+    bonusDeadlineAt: null,
     isExemptDay: false,
     isVacationMode: false,
-    isWeekendEve: false,
     ...overrides,
   };
 }
@@ -96,7 +104,6 @@ describe("HomePage", () => {
         isVacationMode: true,
         todayStatus: "completed",
         questAction: "none",
-        isWeekendEve: true,
       }),
     );
 

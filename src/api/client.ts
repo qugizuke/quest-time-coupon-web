@@ -1,26 +1,29 @@
 /**
  * @file Firebase Cloud Functions API クライアント
- * @description action ベースの GET/POST。`VITE_API_URL`（`api` 関数のベース URL）へ
- *   `?action=<name>` を付けてリクエストし、`{ ok, data, error }` 形のレスポンスから
- *   `data` を取り出す。`VITE_MOCK_API=true` のときのみモックを返す。
- * @limitation 認証はヘッダー `X-Api-Key` による共有シークレット方式（家庭用のため
- *   Firebase Auth は使わない）。`VITE_*` はビルド時にバンドルへ埋め込まれるため、
- *   キーはブラウザから参照可能である点を前提に運用する。
+ * @description action ベースの GET/POST。正本: docs `api-tobe-f-contract.md`（Issue #20）。
+ *   `VITE_MOCK_API=true` のときのみモック。認証は `X-Api-Key`（共有シークレット）。
+ *   保護者パスワードはフロントのみで扱い、actor は認証代用にしない。
+ * @limitation `VITE_*` はビルド時埋め込みのためブラウザから参照可能。
  */
 import type {
   ApiResponse,
   ChildAnswer,
   GradeAdjustment,
+  GradeData,
+  GradeDateItem,
   HomeData,
-  WakeUpTime,
+  LongVacationData,
+  ParentHomeData,
+  QuestExemptionsData,
+  RegistrationActor,
+  ResultItem,
+  WakeTime,
 } from "@/types/api";
 import { mockApi } from "@/api/mock";
 import { todayLocal } from "@/lib/date";
 
 /**
  * API のベース URL を解決する
- * @description `VITE_API_URL`（例: `https://<region>-<project>.cloudfunctions.net/api`）のみを使う。
- *   旧 `VITE_GAS_URL` へのフォールバックは廃止（設定漏れを無言で GAS へ流さない）。
  * @returns {string} 末尾スラッシュを除いたベース URL（未設定なら空文字）
  */
 function resolveApiBaseUrl(): string {
@@ -35,18 +38,12 @@ const API_BASE_URL = resolveApiBaseUrl();
 const API_KEY = import.meta.env.VITE_API_KEY ?? "";
 const USE_MOCK = import.meta.env.VITE_MOCK_API === "true";
 
-/**
- * POST 本体は JSON。Cloud Functions は CORS プリフライト（OPTIONS）に対応するため、
- * GAS 版で必要だった `text/plain` 回避策は不要になった。
- */
 const JSON_POST_HEADERS = {
   "Content-Type": "application/json",
 } as const;
 
 /**
  * 認証ヘッダーを構築する
- * @description クエリ `?key=` は Cloud Logging のリクエスト URL に残るため使わず、
- *   ヘッダー `X-Api-Key` のみで送る（Functions 側は両対応）。
  * @returns {Record<string, string>} キー未設定なら空オブジェクト
  */
 function buildAuthHeaders(): Record<string, string> {
@@ -54,12 +51,31 @@ function buildAuthHeaders(): Record<string, string> {
 }
 
 /**
+ * home レスポンスに UI 互換エイリアスを付与する
+ * @param {HomeData} data - サーバ／モックの home data
+ * @returns {HomeData} エイリアス付き
+ */
+function withHomeAliases(data: HomeData): HomeData {
+  return {
+    ...data,
+    isExemptDay: data.isExemptToday,
+    isVacationMode: data.isLongVacation,
+    isWeekendEve: data.isWeekendEve ?? false,
+    timerBlockCount: data.timerBlockCount ?? 0,
+    registrationReopen: data.registrationReopen ?? null,
+    wakePromiseYesterday: data.wakePromiseYesterday ?? null,
+    bedtimeEditableUntil: data.bedtimeEditableUntil ?? null,
+    questDeadlineAt: data.questDeadlineAt ?? null,
+    bonusDeadlineAt: data.bonusDeadlineAt ?? null,
+  };
+}
+
+/**
  * API リクエストを実行する
- * @param {string} action - action 名（例: `home` / `answers`）
+ * @param {string} action - action 名
  * @param {RequestInit} [init] - fetch オプション
  * @param {Record<string, string>} [query] - 追加クエリ
  * @returns {Promise<T>} レスポンスの data 部分
- * @throws {Error} ベース URL 未設定、通信失敗、JSON 解析失敗、API がエラーを返した場合
  */
 async function request<T>(
   action: string,
@@ -105,9 +121,38 @@ async function request<T>(
   return json.data;
 }
 
+/**
+ * from/to クエリを組み立てる（片方だけは送らない）
+ * @param {string} [from] - 開始日
+ * @param {string} [to] - 終了日
+ * @returns {Record<string, string> | undefined} クエリ
+ */
+function dateRangeQuery(
+  from?: string,
+  to?: string,
+): Record<string, string> | undefined {
+  if (from === undefined && to === undefined) return undefined;
+  if (from === undefined || to === undefined) {
+    throw new Error(
+      "dateRangeQuery: from と to は両方同時に指定してください（契約 §2.3.1）",
+    );
+  }
+  return { from, to };
+}
+
 /** GET home */
-export function fetchHome(date: string = todayLocal()): Promise<HomeData> {
-  return request<HomeData>("home", { method: "GET" }, { date });
+export async function fetchHome(
+  date: string = todayLocal(),
+): Promise<HomeData> {
+  const data = await request<HomeData>("home", { method: "GET" }, { date });
+  return withHomeAliases(data);
+}
+
+/** GET parentHome */
+export function fetchParentHome(
+  date: string = todayLocal(),
+): Promise<ParentHomeData> {
+  return request<ParentHomeData>("parentHome", { method: "GET" }, { date });
 }
 
 /** POST answers */
@@ -115,20 +160,35 @@ export function postAnswers(payload: {
   date: string;
   answers: { questId: string; childAnswer: ChildAnswer }[];
   bedtimeHour?: number;
-  wakeUpTime?: WakeUpTime;
+  wakePromise?: { wakeTime: WakeTime };
+  /** @deprecated wakePromise を使う */
+  wakeUpTime?: WakeTime;
 }): Promise<{ submittedAt: string; overwritten: boolean }> {
+  const { wakeUpTime, wakePromise, ...rest } = payload;
+  const body = {
+    ...rest,
+    wakePromise:
+      wakePromise ??
+      (wakeUpTime !== undefined ? { wakeTime: wakeUpTime } : undefined),
+  };
   return request("answers", {
     method: "POST",
     headers: JSON_POST_HEADERS,
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   });
 }
 
-/** POST registrationSetting */
+/** POST registrationSetting（actor 必須） */
 export function postRegistrationSetting(payload: {
   date: string;
   bedtimeHour: number;
-}): Promise<{ date: string; bedtimeHour: number }> {
+  actor: RegistrationActor;
+}): Promise<{
+  date: string;
+  bedtimeHour: number;
+  actor: RegistrationActor;
+  setAt: string;
+}> {
   return request("registrationSetting", {
     method: "POST",
     headers: JSON_POST_HEADERS,
@@ -136,32 +196,29 @@ export function postRegistrationSetting(payload: {
   });
 }
 
-/** GET results 一覧 */
-export function fetchResults(): Promise<{
-  items: Array<{
-    date: string;
-    totalPoints: number;
-    acknowledged: boolean;
-    registrationTimingAdjustment: number;
-    registrationTimingReason?: string;
-    bedtimePrepPenalty?: number;
-    bedtimePrepPenaltyReason?: string;
-    adjustments?: Array<{
-      kind: "bonus" | "penalty";
-      code: string;
-      label: string;
-      minutes: number;
-    }>;
-    details: Array<{
-      questId: string;
-      childAnswer: ChildAnswer;
-      actualDone: boolean;
-      finalPoints: number;
-      mismatch: boolean;
-    }>;
-  }>;
+/** POST registrationReopen（endsAt はオフセット付き ISO） */
+export function postRegistrationReopen(payload: {
+  date: string;
+  endsAt: string;
+}): Promise<{
+  date: string;
+  endsAt: string;
+  setAt: string;
+  used: boolean;
 }> {
-  return request("results", { method: "GET" });
+  return request("registrationReopen", {
+    method: "POST",
+    headers: JSON_POST_HEADERS,
+    body: JSON.stringify(payload),
+  });
+}
+
+/** GET results 一覧 */
+export function fetchResults(opts?: {
+  from?: string;
+  to?: string;
+}): Promise<{ items: ResultItem[] }> {
+  return request("results", { method: "GET" }, dateRangeQuery(opts?.from, opts?.to));
 }
 
 /** POST resultsAck */
@@ -179,34 +236,30 @@ export function postResultsAck(date: string): Promise<{
 }
 
 /** GET gradeDates */
-export function fetchGradeDates(): Promise<{
-  dates: Array<{
-    date: string;
-    status: "ungraded" | "graded" | "unanswered" | "exempt";
-    ungradedCount: number;
-    totalPoints: number | null;
-    isRejected?: boolean;
-  }>;
-}> {
-  return request("gradeDates", { method: "GET" });
+export function fetchGradeDates(opts?: {
+  from?: string;
+  to?: string;
+}): Promise<{ dates: GradeDateItem[] }> {
+  return request(
+    "gradeDates",
+    { method: "GET" },
+    dateRangeQuery(opts?.from, opts?.to),
+  );
 }
 
 /** GET grade */
-export function fetchGrade(date: string): Promise<{
-  date: string;
-  items: Array<{
-    questId: string;
-    childAnswer: ChildAnswer;
-    actualDone: boolean | null;
-  }>;
-  adjustments: GradeAdjustment[];
-  submittedAt: string | null;
-  isGraded: boolean;
-  isRejected: boolean;
-  isExempt: boolean;
-  withinBonusDeadline: boolean;
-}> {
-  return request("grade", { method: "GET" }, { date });
+export async function fetchGrade(date: string): Promise<GradeData> {
+  const data = await request<GradeData>("grade", { method: "GET" }, { date });
+  return {
+    ...data,
+    isGraded: data.alreadyGraded ?? data.isGraded ?? false,
+    isRejected: data.reasonCode === "grade_rejected" || data.isRejected === true,
+    withinBonusDeadline:
+      data.withinBonusWindow ?? data.withinBonusDeadline ?? false,
+    withinBonusWindow:
+      data.withinBonusWindow ?? data.withinBonusDeadline ?? false,
+    alreadyGraded: data.alreadyGraded ?? data.isGraded ?? false,
+  };
 }
 
 /** POST grade */
@@ -214,7 +267,7 @@ export function postGrade(payload: {
   date: string;
   grades: { questId: string; actualDone: boolean }[];
   adjustments?: GradeAdjustment[];
-}): Promise<{ gradedAt: string }> {
+}): Promise<{ gradedAt: string; totalPoints: number; reasonCode: "normal" }> {
   return request("grade", {
     method: "POST",
     headers: JSON_POST_HEADERS,
@@ -222,13 +275,9 @@ export function postGrade(payload: {
   });
 }
 
-/**
- * POST gradeReject（採点拒否 → -60）
- * @param {string} date - YYYY-MM-DD
- * @returns {Promise<{ reasonCode: string; totalPoints: number; gradedAt: string }>} 結果
- */
+/** POST gradeReject */
 export function postGradeReject(date: string): Promise<{
-  reasonCode: string;
+  reasonCode: "grade_rejected";
   totalPoints: number;
   gradedAt: string;
 }> {
@@ -239,32 +288,45 @@ export function postGradeReject(date: string): Promise<{
   });
 }
 
-/**
- * POST registrationReopen（登録受付再開）
- * @param {{ date: string; until: string }} payload - 日付と終了時刻 ISO
- * @returns {Promise<{ date: string; until: string }>} 再開枠
- */
-export function postRegistrationReopen(payload: {
-  date: string;
-  until: string;
-}): Promise<{ date: string; until: string }> {
-  return request("registrationReopen", {
+/** GET longVacation */
+export function fetchLongVacation(): Promise<LongVacationData> {
+  return request("longVacation", { method: "GET" });
+}
+
+/** POST longVacation */
+export function postLongVacation(payload: {
+  startDate: string;
+  endDate: string;
+}): Promise<LongVacationData> {
+  return request("longVacation", {
     method: "POST",
     headers: JSON_POST_HEADERS,
     body: JSON.stringify(payload),
   });
 }
 
-/**
- * POST parentBedtime（保護者による当日就寝変更）
- * @param {{ date: string; bedtimeHour: 21 | 22 | 23 }} payload - 日付と就寝時刻
- * @returns {Promise<{ date: string; bedtimeHour: number }>} 保存結果
- */
-export function postParentBedtime(payload: {
-  date: string;
-  bedtimeHour: 21 | 22 | 23;
-}): Promise<{ date: string; bedtimeHour: number }> {
-  return request("parentBedtime", {
+/** GET questExemptions */
+export function fetchQuestExemptions(): Promise<QuestExemptionsData> {
+  return request("questExemptions", { method: "GET" });
+}
+
+/** POST questExemptions */
+export function postQuestExemptions(
+  payload:
+    | { op: "add"; startDate: string; endDate: string }
+    | { op: "remove"; startDate: string; endDate: string }
+    | {
+        op: "updateEnd";
+        startDate: string;
+        endDate: string;
+        newEndDate: string;
+      }
+    | {
+        op: "replace";
+        periods: Array<{ startDate: string; endDate: string; createdAt?: string }>;
+      },
+): Promise<QuestExemptionsData> {
+  return request("questExemptions", {
     method: "POST",
     headers: JSON_POST_HEADERS,
     body: JSON.stringify(payload),
@@ -278,7 +340,7 @@ export function postTimerStop(payload: {
   stoppedAt: string;
   usedMinutes: number;
   overrunMinutes: number;
-}): Promise<{ displayBalance: number }> {
+}): Promise<{ displayBalance: number; penaltyMinutes: number }> {
   return request("timerStop", {
     method: "POST",
     headers: JSON_POST_HEADERS,

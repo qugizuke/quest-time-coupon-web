@@ -1,6 +1,7 @@
 /**
  * @file TimerPage
  * @description クーポン時間のカウントダウンと使用記録。
+ *   未確認採点結果があるときは Start 不可（screen-design §6.6）。
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -20,8 +21,11 @@ export function TimerPage() {
   const queryClient = useQueryClient();
   const { data: home } = useQuery(homeQuery);
   const displayBalance = home?.displayBalance ?? 0;
+  const unacknowledgedCount = home?.unacknowledgedCount ?? 0;
+  const blockedByUnacked = unacknowledgedCount > 0;
   const { display, start, stop, canStart, isRunning, state } =
     useTimer(displayBalance);
+  const allowStart = canStart && !blockedByUnacked && (home?.canStartTimer ?? false);
 
   const stopMutation = useMutation({
     mutationFn: async () => {
@@ -46,12 +50,9 @@ export function TimerPage() {
   });
 
   return (
-    <ChildPageFrame>
-      <div className="mb-4 flex justify-between">
+    <ChildPageFrame vacationMode={home?.isVacationMode}>
+      <div className="mb-4">
         <h1 className="text-app-lg font-bold">タイマー</h1>
-        <Button variant="secondary" onClick={() => navigate("/")}>
-          ホーム
-        </Button>
       </div>
 
       <Card
@@ -68,15 +69,33 @@ export function TimerPage() {
         </p>
       </Card>
 
-      {!canStart && !isRunning && displayBalance <= 0 && (
+      {blockedByUnacked && !isRunning && (
+        <div className="mt-4 text-center">
+          <p className="text-muted">採点結果を先に確認してね</p>
+          <Button
+            className="mt-3"
+            variant="secondary"
+            onClick={() => navigate("/results")}
+          >
+            採点結果を確認する
+          </Button>
+        </div>
+      )}
+
+      {!blockedByUnacked && !canStart && !isRunning && displayBalance <= 0 && (
         <p className="mt-4 text-center text-muted">
           残高がないので スタートできません
         </p>
       )}
 
       <div className="mt-6 flex flex-col gap-3">
-        {canStart && (
+        {allowStart && (
           <Button fullWidth onClick={start}>
+            スタート
+          </Button>
+        )}
+        {!allowStart && !isRunning && (
+          <Button fullWidth disabled>
             スタート
           </Button>
         )}
@@ -93,7 +112,9 @@ export function TimerPage() {
       </div>
       {stopMutation.error && (
         <p className="mt-4 text-danger">
-          {stopMutation.error instanceof Error ? stopMutation.error.message : "エラー"}
+          {stopMutation.error instanceof Error
+            ? stopMutation.error.message
+            : "エラー"}
         </p>
       )}
     </ChildPageFrame>

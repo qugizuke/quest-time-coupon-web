@@ -7,7 +7,13 @@
  *   Firebase Auth は使わない）。`VITE_*` はビルド時にバンドルへ埋め込まれるため、
  *   キーはブラウザから参照可能である点を前提に運用する。
  */
-import type { ApiResponse, ChildAnswer, GradeAdjustment, HomeData } from "@/types/api";
+import type {
+  ApiResponse,
+  ChildAnswer,
+  GradeAdjustment,
+  HomeData,
+  WakeUpTime,
+} from "@/types/api";
 import { mockApi } from "@/api/mock";
 import { todayLocal } from "@/lib/date";
 
@@ -109,6 +115,7 @@ export function postAnswers(payload: {
   date: string;
   answers: { questId: string; childAnswer: ChildAnswer }[];
   bedtimeHour?: number;
+  wakeUpTime?: WakeUpTime;
 }): Promise<{ submittedAt: string; overwritten: boolean }> {
   return request("answers", {
     method: "POST",

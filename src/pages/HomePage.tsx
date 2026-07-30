@@ -1,7 +1,8 @@
 /**
  * @file HomePage
  * @description 子ども向けホーム。残高・状態・各画面への導線。
- *   就寝モーダル骨格を持つ。保護者モード入口は ChildPageFrame（Issue #15）。
+ *   4バリアント（通常／免除／vacation／exempt-vacation）と就寝モーダル（Issue #16）。
+ *   保護者モード入口は ChildPageFrame（Issue #15）。
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -20,6 +21,10 @@ import { useQuestDeadlineClock } from "@/hooks/useQuestDeadlineClock";
 import { isWeekendEve } from "@/lib/deadline";
 import { todayLocal } from "@/lib/date";
 import {
+  resolveBedtimeUiMode,
+  resolveHomeVariant,
+} from "@/lib/homeMode";
+import {
   clearBedtimeHourDraft,
   setBedtimeHourDraft,
 } from "@/lib/sessionStorage";
@@ -31,6 +36,9 @@ const STATUS_LABEL = {
   pending_ack: "結果の確認が必要です",
   completed: "今日は全部終わり！",
 } as const;
+
+/** 免除日のお休み文言（仕様正） */
+const EXEMPT_MESSAGE = "今日はクエストお休みです（ママが免除日に設定）";
 
 /** 登録受付締切後に未着手だった場合のメッセージ */
 function missedStartMessage(cutoffLabel: string): string {
@@ -48,7 +56,6 @@ export function HomePage() {
   const [bedtimeModalOpen, setBedtimeModalOpen] = useState(false);
   const { data, isLoading, error } = useQuery(homeQuery);
   const today = todayLocal();
-  const showBedtimePicker = isWeekendEve(today);
   const [bedtimeHour, setBedtimeHour] = useState<BedtimeHour | undefined>(
     undefined,
   );
@@ -90,9 +97,14 @@ export function HomePage() {
     },
   });
 
+  const isExemptDay = data?.isExemptDay ?? false;
+  const isVacationMode = data?.isVacationMode ?? false;
+  const weekendEve = data?.isWeekendEve ?? isWeekendEve(today);
+
   const deadlineActive =
     !isLoading &&
     !!data &&
+    !isExemptDay &&
     data.todayStatus === "unanswered" &&
     data.questAction === "start";
 
@@ -100,7 +112,7 @@ export function HomePage() {
 
   if (isLoading) {
     return (
-      <ChildPageFrame showHome={false}>
+      <ChildPageFrame showHome={false} vacationMode={isVacationMode}>
         <div className="flex flex-1 items-center justify-center">
           <p className="text-muted">読み込み中…</p>
         </div>
@@ -110,7 +122,7 @@ export function HomePage() {
 
   if (error || !data) {
     return (
-      <ChildPageFrame showHome={false}>
+      <ChildPageFrame showHome={false} vacationMode={isVacationMode}>
         <p className="text-danger">
           エラー: {error instanceof Error ? error.message : "不明"}
         </p>
@@ -118,15 +130,29 @@ export function HomePage() {
     );
   }
 
+  const variant = resolveHomeVariant(isExemptDay, isVacationMode);
+  const bedtimeUi = resolveBedtimeUiMode({
+    isExemptDay,
+    isVacationMode,
+    isWeekendEveDay: weekendEve,
+    bedtimeHour,
+    todayStatus: data.todayStatus,
+    date: today,
+  });
+
   const canStartQuest =
+    !isExemptDay &&
     data.questAction === "start" &&
     !deadline.pastRegistrationCutoff &&
     !deadline.beforeRegistrationStart &&
     !registrationMutation.isPending;
   const showMissedStartMessage =
+    !isExemptDay &&
     deadline.pastRegistrationCutoff &&
     data.todayStatus === "unanswered" &&
     data.questAction === "start";
+  const showQuestStart = !isExemptDay && data.questAction === "start";
+  const showQuestRetry = !isExemptDay && data.questAction === "retry";
 
   /**
    * 寝る時間を選択してサーバに保存する
@@ -150,20 +176,40 @@ export function HomePage() {
   }
 
   return (
-    <ChildPageFrame showHome={false}>
-      <div className="flex flex-1 flex-col justify-center gap-6">
+    <ChildPageFrame showHome={false} vacationMode={isVacationMode}>
+      <div
+        className="flex flex-1 flex-col justify-center gap-6"
+        data-testid="home-page"
+        data-home-variant={variant}
+      >
         <Card className="flex flex-col items-center justify-center text-center">
-          <p className="text-lg text-muted">残り時間</p>
+          <p className="text-lg text-muted">いま使えるゲーム・YouTubeの時間</p>
           <p className="text-app-xl font-bold text-primary">
             {data.displayBalance}
             <span className="ml-2 text-2xl">分</span>
           </p>
-          <p className="mt-4 text-base">
-            {showMissedStartMessage
-              ? missedStartMessage(deadline.registrationCutoffLabel)
-              : STATUS_LABEL[data.todayStatus]}
-          </p>
-          {!deadline.pastRegistrationCutoff &&
+        </Card>
+
+        {data.unacknowledgedCount > 0 && (
+          <Banner onClick={() => navigate("/results")}>
+            採点結果を確認する（未確認あり）
+          </Banner>
+        )}
+
+        <Card className="text-center">
+          {isExemptDay ? (
+            <p className="text-base font-medium" data-testid="exempt-message">
+              {EXEMPT_MESSAGE}
+            </p>
+          ) : (
+            <p className="text-base">
+              {showMissedStartMessage
+                ? missedStartMessage(deadline.registrationCutoffLabel)
+                : STATUS_LABEL[data.todayStatus]}
+            </p>
+          )}
+          {!isExemptDay &&
+            !deadline.pastRegistrationCutoff &&
             deadline.beforeRegistrationStart &&
             data.questAction === "start" && (
               <p className="mt-2 text-sm text-muted">
@@ -171,7 +217,8 @@ export function HomePage() {
                 {deadline.registrationCutoffLabel} まで受付）
               </p>
             )}
-          {!deadline.pastRegistrationCutoff &&
+          {!isExemptDay &&
+            !deadline.pastRegistrationCutoff &&
             (data.questAction === "start" || data.questAction === "retry") &&
             !deadline.beforeRegistrationStart &&
             !deadline.showBonusCountdown &&
@@ -185,50 +232,32 @@ export function HomePage() {
             )}
         </Card>
 
-        {showBedtimePicker && data.todayStatus === "unanswered" && (
-          <Button
-            fullWidth
-            variant="secondary"
-            onClick={() => setBedtimeModalOpen(true)}
-            disabled={registrationMutation.isPending}
-          >
-            {bedtimeButtonLabel()}
-          </Button>
-        )}
-
-        {deadline.showBonusCountdown && (
+        {!isExemptDay && deadline.showBonusCountdown && (
           <QuestDeadlineCountdown
             countdownFormatted={deadline.bonusCountdownFormatted}
             bonusDeadlineLabel={deadline.bonusDeadlineLabel}
           />
         )}
 
-        {deadline.showRegistrationCountdown && (
+        {!isExemptDay && deadline.showRegistrationCountdown && (
           <QuestRegistrationCutoffCountdown
             countdownFormatted={deadline.registrationCountdownFormatted}
             registrationCutoffLabel={deadline.registrationCutoffLabel}
           />
         )}
 
-        {data.unacknowledgedCount > 0 && (
-          <Banner onClick={() => navigate("/results")}>
-            採点結果が {data.unacknowledgedCount} 日 待っています。タップして
-            確認してね
-          </Banner>
-        )}
-
         <div className="flex flex-col gap-3">
-          {data.questAction === "start" && canStartQuest && (
+          {showQuestStart && canStartQuest && (
             <Button fullWidth onClick={() => navigate("/quest")}>
               クエスト開始
             </Button>
           )}
-          {data.questAction === "start" && !canStartQuest && (
+          {showQuestStart && !canStartQuest && (
             <Button fullWidth disabled>
               クエスト開始
             </Button>
           )}
-          {data.questAction === "retry" && (
+          {showQuestRetry && (
             <Button
               fullWidth
               variant="secondary"
@@ -237,17 +266,20 @@ export function HomePage() {
               やり直す
             </Button>
           )}
-          <Button
-            fullWidth
-            variant="secondary"
-            onClick={() => setRulesOpen(true)}
-          >
-            クエストのルール
-          </Button>
+          {!isExemptDay && (
+            <Button
+              fullWidth
+              variant="secondary"
+              onClick={() => setRulesOpen(true)}
+            >
+              クエストのルール
+            </Button>
+          )}
           <Button
             fullWidth
             variant="secondary"
             onClick={() => navigate("/results")}
+            data-testid="nav-results"
           >
             採点結果
           </Button>
@@ -255,9 +287,38 @@ export function HomePage() {
             fullWidth
             variant="secondary"
             onClick={() => navigate("/timer")}
+            data-testid="nav-timer"
           >
             タイマー
           </Button>
+
+          {bedtimeUi === "settable" && (
+            <Button
+              fullWidth
+              variant="secondary"
+              onClick={() => setBedtimeModalOpen(true)}
+              disabled={registrationMutation.isPending}
+              data-testid="bedtime-entry"
+            >
+              {bedtimeButtonLabel()}
+            </Button>
+          )}
+          {bedtimeUi === "display" && bedtimeHour !== undefined && (
+            <p
+              className="rounded-default border border-border-soft bg-white px-4 py-3 text-center text-base"
+              data-testid="bedtime-display"
+            >
+              今日の寝る時間: {bedtimeHour}時
+            </p>
+          )}
+          {bedtimeUi === "locked21" && (
+            <p
+              className="rounded-default border border-border-soft bg-white px-4 py-3 text-center text-base"
+              data-testid="bedtime-locked"
+            >
+              今日は21時
+            </p>
+          )}
         </div>
       </div>
 
@@ -265,7 +326,7 @@ export function HomePage() {
         open={rulesOpen}
         onClose={() => setRulesOpen(false)}
         bedtimeHour={bedtimeHour}
-        isRestDayEve={showBedtimePicker}
+        isRestDayEve={weekendEve || isVacationMode}
       />
 
       <BedtimeModal

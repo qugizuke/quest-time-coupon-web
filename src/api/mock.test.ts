@@ -3,8 +3,8 @@
  * @description 受付開始・締切チェックと retry 保存の挙動を検証する。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mockApi } from "./mock";
-import type { ChildAnswer } from "@/types/api";
+import { clearMockHomeModeFlags, mockApi, resetMockStore, setMockHomeModeFlags } from "./mock";
+import type { ChildAnswer, HomeData } from "@/types/api";
 
 const sampleAnswers: { questId: string; childAnswer: ChildAnswer }[] = [
   { questId: "bedtime-prep", childAnswer: 1 },
@@ -18,10 +18,12 @@ const sampleAnswers: { questId: string; childAnswer: ChildAnswer }[] = [
 describe("mockApi answers 受付タイミング", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    clearMockHomeModeFlags();
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    clearMockHomeModeFlags();
   });
 
   it("新規登録は締切後に拒否される", async () => {
@@ -181,10 +183,12 @@ describe("mockApi answers 受付タイミング", () => {
 describe("mockApi registrationSetting 競合ガード", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    clearMockHomeModeFlags();
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    clearMockHomeModeFlags();
   });
 
   it("回答後は就寝時刻を変更できない", async () => {
@@ -263,6 +267,78 @@ describe("mockApi registrationSetting 競合ガード", () => {
         method: "POST",
         body: JSON.stringify({ date, bedtimeHour: 21 }),
       }),
-    ).rejects.toThrow("休日前日のみ bedtimeHour を設定できます");
+    ).rejects.toThrow(
+      "休日前日または長期休み（正午まで）のみ bedtimeHour を設定できます",
+    );
+  });
+});
+
+describe("mockApi home 免除・長期休み", () => {
+  beforeEach(() => {
+    resetMockStore();
+  });
+
+  afterEach(() => {
+    resetMockStore();
+  });
+
+  it("免除日は questAction=none と isExemptDay=true", async () => {
+    setMockHomeModeFlags({ exemptDates: ["2026-07-30"] });
+    const home = await mockApi<HomeData>("home", undefined, { date: "2026-07-30" });
+    expect(home.isExemptDay).toBe(true);
+    expect(home.questAction).toBe("none");
+    expect(home.isVacationMode).toBe(false);
+  });
+
+  it("長期休みフラグを返す", async () => {
+    setMockHomeModeFlags({ vacationMode: true });
+    const home = await mockApi<HomeData>("home", undefined, { date: "2026-07-28" });
+    expect(home.isVacationMode).toBe(true);
+    expect(home.isExemptDay).toBe(false);
+  });
+
+  it("長期休み中は平日でも就寝設定を受け付ける（正午まで）", async () => {
+    vi.useFakeTimers();
+    const date = "2026-08-11"; // 火曜・他テストと日付衝突しない
+    vi.setSystemTime(new Date(2026, 7, 11, 10, 0, 0));
+    setMockHomeModeFlags({ vacationMode: true });
+
+    const result = await mockApi<{ bedtimeHour: number }>("registrationSetting", {
+      method: "POST",
+      body: JSON.stringify({ date, bedtimeHour: 22 }),
+    });
+    expect(result.bedtimeHour).toBe(22);
+    vi.useRealTimers();
+  });
+
+  it("免除日は回答登録できない", async () => {
+    setMockHomeModeFlags({ exemptDates: ["2026-07-30"] });
+    await expect(
+      mockApi("answers", {
+        method: "POST",
+        body: JSON.stringify({
+          date: "2026-07-30",
+          answers: sampleAnswers,
+        }),
+      }),
+    ).rejects.toThrow("免除日は回答を登録できません");
+  });
+
+  it("締切超過後に免除へ切り替えると未確認ブロックが解除される", async () => {
+    vi.useFakeTimers();
+    const date = "2026-07-01"; // 水曜・平日通常日
+    vi.setSystemTime(new Date(2026, 6, 1, 21, 30, 0));
+
+    const before = await mockApi<HomeData>("home", undefined, { date });
+    expect(before.unacknowledgedCount).toBeGreaterThan(0);
+    expect(before.canStartTimer).toBe(false);
+
+    setMockHomeModeFlags({ exemptDates: [date] });
+    const after = await mockApi<HomeData>("home", undefined, { date });
+    expect(after.isExemptDay).toBe(true);
+    expect(after.unacknowledgedCount).toBe(0);
+    expect(after.canStartTimer).toBe(true);
+
+    vi.useRealTimers();
   });
 });

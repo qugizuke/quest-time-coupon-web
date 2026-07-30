@@ -14,10 +14,33 @@ import { useDailyQuests } from "@/hooks/useDailyQuests";
 import { formatDateJa } from "@/lib/date";
 import { actualDoneLabel, childAnswerLabel, isUnknownChildAnswer } from "@/lib/labels";
 import { resolveQuestTitle } from "@/lib/questLabels";
+import type { ReasonCode } from "@/types/api";
 
 /** 「分からない」回答がある日の促しメッセージ */
 const UNKNOWN_ANSWER_MESSAGE =
   "「分からない」は、その日クエストを意識できていなかった扱いで大きめの減点だよ。次からは思い出して「できた」「できなかった」で答えよう！";
+
+/** 採点拒否（grade_rejected）の理由文（screen-design §6.5） */
+const GRADE_REJECTED_REASON =
+  "ママが採点を拒否しました。ママをどんな気持ちにさせたか、振り返ってみよう。";
+
+/** 未登録（unregistered）の理由文（screen-design §6.5） */
+const UNREGISTERED_REASON = "クエストが登録されませんでした（-60分）";
+
+/** 免除（exempt）の理由文（screen-design §6.5） */
+const EXEMPT_REASON = "今日はクエスト免除日でした";
+
+/**
+ * reasonCode ごとの理由文言を返す
+ * @param {ReasonCode} reasonCode - 結果種別
+ * @returns {string | null} 表示文言（通常採点は null）
+ */
+function reasonCodeMessage(reasonCode: ReasonCode): string | null {
+  if (reasonCode === "grade_rejected") return GRADE_REJECTED_REASON;
+  if (reasonCode === "unregistered") return UNREGISTERED_REASON;
+  if (reasonCode === "exempt") return EXEMPT_REASON;
+  return null;
+}
 
 /** 登録タイミング調整の表示ラベル */
 function registrationTimingLabel(adjustment: number, reason?: string): string {
@@ -169,50 +192,61 @@ export function ResultsPage() {
             </div>
           )}
 
-          {(selected.registrationTimingAdjustment !== 0 ||
-            selected.registrationTimingReason) && (
+          {reasonCodeMessage(selected.reasonCode) && (
             <div
-              className={`rounded-default px-4 py-3 text-base ${registrationTimingClassName(
-                selected.registrationTimingAdjustment,
-              )}`}
+              className={`rounded-default px-4 py-3 text-base ${
+                selected.reasonCode === "exempt"
+                  ? "border-2 border-border bg-info-soft text-gray-900"
+                  : "border-2 border-danger bg-danger/10 text-gray-900"
+              }`}
+              data-testid="reason-code-message"
+              data-reason-code={selected.reasonCode}
             >
-              {registrationTimingLabel(
-                selected.registrationTimingAdjustment,
-                selected.registrationTimingReason,
-              )}
+              {reasonCodeMessage(selected.reasonCode)}
             </div>
           )}
 
-          {!!selected.bedtimePrepPenalty && selected.bedtimePrepPenalty !== 0 && (
-            <div className="rounded-default border-2 border-danger bg-danger/10 px-4 py-3 text-base text-gray-900">
-              {selected.bedtimePrepPenaltyReason ??
-                `寝る準備の虚偽ペナルティ ${selected.bedtimePrepPenalty}分`}
-            </div>
-          )}
+          {selected.reasonCode === "normal" &&
+            (selected.registrationTimingAdjustment !== 0 ||
+              selected.registrationTimingReason) && (
+              <div
+                className={`rounded-default px-4 py-3 text-base ${registrationTimingClassName(
+                  selected.registrationTimingAdjustment,
+                )}`}
+              >
+                {registrationTimingLabel(
+                  selected.registrationTimingAdjustment,
+                  selected.registrationTimingReason,
+                )}
+              </div>
+            )}
 
-          {(selected.adjustments ?? []).length > 0 && (
-            <ul className="flex flex-col gap-2">
-              {selected.adjustments!.map((adj) => (
-                <li
-                  key={`${adj.kind}-${adj.code}`}
-                  className={`rounded-default px-4 py-3 text-base ${
-                    adj.minutes > 0
-                      ? "border-2 border-success bg-success/10 text-gray-900"
-                      : "border-2 border-danger bg-danger/10 text-gray-900"
-                  }`}
-                >
-                  {adj.label}: {adj.minutes > 0 ? "+" : ""}
-                  {adj.minutes}分
-                </li>
-              ))}
-            </ul>
-          )}
+          {selected.reasonCode === "normal" &&
+            !!selected.bedtimePrepPenalty &&
+            selected.bedtimePrepPenalty !== 0 && (
+              <div className="rounded-default border-2 border-danger bg-danger/10 px-4 py-3 text-base text-gray-900">
+                {selected.bedtimePrepPenaltyReason ??
+                  `寝る準備の虚偽ペナルティ ${selected.bedtimePrepPenalty}分`}
+              </div>
+            )}
 
-          {selected.details.length === 0 &&
-            selected.registrationTimingAdjustment < 0 && (
-              <p className="text-base text-muted">
-                この日はクエストを登録しなかったため、減点が記録されています。
-              </p>
+          {selected.reasonCode === "normal" &&
+            (selected.adjustments ?? []).length > 0 && (
+              <ul className="flex flex-col gap-2">
+                {selected.adjustments!.map((adj) => (
+                  <li
+                    key={`${adj.kind}-${adj.code}`}
+                    className={`rounded-default px-4 py-3 text-base ${
+                      adj.minutes > 0
+                        ? "border-2 border-success bg-success/10 text-gray-900"
+                        : "border-2 border-danger bg-danger/10 text-gray-900"
+                    }`}
+                  >
+                    {adj.label}: {adj.minutes > 0 ? "+" : ""}
+                    {adj.minutes}分
+                  </li>
+                ))}
+              </ul>
             )}
 
           <ul className="flex flex-col gap-2">

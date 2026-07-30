@@ -21,8 +21,8 @@ export function TimerPage() {
   const queryClient = useQueryClient();
   const { data: home } = useQuery(homeQuery);
   const displayBalance = home?.displayBalance ?? 0;
-  const unacknowledgedCount = home?.unacknowledgedCount ?? 0;
-  const blockedByUnacked = unacknowledgedCount > 0;
+  const timerBlockCount = home?.timerBlockCount ?? 0;
+  const blockedByUnacked = timerBlockCount > 0;
   const { display, start, stop, canStart, isRunning, state } =
     useTimer(displayBalance);
   const allowStart = canStart && !blockedByUnacked && (home?.canStartTimer ?? false);

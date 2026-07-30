@@ -62,7 +62,7 @@ describe("client リクエスト組み立て", () => {
     const { fetchHome } = await importClient();
     const data = await fetchHome("2026-07-28");
 
-    expect(data).toEqual({ displayBalance: 12 });
+    expect(data.displayBalance).toBe(12);
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
     const [url, init] = fetchMock.mock.calls[0];

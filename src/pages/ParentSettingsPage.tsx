@@ -6,7 +6,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { postParentBedtime } from "@/api/client";
+import { postRegistrationSetting } from "@/api/client";
 import { homeQuery, queryKeys } from "@/api/queries";
 import { ParentPageFrame } from "@/components/layout/ParentPageFrame";
 import { LoadingScreen } from "@/components/layout/LoadingScreen";
@@ -86,7 +86,11 @@ export function ParentSettingsPage() {
 
   const bedtimeMutation = useMutation({
     mutationFn: (hour: BedtimeHour) =>
-      postParentBedtime({ date: today, bedtimeHour: hour }),
+      postRegistrationSetting({
+        date: today,
+        bedtimeHour: hour,
+        actor: "parent",
+      }),
     onSuccess: (saved) => {
       setBedtimeHour(saved.bedtimeHour as BedtimeHour);
       setMessage("就寝時刻を保存しました");

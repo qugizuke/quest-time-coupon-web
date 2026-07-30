@@ -35,6 +35,7 @@ const STATUS_LABEL = {
   answered_ungraded: "回答済み・採点待ち",
   pending_ack: "結果の確認が必要です",
   completed: "今日は全部終わり！",
+  exempt: "今日はクエストお休みです",
 } as const;
 
 /** 免除日のお休み文言（仕様正） */
@@ -78,7 +79,7 @@ export function HomePage() {
 
   const registrationMutation = useMutation({
     mutationFn: (hour: BedtimeHour) =>
-      postRegistrationSetting({ date: today, bedtimeHour: hour }),
+      postRegistrationSetting({ date: today, bedtimeHour: hour, actor: "child" }),
     onSuccess: (saved) => {
       const savedHour = saved.bedtimeHour as BedtimeHour;
       setBedtimeHour(savedHour);

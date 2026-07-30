@@ -129,8 +129,8 @@ export function ParentHomePage() {
   const vacationActive = isVacationActiveOn(today) || (home?.isVacationMode ?? false);
 
   const reopenMutation = useMutation({
-    mutationFn: (until: string) =>
-      postRegistrationReopen({ date: today, until }),
+    mutationFn: (endsAt: string) =>
+      postRegistrationReopen({ date: today, endsAt }),
     onSuccess: () => {
       setReopenOpen(false);
       void queryClient.invalidateQueries({ queryKey: queryKeys.home });

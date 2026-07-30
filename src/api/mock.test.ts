@@ -205,7 +205,7 @@ describe("mockApi registrationSetting 競合ガード", () => {
     await expect(
       mockApi("registrationSetting", {
         method: "POST",
-        body: JSON.stringify({ date, bedtimeHour: 23 }),
+        body: JSON.stringify({ date, bedtimeHour: 23, actor: "child"}),
       }),
     ).rejects.toThrow("回答後は就寝時刻を変更できません");
   });
@@ -216,7 +216,7 @@ describe("mockApi registrationSetting 競合ガード", () => {
 
     await mockApi("registrationSetting", {
       method: "POST",
-      body: JSON.stringify({ date, bedtimeHour: 21 }),
+      body: JSON.stringify({ date, bedtimeHour: 21, actor: "child"}),
     });
 
     vi.setSystemTime(new Date(2026, 5, 13, 21, 30, 0));
@@ -224,7 +224,7 @@ describe("mockApi registrationSetting 競合ガード", () => {
     await expect(
       mockApi("registrationSetting", {
         method: "POST",
-        body: JSON.stringify({ date, bedtimeHour: 23 }),
+        body: JSON.stringify({ date, bedtimeHour: 23, actor: "child"}),
       }),
     ).rejects.toThrow("登録受付締切を過ぎているため設定できません");
   });
@@ -235,7 +235,7 @@ describe("mockApi registrationSetting 競合ガード", () => {
 
     await mockApi("registrationSetting", {
       method: "POST",
-      body: JSON.stringify({ date, bedtimeHour: 23 }),
+      body: JSON.stringify({ date, bedtimeHour: 23, actor: "child"}),
     });
 
     vi.setSystemTime(new Date(2026, 5, 13, 21, 30, 0));
@@ -243,7 +243,7 @@ describe("mockApi registrationSetting 競合ガード", () => {
     await expect(
       mockApi("registrationSetting", {
         method: "POST",
-        body: JSON.stringify({ date, bedtimeHour: 21 }),
+        body: JSON.stringify({ date, bedtimeHour: 21, actor: "child"}),
       }),
     ).rejects.toThrow("変更先の登録受付締切を過ぎているため設定できません");
   });
@@ -254,7 +254,7 @@ describe("mockApi registrationSetting 競合ガード", () => {
 
     const result = await mockApi<{ date: string; bedtimeHour: number }>("registrationSetting", {
       method: "POST",
-      body: JSON.stringify({ date, bedtimeHour: 22 }),
+      body: JSON.stringify({ date, bedtimeHour: 22, actor: "child" }),
     });
 
     expect(result.bedtimeHour).toBe(22);
@@ -267,7 +267,7 @@ describe("mockApi registrationSetting 競合ガード", () => {
     await expect(
       mockApi("registrationSetting", {
         method: "POST",
-        body: JSON.stringify({ date, bedtimeHour: 21 }),
+        body: JSON.stringify({ date, bedtimeHour: 21, actor: "child"}),
       }),
     ).rejects.toThrow(
       "休日前日または長期休み（正午まで）のみ bedtimeHour を設定できます",
@@ -287,7 +287,9 @@ describe("mockApi home 免除・長期休み", () => {
   it("免除日は questAction=none と isExemptDay=true", async () => {
     setMockHomeModeFlags({ exemptDates: ["2026-07-30"] });
     const home = await mockApi<HomeData>("home", undefined, { date: "2026-07-30" });
+    expect(home.isExemptToday).toBe(true);
     expect(home.isExemptDay).toBe(true);
+    expect(home.todayStatus).toBe("exempt");
     expect(home.questAction).toBe("none");
     expect(home.isVacationMode).toBe(false);
   });
@@ -307,7 +309,7 @@ describe("mockApi home 免除・長期休み", () => {
 
     const result = await mockApi<{ bedtimeHour: number }>("registrationSetting", {
       method: "POST",
-      body: JSON.stringify({ date, bedtimeHour: 22 }),
+      body: JSON.stringify({ date, bedtimeHour: 22, actor: "child" }),
     });
     expect(result.bedtimeHour).toBe(22);
     vi.useRealTimers();
@@ -323,7 +325,7 @@ describe("mockApi home 免除・長期休み", () => {
           answers: sampleAnswers,
         }),
       }),
-    ).rejects.toThrow("免除日は回答を登録できません");
+    ).rejects.toThrow("FORBIDDEN_STATE: 免除日は回答を登録できません");
   });
 
   it("締切超過後に免除へ切り替えると未確認ブロックが解除される", async () => {
@@ -333,7 +335,9 @@ describe("mockApi home 免除・長期休み", () => {
 
     const before = await mockApi<HomeData>("home", undefined, { date });
     expect(before.unacknowledgedCount).toBeGreaterThan(0);
-    expect(before.canStartTimer).toBe(false);
+    // unregistered は timerBlock 対象外（契約 §2.4）
+    expect(before.timerBlockCount).toBe(0);
+    expect(before.canStartTimer).toBe(true);
 
     setMockHomeModeFlags({ exemptDates: [date] });
     const after = await mockApi<HomeData>("home", undefined, { date });

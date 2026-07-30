@@ -7,8 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import type { ChildAnswer, QuestDefinition } from "@/types/api";
 import { homeQuery } from "@/api/queries";
-import { AppLayout } from "@/components/layout/AppLayout";
-import { LoadingScreen } from "@/components/layout/LoadingScreen";
+import { ChildPageFrame } from "@/components/layout/ChildPageFrame";
 import { Button } from "@/components/ui/Button";
 import { useDailyQuests } from "@/hooks/useDailyQuests";
 import { useQuestDraft } from "@/hooks/useQuestDraft";
@@ -98,13 +97,19 @@ export function QuestPage() {
   }, [date, homeData, navigate]);
 
   if (isLoading || !daily || !ready || !currentQuest) {
-    return <LoadingScreen />;
+    return (
+      <ChildPageFrame>
+        <div className="flex flex-1 items-center justify-center">
+          <p className="text-muted">読み込み中…</p>
+        </div>
+      </ChildPageFrame>
+    );
   }
 
   const choices = answerChoicesFor(currentQuest, isFollowUpMode);
 
   return (
-    <AppLayout>
+    <ChildPageFrame>
       <div className="flex flex-1 flex-col gap-6 transition-opacity duration-300">
         <p className="text-center text-muted">
           {isFollowUpMode ? "追問" : `${draft.index + 1} / ${daily.quests.length}`}
@@ -156,6 +161,6 @@ export function QuestPage() {
           )}
         </div>
       </div>
-    </AppLayout>
+    </ChildPageFrame>
   );
 }

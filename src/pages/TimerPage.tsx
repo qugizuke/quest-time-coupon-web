@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { postTimerStop } from "@/api/client";
 import { homeQuery, queryKeys } from "@/api/queries";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { ChildPageFrame } from "@/components/layout/ChildPageFrame";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { formatMinutesSeconds, useTimer } from "@/hooks/useTimer";
@@ -46,7 +46,7 @@ export function TimerPage() {
   });
 
   return (
-    <AppLayout>
+    <ChildPageFrame>
       <div className="mb-4 flex justify-between">
         <h1 className="text-app-lg font-bold">タイマー</h1>
         <Button variant="secondary" onClick={() => navigate("/")}>
@@ -96,6 +96,6 @@ export function TimerPage() {
           {stopMutation.error instanceof Error ? stopMutation.error.message : "エラー"}
         </p>
       )}
-    </AppLayout>
+    </ChildPageFrame>
   );
 }

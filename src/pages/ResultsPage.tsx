@@ -7,8 +7,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { postResultsAck } from "@/api/client";
 import { homeQuery, queryKeys, resultsQuery } from "@/api/queries";
-import { AppLayout } from "@/components/layout/AppLayout";
-import { LoadingScreen } from "@/components/layout/LoadingScreen";
+import { ChildPageFrame } from "@/components/layout/ChildPageFrame";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useDailyQuests } from "@/hooks/useDailyQuests";
@@ -86,14 +85,20 @@ export function ResultsPage() {
   });
 
   if (isLoading) {
-    return <LoadingScreen />;
+    return (
+      <ChildPageFrame>
+        <div className="flex flex-1 items-center justify-center">
+          <p className="text-muted">読み込み中…</p>
+        </div>
+      </ChildPageFrame>
+    );
   }
 
   if (error) {
     return (
-      <AppLayout>
+      <ChildPageFrame>
         <p className="text-danger">{error instanceof Error ? error.message : "エラー"}</p>
-      </AppLayout>
+      </ChildPageFrame>
     );
   }
 
@@ -103,7 +108,7 @@ export function ResultsPage() {
   const hasMultipleUnacked = unacked.length > 1;
 
   return (
-    <AppLayout>
+    <ChildPageFrame>
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-app-lg font-bold">採点結果</h1>
         <Button variant="secondary" onClick={() => navigate("/")}>
@@ -254,6 +259,6 @@ export function ResultsPage() {
           </Button>
         </div>
       )}
-    </AppLayout>
+    </ChildPageFrame>
   );
 }

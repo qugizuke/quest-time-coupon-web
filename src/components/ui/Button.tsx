@@ -1,6 +1,6 @@
 /**
  * @file Button コンポーネント
- * @description Figma v6 準拠の primary / secondary / danger / ghost バリアント。
+ * @description Figma v6 準拠の primary / secondary / success / danger / ghost バリアント。
  * 茶枠＋押し出し影の主 CTA をデフォルトとする（screen-design.md §4.1）。
  */
 import type { ButtonHTMLAttributes, ReactNode } from "react";
@@ -9,6 +9,7 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
 export type ButtonVariant =
   | "primary"
   | "secondary"
+  | "success"
   | "danger"
   | "ghost"
   | "navResults"
@@ -34,6 +35,9 @@ const variantClass: Record<ButtonVariant, string> = {
     "border-[3px] border-border bg-primary text-white shadow-[var(--shadow-primary)] hover:brightness-105 active:translate-y-[2px] active:shadow-none",
   secondary:
     "border-[3px] border-border bg-surface text-ink shadow-[var(--shadow-secondary)] hover:bg-surface-soft active:translate-y-[2px] active:shadow-none",
+  /** Figma クエスト確認「登録する」など成功系 CTA */
+  success:
+    "border-[3px] border-border bg-success text-white shadow-[var(--shadow-success)] hover:brightness-105 active:translate-y-[2px] active:shadow-none",
   danger:
     "border-[3px] border-border bg-danger text-white shadow-[var(--shadow-danger)] hover:brightness-105 active:translate-y-[2px] active:shadow-none",
   ghost:

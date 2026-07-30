@@ -1,6 +1,7 @@
 /**
  * @file QuestConfirmPage
  * @description 回答一覧の最終確認と登録。条件付きで翌日起床時刻を設定する（Issue #16）。
+ *   Figma kid-quest-confirm の横向き2カラム（左回答／右 CTA）に寄せる（Issue #19）。
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -209,69 +210,80 @@ export function QuestConfirmPage() {
   return (
     <ChildPageFrame vacationMode={vacationMode}>
       <h1 className="mb-4 text-app-lg font-bold">最後の確認</h1>
-      <Card className="mb-6 border-4 p-4">
-        <ul className="flex flex-col gap-2">
-          {confirmationItems.map((item) => (
-            <li
-              key={item.questId}
-              className="flex justify-between gap-3 rounded-default border border-border-soft bg-surface-soft px-4 py-3"
-            >
-              <span className="min-w-0">{item.title}</span>
-              <span className="shrink-0 font-medium text-ink">
-                {childAnswerLabel(item.childAnswer)}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </Card>
 
-      {showWakeUp && (
-        <Card className="mb-6" data-testid="wake-up-section">
-          <h2 className="mb-3 text-base font-bold">明日の起きる時間</h2>
-          <div className="flex flex-wrap gap-2">
-            {WAKE_UP_OPTIONS.map((option) => {
-              const selected = wakeUpTime === option;
-              return (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => setWakeUpTime(option)}
-                  className={[
-                    "min-h-touch rounded-default px-4 text-base",
-                    selected
-                      ? "border-[3px] border-info bg-info-soft text-info"
-                      : "border-2 border-border bg-surface text-ink",
-                  ].join(" ")}
-                >
-                  {wakeUpLabel(option)}
-                </button>
-              );
-            })}
-          </div>
+      {/*
+        Figma kid-quest-confirm: 左に回答一覧、右に起床＋登録／修正 CTA。
+        縦・狭幅のみ1列。登録 CTA は緑（success）。
+      */}
+      <div className="grid gap-4 md:grid-cols-[minmax(0,1.5fr)_minmax(240px,0.9fr)] md:items-start">
+        <Card className="border-4 p-4">
+          <ul className="flex flex-col gap-2">
+            {confirmationItems.map((item) => (
+              <li
+                key={item.questId}
+                className="flex justify-between gap-3 rounded-default border border-border-soft bg-surface-soft px-4 py-3"
+              >
+                <span className="min-w-0">{item.title}</span>
+                <span className="shrink-0 font-medium text-ink">
+                  {childAnswerLabel(item.childAnswer)}
+                </span>
+              </li>
+            ))}
+          </ul>
         </Card>
-      )}
 
-      {mutation.error && (
-        <p className="mb-4 text-danger">
-          {mutation.error instanceof Error ? mutation.error.message : "登録失敗"}
-        </p>
-      )}
-      <div className="flex flex-col gap-3">
-        <Button
-          fullWidth
-          onClick={() => mutation.mutate()}
-          disabled={mutation.isPending}
-        >
-          登録する
-        </Button>
-        <Button
-          fullWidth
-          variant="secondary"
-          onClick={() => navigate("/quest")}
-        >
-          修正する
-        </Button>
+        <div className="flex flex-col gap-4">
+          {showWakeUp && (
+            <Card data-testid="wake-up-section">
+              <h2 className="mb-3 text-base font-bold">明日の起きる時間</h2>
+              <div className="flex flex-wrap gap-2">
+                {WAKE_UP_OPTIONS.map((option) => {
+                  const selected = wakeUpTime === option;
+                  return (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => setWakeUpTime(option)}
+                      className={[
+                        "min-h-touch rounded-default px-4 text-base",
+                        selected
+                          ? "border-[3px] border-info bg-info-soft text-info"
+                          : "border-2 border-border bg-surface text-ink",
+                      ].join(" ")}
+                    >
+                      {wakeUpLabel(option)}
+                    </button>
+                  );
+                })}
+              </div>
+            </Card>
+          )}
+
+          {mutation.error && (
+            <p className="text-danger">
+              {mutation.error instanceof Error ? mutation.error.message : "登録失敗"}
+            </p>
+          )}
+          <div className="flex flex-col gap-3">
+            <Button
+              fullWidth
+              variant="success"
+              onClick={() => mutation.mutate()}
+              disabled={mutation.isPending}
+            >
+              登録する
+            </Button>
+            <Button
+              fullWidth
+              variant="secondary"
+              onClick={() => navigate("/quest")}
+            >
+              修正する
+            </Button>
+          </div>
+        </div>
       </div>
     </ChildPageFrame>
   );
 }
+

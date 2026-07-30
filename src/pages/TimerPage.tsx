@@ -2,7 +2,7 @@
  * @file TimerPage
  * @description クーポン時間のカウントダウンと使用記録。
  *   未確認採点結果があるときは Start 不可（screen-design §6.6）。
- *   見た目は Figma kid-timer（大きな数字・紫アクセント）に寄せる（Issue #19）。
+ *   見た目は Figma kid-timer（横向き2カラム・紫アクセント）に寄せる（Issue #19）。
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -57,79 +57,88 @@ export function TimerPage() {
         <h1 className="text-app-lg font-bold text-ink">残り時間をはかろう</h1>
       </div>
 
-      <Card
+      {/*
+        Figma kid-timer: 横向きは左にタイマー＋操作、右に未確認アラート。
+        狭幅のみ縦積みに戻す。
+      */}
+      <div
         className={[
-          "flex min-h-[45vh] flex-col items-center justify-center gap-3 border-4 text-center",
-          display.isPenalty
-            ? "border-danger bg-danger-soft"
-            : "border-timer-ink/30 bg-nav-timer/40",
+          "flex flex-col gap-4",
+          "md:grid md:grid-cols-[minmax(0,1.6fr)_minmax(220px,0.9fr)] md:items-start md:gap-6",
         ].join(" ")}
       >
-        <p className="text-lg text-muted">
-          {display.isPenalty ? "超過時間" : "残り時間"}
-        </p>
-        <p
-          className={[
-            "font-display text-app-timer leading-none",
-            display.isPenalty ? "text-danger" : "text-timer-ink",
-          ].join(" ")}
-        >
-          {display.isPenalty ? "+" : ""}
-          {formatMinutesSeconds(display.seconds)}
-        </p>
-        <p className="text-sm text-muted">残高 {displayBalance} 分</p>
-      </Card>
-
-      {blockedByUnacked && !isRunning && (
-        <div className="mt-6 text-center">
-          <p className="rounded-default border-[3px] border-info bg-info-soft px-4 py-3 text-info">
-            採点結果を先に確認してね
-          </p>
-          <Button
-            className="mt-4"
-            variant="navResults"
-            onClick={() => navigate("/results")}
+        <div className="flex flex-col gap-4">
+          <Card
+            className={[
+              "flex min-h-[36vh] flex-col items-center justify-center gap-3 border-4 text-center md:min-h-[42vh]",
+              display.isPenalty
+                ? "border-danger bg-danger-soft"
+                : "border-timer-ink/30 bg-nav-timer/40",
+            ].join(" ")}
           >
-            📊 採点結果を確認する
-          </Button>
+            <p className="text-lg text-muted">
+              {display.isPenalty ? "超過時間" : "残り時間"}
+            </p>
+            <p
+              className={[
+                "font-display text-app-timer leading-none",
+                display.isPenalty ? "text-danger" : "text-timer-ink",
+              ].join(" ")}
+            >
+              {display.isPenalty ? "+" : ""}
+              {formatMinutesSeconds(display.seconds)}
+            </p>
+            <p className="text-sm text-muted">残高 {displayBalance} 分</p>
+          </Card>
+
+          {!blockedByUnacked && !canStart && !isRunning && displayBalance <= 0 && (
+            <p className="text-center text-muted md:text-left">
+              残高がないので スタートできません
+            </p>
+          )}
+
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Button
+              className="flex-1"
+              fullWidth
+              onClick={start}
+              disabled={!allowStart || isRunning}
+            >
+              スタート
+            </Button>
+            <Button
+              className="flex-1"
+              fullWidth
+              variant="danger"
+              onClick={() => stopMutation.mutate()}
+              disabled={!isRunning || stopMutation.isPending}
+            >
+              ストップ
+            </Button>
+          </div>
+          {stopMutation.error && (
+            <p className="text-danger">
+              {stopMutation.error instanceof Error
+                ? stopMutation.error.message
+                : "エラー"}
+            </p>
+          )}
         </div>
-      )}
 
-      {!blockedByUnacked && !canStart && !isRunning && displayBalance <= 0 && (
-        <p className="mt-6 text-center text-muted">
-          残高がないので スタートできません
-        </p>
-      )}
-
-      <div className="mt-6 flex flex-col gap-3">
-        {allowStart && (
-          <Button fullWidth onClick={start}>
-            スタート
-          </Button>
-        )}
-        {!allowStart && !isRunning && (
-          <Button fullWidth disabled>
-            スタート
-          </Button>
-        )}
-        {isRunning && (
-          <Button
-            fullWidth
-            variant="danger"
-            onClick={() => stopMutation.mutate()}
-            disabled={stopMutation.isPending}
-          >
-            ストップ
-          </Button>
+        {blockedByUnacked && !isRunning && (
+          <div className="flex flex-col gap-4 text-center md:pt-2">
+            <p className="rounded-default border-[3px] border-info bg-info-soft px-4 py-3 text-info">
+              採点結果を先に確認してね
+            </p>
+            <Button
+              variant="navResults"
+              onClick={() => navigate("/results")}
+            >
+              📊 採点結果を確認する
+            </Button>
+          </div>
         )}
       </div>
-      {stopMutation.error && (
-        <p className="mt-4 text-danger">
-          {stopMutation.error instanceof Error
-            ? stopMutation.error.message
-            : "エラー"}
-        </p>
-      )}
     </ChildPageFrame>
   );
 }

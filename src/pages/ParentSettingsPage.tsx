@@ -3,6 +3,7 @@
  * @description 保護者設定（長期休み・免除期間・当日就寝 21/22/23）。
  *   長期休み・免除は longVacation / questExemptions API（id なし・期間キー）。
  *   就寝編集可否は parentHome.canEditBedtimeAsParent を正とする。
+ *   Figma parent-settings の左主／右就寝2カラムに寄せる（Issue #19）。
  *   Figma 差分は仕様勝ち: 就寝に 22:30 なし、D12 ボーナス増加文言なし。
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -290,192 +291,200 @@ export function ParentSettingsPage() {
         </p>
       )}
 
-      <Card className="mb-4" data-testid="long-vacation-card">
-        <div className="mb-2 flex items-center justify-between gap-3">
-          <h2 className="font-bold text-ink">🏖️ 長期休みモード</h2>
-          <StatusBadge tone={vacationConfigured ? "info" : "muted"}>
-            {vacationConfigured ? "設定あり" : "未設定"}
-          </StatusBadge>
-        </div>
-        <p className="mb-3 text-sm text-muted">{VACATION_HELP}</p>
-        <div className="mb-3 flex flex-col gap-2 sm:flex-row">
-          <label className="flex flex-1 flex-col gap-1 text-sm">
-            開始日
-            <input
-              type="date"
-              className="rounded-default border-[3px] border-border px-3 py-2"
-              value={vacationDraft.startDate}
-              onChange={(e) =>
-                setVacationDraft((v) => ({ ...v, startDate: e.target.value }))
-              }
-            />
-          </label>
-          <label className="flex flex-1 flex-col gap-1 text-sm">
-            終了日
-            <input
-              type="date"
-              className="rounded-default border-[3px] border-border px-3 py-2"
-              value={vacationDraft.endDate}
-              onChange={(e) =>
-                setVacationDraft((v) => ({ ...v, endDate: e.target.value }))
-              }
-            />
-          </label>
-        </div>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <Button
-            className="flex-1"
-            disabled={vacationMutation.isPending}
-            onClick={() =>
-              vacationMutation.mutate({
-                startDate: vacationDraft.startDate,
-                endDate: vacationDraft.endDate,
-              })
-            }
-          >
-            {vacationConfigured ? "期間を変更" : "設定する"}
-          </Button>
-          {vacationConfigured && (
-            <Button
-              className="flex-1"
-              variant="secondary"
-              disabled={endVacationMutation.isPending}
-              onClick={() => endVacationMutation.mutate()}
-            >
-              終了
-            </Button>
-          )}
-        </div>
-      </Card>
-
-      <Card className="mb-4" data-testid="quest-exemptions-card">
-        <h2 className="mb-2 font-bold text-ink">クエスト免除</h2>
-        <p className="mb-3 text-sm text-muted">
-          期間の追加・削除・終了日変更ができます（メモなし）。
-        </p>
-        <div className="mb-3 flex flex-col gap-2 sm:flex-row">
-          <label className="flex flex-1 flex-col gap-1 text-sm">
-            開始日
-            <input
-              type="date"
-              className="rounded-default border-[3px] border-border px-3 py-2"
-              value={exemptStart}
-              onChange={(e) => setExemptStart(e.target.value)}
-            />
-          </label>
-          <label className="flex flex-1 flex-col gap-1 text-sm">
-            終了日
-            <input
-              type="date"
-              className="rounded-default border-[3px] border-border px-3 py-2"
-              value={exemptEnd}
-              onChange={(e) => setExemptEnd(e.target.value)}
-            />
-          </label>
-        </div>
-        <Button
-          className="mb-4"
-          fullWidth
-          variant="secondary"
-          disabled={addExemptMutation.isPending}
-          onClick={() => addExemptMutation.mutate()}
-        >
-          期間を追加
-        </Button>
-        {exemptList.length === 0 ? (
-          <p className="text-sm text-muted">免除期間はまだありません。</p>
-        ) : (
-          <ul className="flex flex-col gap-3">
-            {exemptList.map((period) => (
-              <li
-                key={exemptionKey(period)}
-                className="rounded-default border border-border-soft p-3"
-                data-testid={`exempt-period-${exemptionKey(period)}`}
+      {/*
+        Figma parent-settings: 左に長期休み＋免除、右に当日就寝。
+        狭幅のみ1列。21/22/23・D12 は仕様勝ちのまま。
+      */}
+      <div className="mb-4 grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(240px,1fr)] md:items-start">
+        <div className="flex flex-col gap-4">
+          <Card data-testid="long-vacation-card">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <h2 className="font-bold text-ink">🏖️ 長期休みモード</h2>
+              <StatusBadge tone={vacationConfigured ? "info" : "muted"}>
+                {vacationConfigured ? "設定あり" : "未設定"}
+              </StatusBadge>
+            </div>
+            <p className="mb-3 text-sm text-muted">{VACATION_HELP}</p>
+            <div className="mb-3 flex flex-col gap-2 sm:flex-row">
+              <label className="flex flex-1 flex-col gap-1 text-sm">
+                開始日
+                <input
+                  type="date"
+                  className="rounded-default border-[3px] border-border px-3 py-2"
+                  value={vacationDraft.startDate}
+                  onChange={(e) =>
+                    setVacationDraft((v) => ({ ...v, startDate: e.target.value }))
+                  }
+                />
+              </label>
+              <label className="flex flex-1 flex-col gap-1 text-sm">
+                終了日
+                <input
+                  type="date"
+                  className="rounded-default border-[3px] border-border px-3 py-2"
+                  value={vacationDraft.endDate}
+                  onChange={(e) =>
+                    setVacationDraft((v) => ({ ...v, endDate: e.target.value }))
+                  }
+                />
+              </label>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button
+                className="flex-1"
+                disabled={vacationMutation.isPending}
+                onClick={() =>
+                  vacationMutation.mutate({
+                    startDate: vacationDraft.startDate,
+                    endDate: vacationDraft.endDate,
+                  })
+                }
               >
-                <p className="mb-2 text-sm font-medium">
-                  {period.startDate} 〜 {period.endDate}
-                </p>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                  <label className="flex flex-1 flex-col gap-1 text-sm">
-                    終了日を変更
-                    <input
-                      type="date"
-                      className="rounded-default border-[3px] border-border px-3 py-2"
-                      defaultValue={period.endDate}
-                      onBlur={(e) => {
-                        if (e.target.value !== period.endDate) {
-                          updateExemptMutation.mutate({
-                            startDate: period.startDate,
-                            endDate: period.endDate,
-                            newEndDate: e.target.value,
-                          });
-                        }
-                      }}
-                    />
-                  </label>
-                  <Button
-                    variant="danger"
-                    className="sm:w-auto"
-                    disabled={removeExemptMutation.isPending}
-                    onClick={() =>
-                      removeExemptMutation.mutate({
-                        startDate: period.startDate,
-                        endDate: period.endDate,
-                      })
-                    }
-                  >
-                    削除
-                  </Button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+                {vacationConfigured ? "期間を変更" : "設定する"}
+              </Button>
+              {vacationConfigured && (
+                <Button
+                  className="flex-1"
+                  variant="secondary"
+                  disabled={endVacationMutation.isPending}
+                  onClick={() => endVacationMutation.mutate()}
+                >
+                  終了
+                </Button>
+              )}
+            </div>
+          </Card>
 
-      <Card className="mb-4">
-        <h2 className="mb-2 font-bold text-ink">当日の就寝（保護者変更）</h2>
-        {bedtimeChange.allowed ? (
-          <>
+          <Card data-testid="quest-exemptions-card">
+            <h2 className="mb-2 font-bold text-ink">クエスト免除</h2>
             <p className="mb-3 text-sm text-muted">
-              候補は 21 / 22 / 23 のみです（仕様勝ち・22:30 なし）。回答提出前かつ就寝1時間前まで変更できます。
+              期間の追加・削除・終了日変更ができます（メモなし）。
             </p>
-            <div className="mb-3 flex gap-2">
-              {BEDTIME_OPTIONS.map((hour) => {
-                const selected = bedtimeHour === hour;
-                return (
-                  <button
-                    key={hour}
-                    type="button"
-                    className={[
-                      "flex min-h-touch flex-1 items-center justify-center rounded-default text-base",
-                      selected
-                        ? "border-[3px] border-info bg-info-soft text-info"
-                        : "border-2 border-border bg-surface text-ink",
-                    ].join(" ")}
-                    onClick={() => setBedtimeHour(hour)}
-                  >
-                    {hour}:00
-                  </button>
-                );
-              })}
+            <div className="mb-3 flex flex-col gap-2 sm:flex-row">
+              <label className="flex flex-1 flex-col gap-1 text-sm">
+                開始日
+                <input
+                  type="date"
+                  className="rounded-default border-[3px] border-border px-3 py-2"
+                  value={exemptStart}
+                  onChange={(e) => setExemptStart(e.target.value)}
+                />
+              </label>
+              <label className="flex flex-1 flex-col gap-1 text-sm">
+                終了日
+                <input
+                  type="date"
+                  className="rounded-default border-[3px] border-border px-3 py-2"
+                  value={exemptEnd}
+                  onChange={(e) => setExemptEnd(e.target.value)}
+                />
+              </label>
             </div>
             <Button
+              className="mb-4"
               fullWidth
-              disabled={bedtimeMutation.isPending}
-              onClick={() => bedtimeMutation.mutate(bedtimeHour)}
-              data-testid="bedtime-save"
+              variant="secondary"
+              disabled={addExemptMutation.isPending}
+              onClick={() => addExemptMutation.mutate()}
             >
-              就寝時刻を保存
+              期間を追加
             </Button>
-          </>
-        ) : (
-          <p className="text-sm text-muted" data-testid="bedtime-change-blocked">
-            {bedtimeChange.message ||
-              "現在は就寝時刻を変更できません（回答提出前〜就寝1時間前のみ）。"}
-          </p>
-        )}
-      </Card>
+            {exemptList.length === 0 ? (
+              <p className="text-sm text-muted">免除期間はまだありません。</p>
+            ) : (
+              <ul className="flex flex-col gap-3">
+                {exemptList.map((period) => (
+                  <li
+                    key={exemptionKey(period)}
+                    className="rounded-default border border-border-soft p-3"
+                    data-testid={`exempt-period-${exemptionKey(period)}`}
+                  >
+                    <p className="mb-2 text-sm font-medium">
+                      {period.startDate} 〜 {period.endDate}
+                    </p>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                      <label className="flex flex-1 flex-col gap-1 text-sm">
+                        終了日を変更
+                        <input
+                          type="date"
+                          className="rounded-default border-[3px] border-border px-3 py-2"
+                          defaultValue={period.endDate}
+                          onBlur={(e) => {
+                            if (e.target.value !== period.endDate) {
+                              updateExemptMutation.mutate({
+                                startDate: period.startDate,
+                                endDate: period.endDate,
+                                newEndDate: e.target.value,
+                              });
+                            }
+                          }}
+                        />
+                      </label>
+                      <Button
+                        variant="danger"
+                        className="sm:w-auto"
+                        disabled={removeExemptMutation.isPending}
+                        onClick={() =>
+                          removeExemptMutation.mutate({
+                            startDate: period.startDate,
+                            endDate: period.endDate,
+                          })
+                        }
+                      >
+                        削除
+                      </Button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        </div>
+
+        <Card>
+          <h2 className="mb-2 font-bold text-ink">当日の就寝（保護者変更）</h2>
+          {bedtimeChange.allowed ? (
+            <>
+              <p className="mb-3 text-sm text-muted">
+                候補は 21 / 22 / 23 のみです（仕様勝ち・22:30 なし）。回答提出前かつ就寝1時間前まで変更できます。
+              </p>
+              <div className="mb-3 flex gap-2">
+                {BEDTIME_OPTIONS.map((hour) => {
+                  const selected = bedtimeHour === hour;
+                  return (
+                    <button
+                      key={hour}
+                      type="button"
+                      className={[
+                        "flex min-h-touch flex-1 items-center justify-center rounded-default text-base",
+                        selected
+                          ? "border-[3px] border-info bg-info-soft text-info"
+                          : "border-2 border-border bg-surface text-ink",
+                      ].join(" ")}
+                      onClick={() => setBedtimeHour(hour)}
+                    >
+                      {hour}:00
+                    </button>
+                  );
+                })}
+              </div>
+              <Button
+                fullWidth
+                disabled={bedtimeMutation.isPending}
+                onClick={() => bedtimeMutation.mutate(bedtimeHour)}
+                data-testid="bedtime-save"
+              >
+                就寝時刻を保存
+              </Button>
+            </>
+          ) : (
+            <p className="text-sm text-muted" data-testid="bedtime-change-blocked">
+              {bedtimeChange.message ||
+                "現在は就寝時刻を変更できません（回答提出前〜就寝1時間前のみ）。"}
+            </p>
+          )}
+        </Card>
+      </div>
 
       <Button fullWidth variant="secondary" onClick={() => navigate("/parent")}>
         保護者ホームへ
@@ -483,3 +492,4 @@ export function ParentSettingsPage() {
     </ParentPageFrame>
   );
 }
+

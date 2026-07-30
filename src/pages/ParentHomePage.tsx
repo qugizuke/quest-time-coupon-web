@@ -1,7 +1,8 @@
 /**
  * @file ParentHomePage
  * @description 保護者ホーム（未採点・登録状況・再開・長期休み参照・設定）。
- *   画面状態の正は GET parentHome（契約 §3.5）。見た目最終合わせは Issue #19。
+ *   画面状態の正は GET parentHome（契約 §3.5）。
+ *   Figma parent-home の左主／右サイド2カラムに寄せる（Issue #19）。
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -131,179 +132,188 @@ export function ParentHomePage() {
         <h1 className="text-app-lg font-bold text-ink">きょうの運用</h1>
       </div>
 
-      {ungradedCount > 0 ? (
-        <div
-          className="mb-4 flex flex-col gap-3 rounded-default border-[3px] border-info bg-info-soft p-4 sm:flex-row sm:items-center"
-          data-testid="ungraded-banner"
-        >
-          <div className="min-w-0 flex-1">
-            <p className="font-bold text-info">【要対応】未確認のクエストがあります</p>
-            <p className="mt-1 text-sm text-ink">
-              お子様が提出したクエストが {ungradedCount}件 未採点です
-            </p>
-          </div>
-          <Button onClick={() => navigate("/parent/grades")}>
-            採点をはじめる →
-          </Button>
-        </div>
-      ) : (
-        <Card className="mb-4">
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <h2 className="font-bold text-ink">未採点</h2>
-            <StatusBadge tone="muted">0件</StatusBadge>
-          </div>
-          <Button fullWidth variant="secondary" onClick={() => navigate("/parent/grades")}>
-            採点一覧をみる
-          </Button>
-        </Card>
-      )}
-
-      <Card className="mb-4">
-        <div className="mb-2 flex items-center justify-between gap-3">
-          <h2 className="font-bold text-ink">📅 本日の回答・登録状況</h2>
-          <StatusBadge tone={registrationTone}>{registrationStatus}</StatusBadge>
-        </div>
-        {(parentHome.isExemptToday || registrationStatus === "免除") && (
-          <p className="text-sm text-muted">今日はクエスト免除です</p>
-        )}
-        {registrationStatus === "締切超過" && (
-          <p className="text-sm text-muted">
-            本日は登録締め切り時間を過ぎているため、お子様側からの提出はロックされています。
-          </p>
-        )}
-        {parentHome.registrationReopen.isOpen &&
-          parentHome.registrationReopen.endsAt && (
-            <p className="mt-2 text-sm text-muted" data-testid="reopen-open-hint">
-              登録受付再開中（〜{parentHome.registrationReopen.endsAt}）
-            </p>
-          )}
-      </Card>
-
-      {canReopen && (
-        <Card className="mb-4" data-testid="registration-reopen-card">
-          <h2 className="mb-2 font-bold text-ink">登録受付を再開</h2>
-          <p className="mb-3 text-sm text-muted">
-            当日1回のみ。終了時刻を選んで子どもが登録できるようにします。
-          </p>
-          {!reopenOpen ? (
-            <Button
-              fullWidth
-              onClick={() => {
-                setReopenOpen(true);
-                setReopenUntil(reopenOptions[0]?.value ?? "");
-              }}
+      {/*
+        Figma parent-home: 左約2/3（未採点＋登録）、右約1/3（長期休み＋設定）。
+        狭幅のみ1列へ畳む。
+      */}
+      <div className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(240px,1fr)] md:items-start">
+        <div className="flex flex-col gap-4">
+          {ungradedCount > 0 ? (
+            <div
+              className="flex flex-col gap-3 rounded-default border-[3px] border-info bg-info-soft p-4 sm:flex-row sm:items-center"
+              data-testid="ungraded-banner"
             >
-              登録受付を再開
-            </Button>
+              <div className="min-w-0 flex-1">
+                <p className="font-bold text-info">【要対応】未確認のクエストがあります</p>
+                <p className="mt-1 text-sm text-ink">
+                  お子様が提出したクエストが {ungradedCount}件 未採点です
+                </p>
+              </div>
+              <Button onClick={() => navigate("/parent/grades")}>
+                採点をはじめる →
+              </Button>
+            </div>
           ) : (
-            <div className="flex flex-col gap-3">
-              <label className="flex flex-col gap-1 text-sm">
-                <span>終了時刻</span>
-                <select
-                  className="rounded-default border-[3px] border-border bg-surface px-3 py-2"
-                  value={reopenUntil}
-                  onChange={(e) => setReopenUntil(e.target.value)}
-                  data-testid="reopen-ends-at-select"
-                >
-                  {reopenOptions.length === 0 ? (
-                    <option value="">候補がありません</option>
-                  ) : (
-                    reopenOptions.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))
-                  )}
-                </select>
-              </label>
-              {reopenMutation.error && (
-                <p className="text-sm text-danger">
-                  {reopenMutation.error instanceof Error
-                    ? reopenMutation.error.message
-                    : "再開に失敗しました"}
+            <Card>
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <h2 className="font-bold text-ink">未採点</h2>
+                <StatusBadge tone="muted">0件</StatusBadge>
+              </div>
+              <Button fullWidth variant="secondary" onClick={() => navigate("/parent/grades")}>
+                採点一覧をみる
+              </Button>
+            </Card>
+          )}
+
+          <Card>
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <h2 className="font-bold text-ink">📅 本日の回答・登録状況</h2>
+              <StatusBadge tone={registrationTone}>{registrationStatus}</StatusBadge>
+            </div>
+            {(parentHome.isExemptToday || registrationStatus === "免除") && (
+              <p className="text-sm text-muted">今日はクエスト免除です</p>
+            )}
+            {registrationStatus === "締切超過" && (
+              <p className="text-sm text-muted">
+                本日は登録締め切り時間を過ぎているため、お子様側からの提出はロックされています。
+              </p>
+            )}
+            {parentHome.registrationReopen.isOpen &&
+              parentHome.registrationReopen.endsAt && (
+                <p className="mt-2 text-sm text-muted" data-testid="reopen-open-hint">
+                  登録受付再開中（〜{parentHome.registrationReopen.endsAt}）
                 </p>
               )}
-              <div className="flex gap-2">
-                <Button
-                  className="flex-1"
-                  disabled={!reopenUntil || reopenMutation.isPending}
-                  onClick={() => reopenMutation.mutate(reopenUntil)}
-                >
-                  再開する
-                </Button>
-                <Button
-                  className="flex-1"
-                  variant="secondary"
-                  onClick={() => setReopenOpen(false)}
-                >
-                  キャンセル
-                </Button>
-              </div>
-            </div>
-          )}
-        </Card>
-      )}
+          </Card>
 
-      <div className="mb-4 grid gap-4 sm:grid-cols-2">
-        <Card>
-          <h2 className="mb-2 font-bold text-ink">🏖️ 長期休みモード</h2>
-          <div
-            className={[
-              "rounded-default border-[3px] px-3 py-3",
-              vacationActive
-                ? "border-primary bg-surface-warm"
-                : "border-border-soft bg-surface-soft",
-            ].join(" ")}
-          >
-            <p className="text-sm text-muted">現在</p>
-            <p
+          {canReopen && (
+            <Card data-testid="registration-reopen-card">
+              <h2 className="mb-2 font-bold text-ink">登録受付を再開</h2>
+              <p className="mb-3 text-sm text-muted">
+                当日1回のみ。終了時刻を選んで子どもが登録できるようにします。
+              </p>
+              {!reopenOpen ? (
+                <Button
+                  fullWidth
+                  onClick={() => {
+                    setReopenOpen(true);
+                    setReopenUntil(reopenOptions[0]?.value ?? "");
+                  }}
+                >
+                  登録受付を再開
+                </Button>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  <label className="flex flex-col gap-1 text-sm">
+                    <span>終了時刻</span>
+                    <select
+                      className="rounded-default border-[3px] border-border bg-surface px-3 py-2"
+                      value={reopenUntil}
+                      onChange={(e) => setReopenUntil(e.target.value)}
+                      data-testid="reopen-ends-at-select"
+                    >
+                      {reopenOptions.length === 0 ? (
+                        <option value="">候補がありません</option>
+                      ) : (
+                        reopenOptions.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  </label>
+                  {reopenMutation.error && (
+                    <p className="text-sm text-danger">
+                      {reopenMutation.error instanceof Error
+                        ? reopenMutation.error.message
+                        : "再開に失敗しました"}
+                    </p>
+                  )}
+                  <div className="flex gap-2">
+                    <Button
+                      className="flex-1"
+                      disabled={!reopenUntil || reopenMutation.isPending}
+                      onClick={() => reopenMutation.mutate(reopenUntil)}
+                    >
+                      再開する
+                    </Button>
+                    <Button
+                      className="flex-1"
+                      variant="secondary"
+                      onClick={() => setReopenOpen(false)}
+                    >
+                      キャンセル
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </Card>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-4">
+          <Card>
+            <h2 className="mb-2 font-bold text-ink">🏖️ 長期休みモード</h2>
+            <div
               className={[
-                "text-lg font-bold",
-                vacationActive ? "text-primary" : "text-muted",
+                "rounded-default border-[3px] px-3 py-3",
+                vacationActive
+                  ? "border-primary bg-surface-warm"
+                  : "border-border-soft bg-surface-soft",
               ].join(" ")}
             >
-              {vacationActive ? "モード中" : "オフ"}
-            </p>
-            {vacationPeriod ? (
-              <p className="mt-1 text-sm text-muted" data-testid="vacation-period">
-                期間：{vacationPeriod.startDate} 〜 {vacationPeriod.endDate}
+              <p className="text-sm text-muted">現在</p>
+              <p
+                className={[
+                  "text-lg font-bold",
+                  vacationActive ? "text-primary" : "text-muted",
+                ].join(" ")}
+              >
+                {vacationActive ? "モード中" : "オフ"}
               </p>
-            ) : (
-              <p className="mt-1 text-sm text-muted">期間未設定</p>
-            )}
-          </div>
-          <p className="mt-2 text-xs text-muted">変更は各種設定から行えます</p>
-        </Card>
+              {vacationPeriod ? (
+                <p className="mt-1 text-sm text-muted" data-testid="vacation-period">
+                  期間：{vacationPeriod.startDate} 〜 {vacationPeriod.endDate}
+                </p>
+              ) : (
+                <p className="mt-1 text-sm text-muted">期間未設定</p>
+              )}
+            </div>
+            <p className="mt-2 text-xs text-muted">変更は各種設定から行えます</p>
+          </Card>
 
-        <Card>
-          <h2 className="mb-3 font-bold text-ink">⚙️ 設定クイックメニュー</h2>
-          <div className="flex flex-col gap-2">
-            <button
-              type="button"
-              onClick={() => navigate("/parent/settings")}
-              className="flex w-full items-center justify-between rounded-default border border-border-parent-chip bg-surface px-4 py-3 text-left text-sm text-ink hover:bg-parent-chip"
-            >
-              <span>特定日のクエスト免除を設定</span>
-              <span aria-hidden>→</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate("/parent/settings")}
-              className="flex w-full items-center justify-between rounded-default border border-border-parent-chip bg-surface px-4 py-3 text-left text-sm text-ink hover:bg-parent-chip"
-            >
-              <span>本日の目標就寝時間を上書きする</span>
-              <span aria-hidden>→</span>
-            </button>
-            <Button
-              fullWidth
-              variant="secondary"
-              onClick={() => navigate("/parent/settings")}
-            >
-              設定へ
-            </Button>
-          </div>
-        </Card>
+          <Card>
+            <h2 className="mb-3 font-bold text-ink">⚙️ 設定クイックメニュー</h2>
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => navigate("/parent/settings")}
+                className="flex w-full items-center justify-between rounded-default border border-border-parent-chip bg-surface px-4 py-3 text-left text-sm text-ink hover:bg-parent-chip"
+              >
+                <span>特定日のクエスト免除を設定</span>
+                <span aria-hidden>→</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate("/parent/settings")}
+                className="flex w-full items-center justify-between rounded-default border border-border-parent-chip bg-surface px-4 py-3 text-left text-sm text-ink hover:bg-parent-chip"
+              >
+                <span>本日の目標就寝時間を上書きする</span>
+                <span aria-hidden>→</span>
+              </button>
+              <Button
+                fullWidth
+                variant="secondary"
+                onClick={() => navigate("/parent/settings")}
+              >
+                設定へ
+              </Button>
+            </div>
+          </Card>
+        </div>
       </div>
     </ParentPageFrame>
   );
 }
+

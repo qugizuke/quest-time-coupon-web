@@ -1,6 +1,7 @@
 /**
  * @file ResultsPage
  * @description 採点結果の週ナビ＋日詳細前面・「確認した」操作（Issue #17 / screen-design §6.5）。
+ *   週一覧は Figma kid-results-week の7列カード構成に寄せる（Issue #19）。
  * @limitation API/DB 本接続は含まない。免除日詳細の完了 CTA は省略（自動確認扱い）。
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -13,7 +14,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { StatusBadge, type StatusBadgeTone } from "@/components/ui/StatusBadge";
 import { useDailyQuests } from "@/hooks/useDailyQuests";
-import { formatDateJa, todayLocal } from "@/lib/date";
+import { formatDateJa, formatDayNumber, formatWeekdayJa, todayLocal } from "@/lib/date";
 import { actualDoneLabel, childAnswerLabel, isUnknownChildAnswer } from "@/lib/labels";
 import { resolveQuestTitle } from "@/lib/questLabels";
 import {
@@ -51,32 +52,34 @@ function reasonCodeMessage(reasonCode: ReasonCode): string | null {
 }
 
 /**
- * 週一覧の右側ラベルを返す
+ * 週カードの点数・状態ラベルを返す
  * @param {ResultItem | undefined} item - 結果1件
- * @returns {{ text: string; tone: StatusBadgeTone }} 表示
+ * @returns {{ pointsText: string; statusText: string | null; tone: StatusBadgeTone }} 表示
  */
-function weekRowLabel(item: ResultItem | undefined): {
-  text: string;
+function weekCardLabel(item: ResultItem | undefined): {
+  pointsText: string;
+  statusText: string | null;
   tone: StatusBadgeTone;
 } {
   if (!item) {
-    return { text: "結果なし", tone: "muted" };
+    return { pointsText: "—", statusText: "結果なし", tone: "muted" };
   }
   if (item.reasonCode === "exempt") {
-    return { text: "免除 ±0", tone: "info" };
+    return { pointsText: "±0", statusText: "免除", tone: "info" };
   }
   const pointsText = `${item.totalPoints >= 0 ? "+" : ""}${item.totalPoints}分`;
   if (item.requiresAck && !item.acknowledged) {
-    return { text: `${pointsText}・未確認`, tone: "danger" };
+    return { pointsText, statusText: "未確認", tone: "danger" };
   }
   if (item.reasonCode === "grade_rejected") {
-    return { text: pointsText, tone: "danger" };
+    return { pointsText, statusText: "拒否", tone: "danger" };
   }
   if (item.reasonCode === "unregistered") {
-    return { text: pointsText, tone: "danger" };
+    return { pointsText, statusText: "未登録", tone: "danger" };
   }
   return {
-    text: pointsText,
+    pointsText,
+    statusText: null,
     tone: item.totalPoints >= 0 ? "success" : "danger",
   };
 }
@@ -254,12 +257,12 @@ export function ResultsPage() {
             </Button>
           </div>
 
-          <ul className="flex flex-col gap-2">
+          <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-7">
             {weekDates.map((date) => {
               const item = byDate.get(date);
               const clickable = !!item;
               const unacked = item ? needsAck(item) : false;
-              const right = weekRowLabel(item);
+              const card = weekCardLabel(item);
               return (
                 <li key={date}>
                   <button
@@ -271,7 +274,7 @@ export function ResultsPage() {
                     data-testid={`results-day-${date}`}
                     data-reason-code={item?.reasonCode ?? ""}
                     data-unacked={unacked ? "true" : "false"}
-                    className={`flex w-full items-center justify-between rounded-default px-4 py-3 text-left ${
+                    className={`flex w-full flex-col items-center gap-1 rounded-default px-2 py-3 text-center ${
                       clickable
                         ? unacked
                           ? "border-[3px] border-danger bg-surface shadow-[var(--shadow-card)]"
@@ -279,8 +282,27 @@ export function ResultsPage() {
                         : "cursor-default border border-transparent bg-muted-soft text-muted"
                     }`}
                   >
-                    <span className="font-medium">{formatDateJa(date)}</span>
-                    <StatusBadge tone={right.tone}>{right.text}</StatusBadge>
+                    <span className="font-display text-2xl leading-none text-ink">
+                      {formatDayNumber(date)}
+                    </span>
+                    <span className="text-xs text-muted">{formatWeekdayJa(date)}</span>
+                    <span
+                      className={[
+                        "text-sm font-bold",
+                        card.tone === "danger"
+                          ? "text-danger"
+                          : card.tone === "success"
+                            ? "text-success"
+                            : card.tone === "info"
+                              ? "text-info"
+                              : "text-muted",
+                      ].join(" ")}
+                    >
+                      {card.pointsText}
+                    </span>
+                    {card.statusText && (
+                      <StatusBadge tone={card.tone}>{card.statusText}</StatusBadge>
+                    )}
                   </button>
                 </li>
               );

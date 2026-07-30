@@ -1,7 +1,7 @@
 /**
  * @file HomePage
  * @description 子ども向けホーム。残高・状態・各画面への導線。
- *   保護者モード入口（パスワードモーダル）と就寝モーダル骨格を持つ（Issue #15）。
+ *   就寝モーダル骨格を持つ。保護者モード入口は ChildPageFrame（Issue #15）。
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -10,12 +10,9 @@ import { QuestDeadlineCountdown } from "@/components/QuestDeadlineCountdown";
 import { QuestRegistrationCutoffCountdown } from "@/components/QuestRegistrationCutoffCountdown";
 import { QuestRulesDialog } from "@/components/QuestRulesDialog";
 import { BedtimeModal } from "@/components/BedtimeModal";
-import { ParentPasswordModal } from "@/components/ParentPasswordModal";
 import { homeQuery, queryKeys } from "@/api/queries";
 import { postRegistrationSetting } from "@/api/client";
-import { AppHeader } from "@/components/layout/AppHeader";
-import { AppLayout } from "@/components/layout/AppLayout";
-import { LoadingScreen } from "@/components/layout/LoadingScreen";
+import { ChildPageFrame } from "@/components/layout/ChildPageFrame";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -49,7 +46,6 @@ export function HomePage() {
   const queryClient = useQueryClient();
   const [rulesOpen, setRulesOpen] = useState(false);
   const [bedtimeModalOpen, setBedtimeModalOpen] = useState(false);
-  const [parentPasswordOpen, setParentPasswordOpen] = useState(false);
   const { data, isLoading, error } = useQuery(homeQuery);
   const today = todayLocal();
   const showBedtimePicker = isWeekendEve(today);
@@ -103,16 +99,22 @@ export function HomePage() {
   const deadline = useQuestDeadlineClock(today, deadlineActive, bedtimeHour);
 
   if (isLoading) {
-    return <LoadingScreen />;
+    return (
+      <ChildPageFrame showHome={false}>
+        <div className="flex flex-1 items-center justify-center">
+          <p className="text-muted">読み込み中…</p>
+        </div>
+      </ChildPageFrame>
+    );
   }
 
   if (error || !data) {
     return (
-      <AppLayout>
+      <ChildPageFrame showHome={false}>
         <p className="text-danger">
           エラー: {error instanceof Error ? error.message : "不明"}
         </p>
-      </AppLayout>
+      </ChildPageFrame>
     );
   }
 
@@ -148,15 +150,7 @@ export function HomePage() {
   }
 
   return (
-    <AppLayout>
-      <div className="-mx-4 mb-4 sm:-mx-8">
-        <AppHeader
-          mode="kid"
-          showHome={false}
-          onParentMode={() => setParentPasswordOpen(true)}
-        />
-      </div>
-
+    <ChildPageFrame showHome={false}>
       <div className="flex flex-1 flex-col justify-center gap-6">
         <Card className="flex flex-col items-center justify-center text-center">
           <p className="text-lg text-muted">残り時間</p>
@@ -281,15 +275,6 @@ export function HomePage() {
         onSelect={handleBedtimeChange}
         disabled={registrationMutation.isPending}
       />
-
-      <ParentPasswordModal
-        open={parentPasswordOpen}
-        onSuccess={() => {
-          setParentPasswordOpen(false);
-          navigate("/parent");
-        }}
-        onDismiss={() => setParentPasswordOpen(false)}
-      />
-    </AppLayout>
+    </ChildPageFrame>
   );
 }

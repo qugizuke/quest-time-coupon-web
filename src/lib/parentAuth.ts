@@ -70,20 +70,29 @@ function readAuthRecord(): ParentAuthRecord | null {
 }
 
 /**
+ * 認証の残存有効時間（ミリ秒）を返す
+ * @description 期限切れなら記録を削除して 0 を返す。
+ * @returns {number} 残存 TTL（ms）。未認証・期限切れは 0
+ */
+export function getParentAuthRemainingMs(): number {
+  const record = readAuthRecord();
+  if (!record) return 0;
+
+  const remaining = PARENT_AUTH_TTL_MS - (Date.now() - record.authedAt);
+  if (remaining <= 0) {
+    clearParentAuthed();
+    return 0;
+  }
+
+  return remaining;
+}
+
+/**
  * 保護者モードに認証済みか
  * @returns {boolean} 認証済みかつ有効期限内なら true
  */
 export function isParentAuthed(): boolean {
-  const record = readAuthRecord();
-  if (!record) return false;
-
-  const elapsed = Date.now() - record.authedAt;
-  if (elapsed >= PARENT_AUTH_TTL_MS) {
-    clearParentAuthed();
-    return false;
-  }
-
-  return true;
+  return getParentAuthRemainingMs() > 0;
 }
 
 /**

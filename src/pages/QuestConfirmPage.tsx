@@ -7,8 +7,7 @@ import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { postAnswers } from "@/api/client";
 import { homeQuery, queryKeys } from "@/api/queries";
-import { AppLayout } from "@/components/layout/AppLayout";
-import { LoadingScreen } from "@/components/layout/LoadingScreen";
+import { ChildPageFrame } from "@/components/layout/ChildPageFrame";
 import { Button } from "@/components/ui/Button";
 import { useDailyQuests } from "@/hooks/useDailyQuests";
 import { todayLocal } from "@/lib/date";
@@ -144,24 +143,30 @@ export function QuestConfirmPage() {
   });
 
   if (isHomeLoading) {
-    return <LoadingScreen />;
+    return (
+      <ChildPageFrame>
+        <div className="flex flex-1 items-center justify-center">
+          <p className="text-muted">読み込み中…</p>
+        </div>
+      </ChildPageFrame>
+    );
   }
 
   if (!draft || !daily || !confirmationItems || draftError) {
     return (
-      <AppLayout>
+      <ChildPageFrame>
         <p className="text-danger">
           {draftError ?? "下書きが見つかりません。"}
         </p>
         <Button className="mt-4" onClick={() => navigate("/quest")}>
           クエストに戻る
         </Button>
-      </AppLayout>
+      </ChildPageFrame>
     );
   }
 
   return (
-    <AppLayout>
+    <ChildPageFrame>
       <h1 className="mb-4 text-app-lg font-bold">
         最後の確認
       </h1>
@@ -191,6 +196,6 @@ export function QuestConfirmPage() {
           修正する
         </Button>
       </div>
-    </AppLayout>
+    </ChildPageFrame>
   );
 }

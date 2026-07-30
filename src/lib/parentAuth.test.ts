@@ -6,6 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearParentAuthed,
+  getParentAuthRemainingMs,
   isParentAuthed,
   PARENT_AUTH_TTL_MS,
   PARENT_PASSWORD,
@@ -38,12 +39,15 @@ describe("parentAuth", () => {
   it("認証後は TTL 内で true、期限切れで false", () => {
     setParentAuthed();
     expect(isParentAuthed()).toBe(true);
+    expect(getParentAuthRemainingMs()).toBe(PARENT_AUTH_TTL_MS);
 
     vi.advanceTimersByTime(PARENT_AUTH_TTL_MS - 1);
     expect(isParentAuthed()).toBe(true);
+    expect(getParentAuthRemainingMs()).toBe(1);
 
     vi.advanceTimersByTime(1);
     expect(isParentAuthed()).toBe(false);
+    expect(getParentAuthRemainingMs()).toBe(0);
     expect(sessionStorage.getItem("qtc:parentAuth")).toBeNull();
   });
 

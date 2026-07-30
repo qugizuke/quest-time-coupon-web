@@ -30,6 +30,8 @@
   --color-muted-soft: #f0eeec;
   --color-nav-results: #c8e6b4;
   --color-nav-timer: #d2c8f5;
+  --color-progress-track: #e2dcd0;
+  --shadow-quest-board: 0 6px 0 0 #e0dcd0;
 
   /* --- ブランド／セマンティック色 --- */
   --color-primary: #ff9f1c;
@@ -86,6 +88,7 @@
   --shadow-primary: 0 5px 0 0 #e08300;
   --shadow-secondary: 0 5px 0 0 #d2c9b5;
   --shadow-danger: 0 5px 0 0 #d9484d;
+  --shadow-success: 0 5px 0 0 #2d8a00;
   --shadow-card: 0 8px 8px 0 rgb(94 58 33 / 0.1);
 }
 

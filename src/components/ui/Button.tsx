@@ -1,12 +1,19 @@
 /**
  * @file Button コンポーネント
- * @description Figma v6 準拠の primary / secondary / danger / ghost バリアント。
+ * @description Figma v6 準拠の primary / secondary / success / danger / ghost バリアント。
  * 茶枠＋押し出し影の主 CTA をデフォルトとする（screen-design.md §4.1）。
  */
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
 /** ボタンバリアント */
-export type ButtonVariant = "primary" | "secondary" | "danger" | "ghost";
+export type ButtonVariant =
+  | "primary"
+  | "secondary"
+  | "success"
+  | "danger"
+  | "ghost"
+  | "navResults"
+  | "navTimer";
 
 /**
  * @typedef {object} ButtonProps
@@ -28,10 +35,18 @@ const variantClass: Record<ButtonVariant, string> = {
     "border-[3px] border-border bg-primary text-white shadow-[var(--shadow-primary)] hover:brightness-105 active:translate-y-[2px] active:shadow-none",
   secondary:
     "border-[3px] border-border bg-surface text-ink shadow-[var(--shadow-secondary)] hover:bg-surface-soft active:translate-y-[2px] active:shadow-none",
+  /** Figma クエスト確認「登録する」など成功系 CTA */
+  success:
+    "border-[3px] border-border bg-success text-white shadow-[var(--shadow-success)] hover:brightness-105 active:translate-y-[2px] active:shadow-none",
   danger:
     "border-[3px] border-border bg-danger text-white shadow-[var(--shadow-danger)] hover:brightness-105 active:translate-y-[2px] active:shadow-none",
   ghost:
     "border border-border-chip bg-chip text-chip-ink hover:bg-surface-warm",
+  /** Figma ホーム「採点結果をみる」 */
+  navResults:
+    "border-0 bg-nav-results text-success-deep hover:brightness-95",
+  /** Figma ホーム「タイマーをスタート」 */
+  navTimer: "border-0 bg-nav-timer text-timer-ink hover:brightness-95",
 };
 
 /**

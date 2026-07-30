@@ -1,6 +1,7 @@
 /**
  * @file QuestPage
  * @description 1問ずつクエストに回答する画面（宿題条件分岐対応）。
+ *   見た目は Figma kid-quest（進捗バー・色付き3択・茶枠ボード）に寄せる（Issue #19）。
  */
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -9,6 +10,7 @@ import type { ChildAnswer, QuestDefinition } from "@/types/api";
 import { homeQuery } from "@/api/queries";
 import { ChildPageFrame } from "@/components/layout/ChildPageFrame";
 import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 import { useDailyQuests } from "@/hooks/useDailyQuests";
 import { useQuestDraft } from "@/hooks/useQuestDraft";
 import { todayLocal } from "@/lib/date";
@@ -18,34 +20,75 @@ import {
 } from "@/lib/deadline";
 import { ensureQuestSessionStarted, getBedtimeHourDraft } from "@/lib/sessionStorage";
 
-const CHOICES: { value: ChildAnswer; label: string }[] = [
-  { value: 1, label: "できた" },
-  { value: 0, label: "できなかった" },
-  { value: -1, label: "分からない" },
+/**
+ * 選択肢の見た目メタ
+ * @typedef {object} ChoiceMeta
+ * @property {ChildAnswer} value - 回答値
+ * @property {string} label - 表示ラベル
+ * @property {string} idleClass - 未選択クラス
+ * @property {string} selectedClass - 選択中クラス
+ */
+type ChoiceMeta = {
+  value: ChildAnswer;
+  label: string;
+  idleClass: string;
+  selectedClass: string;
+};
+
+/** 3択クエスト用の選択肢（Figma 色） */
+const CHOICES: ChoiceMeta[] = [
+  {
+    value: 1,
+    label: "👍 できた",
+    idleClass: "border-success bg-success-soft",
+    selectedClass: "border-success bg-success text-white shadow-[var(--shadow-secondary)]",
+  },
+  {
+    value: 0,
+    label: "👎 できなかった",
+    idleClass: "border-danger bg-danger-soft",
+    selectedClass: "border-danger bg-danger text-white shadow-[var(--shadow-danger)]",
+  },
+  {
+    value: -1,
+    label: "🤔 わからない",
+    idleClass: "border-primary bg-surface-warm",
+    selectedClass: "border-primary bg-primary text-white shadow-[var(--shadow-primary)]",
+  },
 ];
 
 /** 2択クエスト用の選択肢 */
-const BINARY_CHOICES: { value: ChildAnswer; label: string }[] = [
-  { value: 1, label: "できた" },
-  { value: 0, label: "できなかった" },
+const BINARY_CHOICES: ChoiceMeta[] = [
+  CHOICES[0],
+  CHOICES[1],
 ];
 
 /** はい / いいえゲート用の選択肢 */
-const YES_NO_CHOICES: { value: ChildAnswer; label: string }[] = [
-  { value: 1, label: "はい" },
-  { value: 0, label: "いいえ" },
+const YES_NO_CHOICES: ChoiceMeta[] = [
+  {
+    value: 1,
+    label: "👍 はい",
+    idleClass: "border-success bg-success-soft",
+    selectedClass: "border-success bg-success text-white",
+  },
+  {
+    value: 0,
+    label: "👎 いいえ",
+    idleClass: "border-danger bg-danger-soft",
+    selectedClass: "border-danger bg-danger text-white",
+  },
 ];
 
 /**
  * 現在のクエストに表示する選択肢を返す
  * @param {QuestDefinition} quest - 表示中のクエスト
  * @param {boolean} isFollowUpMode - 追問表示中か
- * @returns {{ value: ChildAnswer; label: string }[]} 選択肢一覧
+ * @returns {ChoiceMeta[]} 選択肢一覧
  */
 function answerChoicesFor(
   quest: QuestDefinition,
   isFollowUpMode: boolean,
-): { value: ChildAnswer; label: string }[] {
+): ChoiceMeta[] {
   if (isFollowUpMode) return CHOICES;
   if (quest.conditional?.gateAnswerMode === "yesNo") return YES_NO_CHOICES;
   if (quest.answerMode === "binary") return BINARY_CHOICES;
@@ -107,35 +150,74 @@ export function QuestPage() {
   }
 
   const choices = answerChoicesFor(currentQuest, isFollowUpMode);
+  const progressIndex = isFollowUpMode ? draft.index + 1 : draft.index + 1;
+  const progressTotal = daily.quests.length;
+  const progressRatio = progressTotal > 0 ? progressIndex / progressTotal : 0;
 
   return (
     <ChildPageFrame vacationMode={homeData?.isVacationMode}>
       <div className="flex flex-1 flex-col gap-6 transition-opacity duration-300">
-        <p className="text-center text-muted">
-          {isFollowUpMode ? "追問" : `${draft.index + 1} / ${daily.quests.length}`}
-        </p>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted">
+              {isFollowUpMode ? "追問" : "まいにちクエスト"}
+            </span>
+            <span className="text-info">
+              {isFollowUpMode
+                ? "追問"
+                : `${progressIndex} / ${progressTotal}`}
+            </span>
+          </div>
+          {!isFollowUpMode && (
+            <div
+              className="h-4 overflow-hidden rounded-sm border-2 border-border bg-progress-track"
+              role="progressbar"
+              aria-valuenow={progressIndex}
+              aria-valuemin={1}
+              aria-valuemax={progressTotal}
+            >
+              <div
+                className="h-full bg-info transition-[width] duration-300"
+                style={{ width: `${Math.round(progressRatio * 100)}%` }}
+              />
+            </div>
+          )}
+        </div>
 
-        <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
-          <h1 className="text-app-lg font-bold leading-relaxed">
+        <Card className="flex flex-1 flex-col items-center gap-8 border-4 p-8 text-center shadow-[var(--shadow-quest-board)] sm:p-12">
+          <h1 className="text-2xl font-bold leading-relaxed text-ink sm:text-[32px]">
             {currentQuest.title}
           </h1>
           {currentQuest.hint && (
             <p className="text-muted">{currentQuest.hint}</p>
           )}
-        </div>
 
-        <div className="flex flex-col gap-3">
-          {choices.map((c) => (
-            <Button
-              key={c.value}
-              fullWidth
-              variant={currentAnswer === c.value ? "primary" : "secondary"}
-              onClick={() => setAnswer(c.value)}
-            >
-              {c.label}
-            </Button>
-          ))}
-        </div>
+          <div
+            className={[
+              "flex w-full gap-3",
+              choices.length >= 3
+                ? "flex-col sm:flex-row"
+                : "flex-col sm:flex-row",
+            ].join(" ")}
+          >
+            {choices.map((c) => {
+              const selected = currentAnswer === c.value;
+              return (
+                <button
+                  key={c.value}
+                  type="button"
+                  onClick={() => setAnswer(c.value)}
+                  className={[
+                    "flex min-h-[72px] flex-1 items-center justify-center rounded-[20px] border-4 px-4 py-6 text-lg font-medium text-ink transition-transform active:scale-[0.98] sm:min-h-[120px] sm:text-[22px]",
+                    selected ? c.selectedClass : c.idleClass,
+                  ].join(" ")}
+                >
+                  {c.label}
+                </button>
+              );
+            })}
+          </div>
+        </Card>
 
         <div className="flex gap-3">
           <Button
@@ -144,11 +226,11 @@ export function QuestPage() {
             disabled={draft.index === 0 && !isFollowUpMode}
             onClick={goPrev}
           >
-            戻る
+            👈 もどる
           </Button>
           {canGoNext ? (
             <Button className="flex-1" onClick={goNext}>
-              次へ
+              つぎへ 👉
             </Button>
           ) : (
             <Button
@@ -156,7 +238,7 @@ export function QuestPage() {
               disabled={!canConfirm && !isComplete}
               onClick={() => navigate("/quest/confirm")}
             >
-              確認へ
+              確認へ 👉
             </Button>
           )}
         </div>

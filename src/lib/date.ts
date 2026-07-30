@@ -45,3 +45,25 @@ export function formatDateJa(value: string): string {
   const weekday = WEEKDAY_JA[d.getDay()];
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日(${weekday})`;
 }
+
+/**
+ * 日付の「日」だけを返す（週カード用）
+ * @param {string} value - YYYY-MM-DD
+ * @returns {string} 例: 28
+ */
+export function formatDayNumber(value: string): string {
+  const d = parseDateString(value);
+  if (!d) return value;
+  return String(d.getDate());
+}
+
+/**
+ * 日付の曜日ラベルを返す（週カード用）
+ * @param {string} value - YYYY-MM-DD
+ * @returns {string} 例: 火
+ */
+export function formatWeekdayJa(value: string): string {
+  const d = parseDateString(value);
+  if (!d) return "";
+  return WEEKDAY_JA[d.getDay()];
+}

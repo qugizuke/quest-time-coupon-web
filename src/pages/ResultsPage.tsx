@@ -1,6 +1,7 @@
 /**
  * @file ResultsPage
  * @description 採点結果の週ナビ＋日詳細前面・「確認した」操作（Issue #17 / screen-design §6.5）。
+ *   週一覧は Figma kid-results-week の7列カード構成に寄せる（Issue #19）。
  * @limitation API/DB 本接続は含まない。免除日詳細の完了 CTA は省略（自動確認扱い）。
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -13,7 +14,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { StatusBadge, type StatusBadgeTone } from "@/components/ui/StatusBadge";
 import { useDailyQuests } from "@/hooks/useDailyQuests";
-import { formatDateJa, todayLocal } from "@/lib/date";
+import { formatDateJa, formatDayNumber, formatWeekdayJa, todayLocal } from "@/lib/date";
 import { actualDoneLabel, childAnswerLabel, isUnknownChildAnswer } from "@/lib/labels";
 import { resolveQuestTitle } from "@/lib/questLabels";
 import {
@@ -51,32 +52,34 @@ function reasonCodeMessage(reasonCode: ReasonCode): string | null {
 }
 
 /**
- * 週一覧の右側ラベルを返す
+ * 週カードの点数・状態ラベルを返す
  * @param {ResultItem | undefined} item - 結果1件
- * @returns {{ text: string; tone: StatusBadgeTone }} 表示
+ * @returns {{ pointsText: string; statusText: string | null; tone: StatusBadgeTone }} 表示
  */
-function weekRowLabel(item: ResultItem | undefined): {
-  text: string;
+function weekCardLabel(item: ResultItem | undefined): {
+  pointsText: string;
+  statusText: string | null;
   tone: StatusBadgeTone;
 } {
   if (!item) {
-    return { text: "結果なし", tone: "muted" };
+    return { pointsText: "—", statusText: "結果なし", tone: "muted" };
   }
   if (item.reasonCode === "exempt") {
-    return { text: "免除 ±0", tone: "info" };
+    return { pointsText: "±0", statusText: "免除", tone: "info" };
   }
   const pointsText = `${item.totalPoints >= 0 ? "+" : ""}${item.totalPoints}分`;
   if (item.requiresAck && !item.acknowledged) {
-    return { text: `${pointsText}・未確認`, tone: "danger" };
+    return { pointsText, statusText: "未確認", tone: "danger" };
   }
   if (item.reasonCode === "grade_rejected") {
-    return { text: pointsText, tone: "danger" };
+    return { pointsText, statusText: "拒否", tone: "danger" };
   }
   if (item.reasonCode === "unregistered") {
-    return { text: pointsText, tone: "danger" };
+    return { pointsText, statusText: "未登録", tone: "danger" };
   }
   return {
-    text: pointsText,
+    pointsText,
+    statusText: null,
     tone: item.totalPoints >= 0 ? "success" : "danger",
   };
 }
@@ -105,12 +108,12 @@ function registrationTimingLabel(adjustment: number, reason?: string): string {
  */
 function registrationTimingClassName(adjustment: number): string {
   if (adjustment > 0) {
-    return "border-2 border-success bg-success/10 text-gray-900";
+    return "border-2 border-success bg-success/10 text-ink";
   }
   if (adjustment < 0) {
-    return "border-2 border-danger bg-danger/10 text-gray-900";
+    return "border-2 border-danger bg-danger/10 text-ink";
   }
-  return "border-2 border-warning bg-warning/20 text-gray-900";
+  return "border-2 border-warning bg-warning/20 text-ink";
 }
 
 /**
@@ -225,11 +228,9 @@ export function ResultsPage() {
 
   return (
     <ChildPageFrame>
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-6">
+        <p className="text-sm text-muted">📊 週ごとの結果</p>
         <h1 className="text-app-lg font-bold">採点結果</h1>
-        <Button variant="secondary" onClick={() => navigate("/")}>
-          ホーム
-        </Button>
       </div>
 
       {!selected && (
@@ -256,12 +257,12 @@ export function ResultsPage() {
             </Button>
           </div>
 
-          <ul className="flex flex-col gap-2">
+          <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-7">
             {weekDates.map((date) => {
               const item = byDate.get(date);
               const clickable = !!item;
               const unacked = item ? needsAck(item) : false;
-              const right = weekRowLabel(item);
+              const card = weekCardLabel(item);
               return (
                 <li key={date}>
                   <button
@@ -273,16 +274,35 @@ export function ResultsPage() {
                     data-testid={`results-day-${date}`}
                     data-reason-code={item?.reasonCode ?? ""}
                     data-unacked={unacked ? "true" : "false"}
-                    className={`flex w-full items-center justify-between rounded-default px-4 py-3 text-left shadow-sm ${
+                    className={`flex w-full flex-col items-center gap-1 rounded-default px-2 py-3 text-center ${
                       clickable
                         ? unacked
-                          ? "border-2 border-danger bg-white"
-                          : "border border-border bg-white"
+                          ? "border-[3px] border-danger bg-surface shadow-[var(--shadow-card)]"
+                          : "border-[3px] border-border bg-surface shadow-[var(--shadow-card)]"
                         : "cursor-default border border-transparent bg-muted-soft text-muted"
                     }`}
                   >
-                    <span className="font-medium">{formatDateJa(date)}</span>
-                    <StatusBadge tone={right.tone}>{right.text}</StatusBadge>
+                    <span className="font-display text-2xl leading-none text-ink">
+                      {formatDayNumber(date)}
+                    </span>
+                    <span className="text-xs text-muted">{formatWeekdayJa(date)}</span>
+                    <span
+                      className={[
+                        "text-sm font-bold",
+                        card.tone === "danger"
+                          ? "text-danger"
+                          : card.tone === "success"
+                            ? "text-success"
+                            : card.tone === "info"
+                              ? "text-info"
+                              : "text-muted",
+                      ].join(" ")}
+                    >
+                      {card.pointsText}
+                    </span>
+                    {card.statusText && (
+                      <StatusBadge tone={card.tone}>{card.statusText}</StatusBadge>
+                    )}
                   </button>
                 </li>
               );
@@ -296,16 +316,17 @@ export function ResultsPage() {
           <Card
             className={
               selected.reasonCode === "exempt"
-                ? "border-2 border-border"
+                ? "border-[3px] border-border"
                 : selected.totalPoints >= 0
-                  ? "border-2 border-success"
-                  : "border-2 border-danger"
+                  ? "border-[3px] border-success"
+                  : "border-[3px] border-danger"
             }
           >
             <p className="text-lg font-bold">{formatDateJa(selected.date)}</p>
-            <p className="text-app-lg font-bold">
+            <p className="font-display text-app-xl leading-none text-ink">
               {selected.totalPoints >= 0 ? "+" : ""}
-              {selected.totalPoints} 分
+              {selected.totalPoints}
+              <span className="ml-2 font-sans text-xl font-normal">分</span>
             </p>
             {needsAck(selected) && penaltyPreviewOffset > 0 && (
               <p className="mt-2 text-sm text-muted">
@@ -318,7 +339,7 @@ export function ResultsPage() {
           </Card>
 
           {selected.details.some((d) => isUnknownChildAnswer(d.childAnswer)) && (
-            <div className="rounded-default border-2 border-warning bg-warning/20 px-4 py-3 text-base text-gray-900">
+            <div className="rounded-default border-2 border-warning bg-warning/20 px-4 py-3 text-base text-ink">
               {UNKNOWN_ANSWER_MESSAGE}
             </div>
           )}
@@ -327,8 +348,8 @@ export function ResultsPage() {
             <div
               className={`rounded-default px-4 py-3 text-base ${
                 selected.reasonCode === "exempt"
-                  ? "border-2 border-border bg-info-soft text-gray-900"
-                  : "border-2 border-danger bg-danger/10 text-gray-900"
+                  ? "border-2 border-border bg-info-soft text-ink"
+                  : "border-2 border-danger bg-danger/10 text-ink"
               }`}
               data-testid="reason-code-message"
               data-reason-code={selected.reasonCode}
@@ -355,7 +376,7 @@ export function ResultsPage() {
           {selected.reasonCode === "normal" &&
             !!selected.bedtimePrepPenalty &&
             selected.bedtimePrepPenalty !== 0 && (
-              <div className="rounded-default border-2 border-danger bg-danger/10 px-4 py-3 text-base text-gray-900">
+              <div className="rounded-default border-2 border-danger bg-danger/10 px-4 py-3 text-base text-ink">
                 {selected.bedtimePrepPenaltyReason ??
                   `寝る準備の虚偽ペナルティ ${selected.bedtimePrepPenalty}分`}
               </div>
@@ -369,8 +390,8 @@ export function ResultsPage() {
                     key={`${adj.kind}-${adj.code}`}
                     className={`rounded-default px-4 py-3 text-base ${
                       adj.minutes > 0
-                        ? "border-2 border-success bg-success/10 text-gray-900"
-                        : "border-2 border-danger bg-danger/10 text-gray-900"
+                        ? "border-2 border-success bg-success/10 text-ink"
+                        : "border-2 border-danger bg-danger/10 text-ink"
                     }`}
                   >
                     {adj.label}: {adj.minutes > 0 ? "+" : ""}

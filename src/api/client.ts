@@ -248,8 +248,18 @@ export function fetchGradeDates(opts?: {
 }
 
 /** GET grade */
-export function fetchGrade(date: string): Promise<GradeData> {
-  return request("grade", { method: "GET" }, { date });
+export async function fetchGrade(date: string): Promise<GradeData> {
+  const data = await request<GradeData>("grade", { method: "GET" }, { date });
+  return {
+    ...data,
+    isGraded: data.alreadyGraded ?? data.isGraded ?? false,
+    isRejected: data.reasonCode === "grade_rejected" || data.isRejected === true,
+    withinBonusDeadline:
+      data.withinBonusWindow ?? data.withinBonusDeadline ?? false,
+    withinBonusWindow:
+      data.withinBonusWindow ?? data.withinBonusDeadline ?? false,
+    alreadyGraded: data.alreadyGraded ?? data.isGraded ?? false,
+  };
 }
 
 /** POST grade */

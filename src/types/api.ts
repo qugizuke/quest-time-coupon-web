@@ -185,6 +185,12 @@ export interface GradeData {
     autoOutcome: string | null;
   }>;
   adjustments: GradeAdjustment[];
+  /** UI 互換（alreadyGraded） */
+  isGraded: boolean;
+  /** UI 互換（reasonCode === grade_rejected） */
+  isRejected: boolean;
+  /** UI 互換（withinBonusWindow） */
+  withinBonusDeadline: boolean;
 }
 
 /** GET results 1件 */

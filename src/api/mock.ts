@@ -18,7 +18,6 @@ import {
   calcBedtimePrepFalseClaimPenalty,
   canApplyBedtimePrepRegistrationBonus,
 } from "@/lib/registrationBonus";
-import { isUnknownChildAnswer } from "@/lib/labels";
 import daily from "../../quests/daily.json";
 import adjustmentDefinitions from "../../adjustments/grade.json";
 
@@ -393,7 +392,8 @@ function validateMockGrades(
   }
   const gradeMap = new Map(grades.map((g) => [g.questId, g.actualDone]));
   for (const [questId, childAnswer] of dayAnswers) {
-    if (isUnknownChildAnswer(childAnswer)) continue;
+    // 契約: parent_choice 相当は肯定回答のみ保護者入力。否定・わからないはサーバ側 auto
+    if (childAnswer !== 1) continue;
     if (!gradeMap.has(questId)) {
       throw new Error(`BAD_REQUEST: 未採点 questId=${questId}`);
     }
@@ -402,8 +402,11 @@ function validateMockGrades(
     if (!dayAnswers.has(g.questId)) {
       throw new Error(`BAD_REQUEST: 未知の questId=${g.questId}`);
     }
-    if (isUnknownChildAnswer(dayAnswers.get(g.questId)!)) {
-      throw new Error(`BAD_REQUEST: 分からない回答は採点不要 questId=${g.questId}`);
+    const childAnswer = dayAnswers.get(g.questId)!;
+    if (childAnswer !== 1) {
+      throw new Error(
+        `BAD_REQUEST: 肯定回答以外は採点不要 questId=${g.questId}`,
+      );
     }
   }
 }
@@ -706,6 +709,15 @@ export async function mockApi<T>(
       if (actor === "parent" && !isWeekendEveDay && !isVacationMode) {
         throw new Error("FORBIDDEN_STATE: 対象日でないため設定できません");
       }
+      if (actor === "parent") {
+        const now = new Date();
+        const hour = now.getHours();
+        if (hour >= bedtimeHour - 1) {
+          throw new Error(
+            `FORBIDDEN_STATE: 保護者は就寝1時間前までしか変更できません bedtimeHour=${bedtimeHour}`,
+          );
+        }
+      }
       if (store.missedRegistrationDates.has(date) || store.gradedDates.has(date)) {
         throw new Error("ALREADY_RESULT: 結果作成済みのため設定できません");
       }
@@ -918,23 +930,28 @@ export async function mockApi<T>(
         gradingMode: "parent_choice" as const,
         autoOutcome: null,
       }));
+      const withinBonusWindow = !isPastQuestBonusDeadline(
+        date,
+        new Date(),
+        store.bedtimeByDate.get(date),
+      );
+      const reasonCode = store.rejectedDates.has(date)
+        ? ("grade_rejected" as const)
+        : alreadyGraded
+          ? ("normal" as const)
+          : null;
       return {
         date,
         submittedAt: store.submittedAtByDate.get(date) ?? null,
-        withinBonusWindow: !isPastQuestBonusDeadline(
-          date,
-          new Date(),
-          store.bedtimeByDate.get(date),
-        ),
+        withinBonusWindow,
         isExempt: resolveMockExemptDay(date),
         alreadyGraded,
-        reasonCode: store.rejectedDates.has(date)
-          ? "grade_rejected"
-          : alreadyGraded
-            ? "normal"
-            : null,
+        reasonCode,
         items,
         adjustments: store.adjustmentsByDate.get(date) ?? [],
+        isGraded: alreadyGraded,
+        isRejected: store.rejectedDates.has(date),
+        withinBonusDeadline: withinBonusWindow,
       } as T;
     }
 

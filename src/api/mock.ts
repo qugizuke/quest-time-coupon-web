@@ -121,6 +121,51 @@ function resolveMockExemptDay(date: string): boolean {
 }
 
 /**
+ * 期間内の全日を YYYY-MM-DD 配列で返す
+ * @param {string} startDate - 開始
+ * @param {string} endDate - 終了
+ * @returns {string[]} 日付一覧
+ */
+function expandInclusiveDateRange(startDate: string, endDate: string): string[] {
+  if (!startDate || !endDate || startDate > endDate) return [];
+  const [sy, sm, sd] = startDate.split("-").map(Number);
+  const [ey, em, ed] = endDate.split("-").map(Number);
+  const cursor = new Date(sy, sm - 1, sd);
+  const end = new Date(ey, em - 1, ed);
+  const dates: string[] = [];
+  while (cursor <= end) {
+    const y = cursor.getFullYear();
+    const m = String(cursor.getMonth() + 1).padStart(2, "0");
+    const d = String(cursor.getDate()).padStart(2, "0");
+    dates.push(`${y}-${m}-${d}`);
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return dates;
+}
+
+/**
+ * results に載せる免除日一覧を収集する
+ * @returns {string[]} 免除日 YYYY-MM-DD
+ */
+function collectMockExemptDatesForResults(): string[] {
+  const dates = new Set<string>();
+  if (store.exemptDatesOverride) {
+    for (const date of store.exemptDatesOverride) {
+      dates.add(date);
+    }
+  }
+  for (const period of store.exemptionPeriods) {
+    for (const date of expandInclusiveDateRange(period.startDate, period.endDate)) {
+      dates.add(date);
+    }
+  }
+  if (!store.exemptDatesOverride && readMockFlag(MOCK_EXEMPT_KEY)) {
+    dates.add(todayLocal());
+  }
+  return [...dates];
+}
+
+/**
  * モックの長期休み／免除フラグをテストから設定する
  * @param {object} opts - オプション
  * @param {boolean} [opts.vacationMode] - 長期休み
@@ -1159,7 +1204,27 @@ export async function mockApi<T>(
         requiresAck: true,
         blocksTimer: false,
       }));
-      return { items: [...gradedItems, ...rejectedItems, ...missedItems] } as T;
+      const occupied = new Set([
+        ...store.gradedDates,
+        ...store.rejectedDates,
+        ...store.missedRegistrationDates,
+      ]);
+      const exemptItems = collectMockExemptDatesForResults()
+        .filter((date) => !occupied.has(date))
+        .map((date) => ({
+          date,
+          totalPoints: 0,
+          acknowledged: true,
+          reasonCode: "exempt" as const,
+          registrationTimingAdjustment: 0,
+          adjustments: [],
+          details: [],
+          requiresAck: false,
+          blocksTimer: false,
+        }));
+      return {
+        items: [...gradedItems, ...rejectedItems, ...missedItems, ...exemptItems],
+      } as T;
     }
 
     case "resultsAck": {

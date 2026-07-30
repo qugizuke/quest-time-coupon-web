@@ -1,20 +1,28 @@
 /**
  * @file ResultsPage
- * @description 採点結果の一覧・詳細・「確認した」操作。
+ * @description 採点結果の週ナビ＋日詳細前面・「確認した」操作（Issue #17 / screen-design §6.5）。
+ * @limitation API/DB 本接続は含まない。免除日詳細の完了 CTA は省略（自動確認扱い）。
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { postResultsAck } from "@/api/client";
 import { homeQuery, queryKeys, resultsQuery } from "@/api/queries";
 import { ChildPageFrame } from "@/components/layout/ChildPageFrame";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { StatusBadge, type StatusBadgeTone } from "@/components/ui/StatusBadge";
 import { useDailyQuests } from "@/hooks/useDailyQuests";
-import { formatDateJa } from "@/lib/date";
+import { formatDateJa, todayLocal } from "@/lib/date";
 import { actualDoneLabel, childAnswerLabel, isUnknownChildAnswer } from "@/lib/labels";
 import { resolveQuestTitle } from "@/lib/questLabels";
-import type { ReasonCode } from "@/types/api";
+import {
+  formatWeekLabel,
+  getMondayWithOffset,
+  getWeekDates,
+  getWeekOffsetBetween,
+} from "@/lib/week";
+import type { ReasonCode, ResultItem } from "@/types/api";
 
 /** 「分からない」回答がある日の促しメッセージ */
 const UNKNOWN_ANSWER_MESSAGE =
@@ -42,6 +50,46 @@ function reasonCodeMessage(reasonCode: ReasonCode): string | null {
   return null;
 }
 
+/**
+ * 週一覧の右側ラベルを返す
+ * @param {ResultItem | undefined} item - 結果1件
+ * @returns {{ text: string; tone: StatusBadgeTone }} 表示
+ */
+function weekRowLabel(item: ResultItem | undefined): {
+  text: string;
+  tone: StatusBadgeTone;
+} {
+  if (!item) {
+    return { text: "結果なし", tone: "muted" };
+  }
+  if (item.reasonCode === "exempt") {
+    return { text: "免除 ±0", tone: "info" };
+  }
+  const pointsText = `${item.totalPoints >= 0 ? "+" : ""}${item.totalPoints}分`;
+  if (item.requiresAck && !item.acknowledged) {
+    return { text: `${pointsText}・未確認`, tone: "danger" };
+  }
+  if (item.reasonCode === "grade_rejected") {
+    return { text: pointsText, tone: "danger" };
+  }
+  if (item.reasonCode === "unregistered") {
+    return { text: pointsText, tone: "danger" };
+  }
+  return {
+    text: pointsText,
+    tone: item.totalPoints >= 0 ? "success" : "danger",
+  };
+}
+
+/**
+ * 未確認（要確認）かどうか
+ * @param {ResultItem} item - 結果
+ * @returns {boolean} 要確認なら true
+ */
+function needsAck(item: ResultItem): boolean {
+  return item.requiresAck && !item.acknowledged && item.reasonCode !== "exempt";
+}
+
 /** 登録タイミング調整の表示ラベル */
 function registrationTimingLabel(adjustment: number, reason?: string): string {
   if (reason) return reason;
@@ -66,20 +114,55 @@ function registrationTimingClassName(adjustment: number): string {
 }
 
 /**
- * 採点結果画面
+ * 採点結果画面（週ナビ＋日詳細前面）
  * @returns {JSX.Element} ページ
  */
 export function ResultsPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const today = todayLocal();
   const { data, isLoading, error } = useQuery(resultsQuery);
   const { data: homeData } = useQuery(homeQuery);
   const { data: daily } = useDailyQuests();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [weekInitialized, setWeekInitialized] = useState(false);
 
-  const selected = data?.items.find((i) => i.date === selectedDate);
+  const items = data?.items ?? [];
+
+  useEffect(() => {
+    if (!data || weekInitialized) return;
+    const unackedDates = items
+      .filter((item) => needsAck(item))
+      .map((item) => item.date)
+      .sort();
+    if (unackedDates.length > 0) {
+      setWeekOffset(getWeekOffsetBetween(today, unackedDates[0]));
+    } else {
+      setWeekOffset(0);
+    }
+    setWeekInitialized(true);
+  }, [data, items, today, weekInitialized]);
+
+  const monday = useMemo(
+    () => getMondayWithOffset(today, weekOffset),
+    [today, weekOffset],
+  );
+  const weekDates = useMemo(() => getWeekDates(monday), [monday]);
+
+  const byDate = useMemo(() => {
+    const map = new Map<string, ResultItem>();
+    for (const item of items) {
+      map.set(item.date, item);
+    }
+    return map;
+  }, [items]);
+
+  const selected = selectedDate ? byDate.get(selectedDate) : undefined;
+  const unackedCount = items.filter((item) => needsAck(item)).length;
+  const hasMultipleUnacked = unackedCount > 1;
   const penaltyPreviewOffset =
-    selected && !selected.acknowledged && selected.totalPoints > 0
+    selected && needsAck(selected) && selected.totalPoints > 0
       ? Math.min(homeData?.penaltyMinutes ?? 0, selected.totalPoints)
       : 0;
   const effectiveDeltaPreview = selected
@@ -93,10 +176,14 @@ export function ResultsPage() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.results });
 
       const current = queryClient.getQueryData<{
-        items: Array<{ date: string; acknowledged: boolean }>;
+        items: Array<{ date: string; acknowledged: boolean; requiresAck: boolean; reasonCode: ReasonCode }>;
       }>(queryKeys.results);
       const hasOtherUnacked = (current?.items ?? []).some(
-        (item) => !item.acknowledged && item.date !== date,
+        (item) =>
+          item.date !== date &&
+          item.requiresAck &&
+          !item.acknowledged &&
+          item.reasonCode !== "exempt",
       );
 
       if (hasOtherUnacked) {
@@ -125,11 +212,6 @@ export function ResultsPage() {
     );
   }
 
-  const items = data?.items ?? [];
-  const unacked = items.filter((i) => !i.acknowledged);
-  const acked = items.filter((i) => i.acknowledged);
-  const hasMultipleUnacked = unacked.length > 1;
-
   return (
     <ChildPageFrame>
       <div className="mb-4 flex items-center justify-between">
@@ -140,35 +222,73 @@ export function ResultsPage() {
       </div>
 
       {!selected && (
-        <div className="flex flex-col gap-2">
-          {unacked.length === 0 && acked.length === 0 && (
-            <p className="text-muted">まだ結果はありません。</p>
-          )}
-          {[...unacked, ...acked].map((item) => (
-            <button
-              key={item.date}
-              type="button"
-              onClick={() => setSelectedDate(item.date)}
-              className="flex items-center justify-between rounded-default bg-white px-4 py-3 text-left shadow-sm"
+        <div className="flex flex-col gap-4" data-testid="results-week-list">
+          <div className="flex items-center justify-between gap-2">
+            <Button
+              variant="secondary"
+              className="px-3 text-base"
+              onClick={() => setWeekOffset((v) => v - 1)}
+              data-testid="results-prev-week"
             >
-              <span>{formatDateJa(item.date)}</span>
-              <span className={item.totalPoints >= 0 ? "text-success" : "text-danger"}>
-                {item.totalPoints >= 0 ? "+" : ""}
-                {item.totalPoints}分
-                {!item.acknowledged && "（未確認）"}
-              </span>
-            </button>
-          ))}
+              ← 前週
+            </Button>
+            <p className="text-center text-sm font-medium" data-testid="results-week-label">
+              {formatWeekLabel(monday)}
+            </p>
+            <Button
+              variant="secondary"
+              className="px-3 text-base"
+              onClick={() => setWeekOffset((v) => v + 1)}
+              data-testid="results-next-week"
+            >
+              翌週 →
+            </Button>
+          </div>
+
+          <ul className="flex flex-col gap-2">
+            {weekDates.map((date) => {
+              const item = byDate.get(date);
+              const clickable = !!item;
+              const unacked = item ? needsAck(item) : false;
+              const right = weekRowLabel(item);
+              return (
+                <li key={date}>
+                  <button
+                    type="button"
+                    disabled={!clickable}
+                    onClick={() => {
+                      if (clickable) setSelectedDate(date);
+                    }}
+                    data-testid={`results-day-${date}`}
+                    data-reason-code={item?.reasonCode ?? ""}
+                    data-unacked={unacked ? "true" : "false"}
+                    className={`flex w-full items-center justify-between rounded-default px-4 py-3 text-left shadow-sm ${
+                      clickable
+                        ? unacked
+                          ? "border-2 border-danger bg-white"
+                          : "border border-border bg-white"
+                        : "cursor-default border border-transparent bg-muted-soft text-muted"
+                    }`}
+                  >
+                    <span className="font-medium">{formatDateJa(date)}</span>
+                    <StatusBadge tone={right.tone}>{right.text}</StatusBadge>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
         </div>
       )}
 
       {selected && (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4" data-testid="results-day-detail">
           <Card
             className={
-              selected.totalPoints >= 0
-                ? "border-2 border-success"
-                : "border-2 border-danger"
+              selected.reasonCode === "exempt"
+                ? "border-2 border-border"
+                : selected.totalPoints >= 0
+                  ? "border-2 border-success"
+                  : "border-2 border-danger"
             }
           >
             <p className="text-lg font-bold">{formatDateJa(selected.date)}</p>
@@ -176,7 +296,7 @@ export function ResultsPage() {
               {selected.totalPoints >= 0 ? "+" : ""}
               {selected.totalPoints} 分
             </p>
-            {!selected.acknowledged && penaltyPreviewOffset > 0 && (
+            {needsAck(selected) && penaltyPreviewOffset > 0 && (
               <p className="mt-2 text-sm text-muted">
                 {hasMultipleUnacked ? "この結果を先に確認すると、" : ""}
                 超過ペナルティ {penaltyPreviewOffset}分を相殺後、実質{" "}
@@ -279,16 +399,22 @@ export function ResultsPage() {
             })}
           </ul>
 
-          {!selected.acknowledged && (
+          {needsAck(selected) && (
             <Button
               fullWidth
               onClick={() => ackMutation.mutate(selected.date)}
               disabled={ackMutation.isPending}
+              data-testid="results-ack-button"
             >
               確認した
             </Button>
           )}
-          <Button variant="secondary" fullWidth onClick={() => setSelectedDate(null)}>
+          <Button
+            variant="secondary"
+            fullWidth
+            onClick={() => setSelectedDate(null)}
+            data-testid="results-back-to-week"
+          >
             一覧に戻る
           </Button>
         </div>

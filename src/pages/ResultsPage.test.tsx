@@ -68,18 +68,26 @@ function buildResult(overrides: Partial<ResultItem>): ResultItem {
 /**
  * ResultsPage を描画する
  * @param {ResultItem[]} items - 結果一覧
- * @param {Partial<HomeData>} [homeOverrides] - ホーム上書き
+ * @param {object} [opts] - オプション
+ * @param {Partial<HomeData>} [opts.homeOverrides] - ホーム上書き
+ * @param {string} [opts.initialPath] - 初期パス（クエリ含む）
  * @returns {void}
  */
-function renderResults(items: ResultItem[], homeOverrides: Partial<HomeData> = {}): void {
+function renderResults(
+  items: ResultItem[],
+  opts: { homeOverrides?: Partial<HomeData>; initialPath?: string } = {},
+): void {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
   queryClient.setQueryData(queryKeys.results, { items });
-  queryClient.setQueryData(queryKeys.home, { ...buildHome(), ...homeOverrides });
+  queryClient.setQueryData(queryKeys.home, {
+    ...buildHome(),
+    ...opts.homeOverrides,
+  });
   render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={["/results"]}>
+      <MemoryRouter initialEntries={[opts.initialPath ?? "/results"]}>
         <Routes>
           <Route path="/results" element={<ResultsPage />} />
           <Route path="/" element={<div>home</div>} />
@@ -200,7 +208,7 @@ describe("ResultsPage week UI (#17)", () => {
     expect(screen.getByTestId("results-ack-button")).toBeTruthy();
   });
 
-  it("最古の未確認日の週を初期表示する", () => {
+  it("通常導線は今週を初期表示する（未確認があっても）", () => {
     renderResults([
       buildResult({
         date: "2026-07-21",
@@ -217,6 +225,30 @@ describe("ResultsPage week UI (#17)", () => {
         requiresAck: true,
       }),
     ]);
+    expect(screen.getByTestId("results-week-label").textContent).toContain("7月27日の週");
+    expect(screen.getByTestId("results-day-2026-07-29")).toBeTruthy();
+  });
+
+  it("未確認バナー経由（?unacked=1）は最古の未確認日の週を開く", () => {
+    renderResults(
+      [
+        buildResult({
+          date: "2026-07-21",
+          reasonCode: "normal",
+          totalPoints: 20,
+          acknowledged: false,
+          requiresAck: true,
+        }),
+        buildResult({
+          date: "2026-07-29",
+          reasonCode: "normal",
+          totalPoints: 10,
+          acknowledged: false,
+          requiresAck: true,
+        }),
+      ],
+      { initialPath: "/results?unacked=1" },
+    );
     expect(screen.getByTestId("results-week-label").textContent).toContain("7月20日の週");
     expect(screen.getByTestId("results-day-2026-07-21")).toBeTruthy();
   });

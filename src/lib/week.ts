@@ -1,6 +1,6 @@
 /**
  * @file 週ユーティリティ
- * @description 月曜始まりの週ページング（保護者 grades 一覧用）。
+ * @description 月曜始まりの週ページング（子ども `/results`・保護者 `/parent/grades` 共用）。
  * @limitation ブラウザのローカルタイムゾーンを使用する。
  */
 

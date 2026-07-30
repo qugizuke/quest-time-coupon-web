@@ -5,7 +5,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { postResultsAck } from "@/api/client";
 import { homeQuery, queryKeys, resultsQuery } from "@/api/queries";
 import { ChildPageFrame } from "@/components/layout/ChildPageFrame";
@@ -119,6 +119,7 @@ function registrationTimingClassName(adjustment: number): string {
  */
 export function ResultsPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const today = todayLocal();
   const { data, isLoading, error } = useQuery(resultsQuery);
@@ -127,22 +128,28 @@ export function ResultsPage() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
   const [weekInitialized, setWeekInitialized] = useState(false);
+  /** 未確認バナー経由（`?unacked=1`）のとき最古未確認週へ */
+  const focusOldestUnacked = searchParams.get("unacked") === "1";
 
   const items = data?.items ?? [];
 
   useEffect(() => {
     if (!data || weekInitialized) return;
-    const unackedDates = items
-      .filter((item) => needsAck(item))
-      .map((item) => item.date)
-      .sort();
-    if (unackedDates.length > 0) {
-      setWeekOffset(getWeekOffsetBetween(today, unackedDates[0]));
+    if (focusOldestUnacked) {
+      const unackedDates = items
+        .filter((item) => needsAck(item))
+        .map((item) => item.date)
+        .sort();
+      if (unackedDates.length > 0) {
+        setWeekOffset(getWeekOffsetBetween(today, unackedDates[0]));
+      } else {
+        setWeekOffset(0);
+      }
     } else {
       setWeekOffset(0);
     }
     setWeekInitialized(true);
-  }, [data, items, today, weekInitialized]);
+  }, [data, items, today, weekInitialized, focusOldestUnacked]);
 
   const monday = useMemo(
     () => getMondayWithOffset(today, weekOffset),

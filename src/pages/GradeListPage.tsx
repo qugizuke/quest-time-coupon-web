@@ -1,11 +1,11 @@
 /**
  * @file GradeListPage
- * @description 保護者向け採点日一覧。
+ * @description 保護者向け採点日一覧（`/parent/grades`）。週 UI 本実装は後続 Issue。
  */
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { gradeDatesQuery } from "@/api/queries";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { ParentPageFrame } from "@/components/layout/ParentPageFrame";
 import { LoadingScreen } from "@/components/layout/LoadingScreen";
 import { Button } from "@/components/ui/Button";
 import { formatDateJa } from "@/lib/date";
@@ -62,16 +62,16 @@ export function GradeListPage() {
 
   if (error) {
     return (
-      <AppLayout>
+      <ParentPageFrame>
         <p className="text-danger">{error instanceof Error ? error.message : "エラー"}</p>
-      </AppLayout>
+      </ParentPageFrame>
     );
   }
 
   const dates = data?.dates ?? [];
 
   return (
-    <AppLayout>
+    <ParentPageFrame>
       <h1 className="mb-4 text-app-lg font-bold">採点日一覧</h1>
       {dates.length === 0 ? (
         <p className="text-muted">
@@ -87,7 +87,7 @@ export function GradeListPage() {
                 <button
                   type="button"
                   disabled={!clickable}
-                  onClick={() => clickable && navigate(`/grade/${d.date}`)}
+                  onClick={() => clickable && navigate(`/parent/grades/${d.date}`)}
                   className={`flex w-full items-center justify-between rounded-default px-4 py-3 text-left shadow-sm ${
                     clickable
                       ? "bg-white hover:bg-primary/5"
@@ -102,9 +102,14 @@ export function GradeListPage() {
           })}
         </ul>
       )}
-      <Button className="mt-6" variant="secondary" fullWidth onClick={() => navigate("/")}>
-        ホームへ
+      <Button
+        className="mt-6"
+        variant="secondary"
+        fullWidth
+        onClick={() => navigate("/parent")}
+      >
+        保護者ホームへ
       </Button>
-    </AppLayout>
+    </ParentPageFrame>
   );
 }

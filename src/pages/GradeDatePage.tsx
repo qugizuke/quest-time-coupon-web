@@ -1,13 +1,13 @@
 /**
  * @file GradeDatePage
- * @description 保護者が1日分を採点する画面（任意加減点対応）。
+ * @description 保護者が1日分を採点する画面（`/parent/grades/:date`）。任意加減点対応。
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { postGrade } from "@/api/client";
 import { gradeQuery, queryKeys } from "@/api/queries";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { ParentPageFrame } from "@/components/layout/ParentPageFrame";
 import { LoadingScreen } from "@/components/layout/LoadingScreen";
 import { Button } from "@/components/ui/Button";
 import { useGradeAdjustmentDefinitions } from "@/hooks/useGradeAdjustmentDefinitions";
@@ -190,7 +190,7 @@ export function GradeDatePage() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.gradeDates });
       void queryClient.invalidateQueries({ queryKey: queryKeys.home });
-      navigate("/grade");
+      navigate("/parent/grades");
     },
   });
 
@@ -238,16 +238,16 @@ export function GradeDatePage() {
 
   if (isAdjustmentDefinitionsError) {
     return (
-      <AppLayout>
+      <ParentPageFrame>
         <p className="text-danger">
           {adjustmentDefinitionsError instanceof Error
             ? adjustmentDefinitionsError.message
             : "任意加減点の定義を読み込めませんでした。"}
         </p>
-        <Button className="mt-4" variant="secondary" onClick={() => navigate("/grade")}>
+        <Button className="mt-4" variant="secondary" onClick={() => navigate("/parent/grades")}>
           一覧に戻る
         </Button>
-      </AppLayout>
+      </ParentPageFrame>
     );
   }
 
@@ -256,7 +256,7 @@ export function GradeDatePage() {
   }
 
   return (
-    <AppLayout>
+    <ParentPageFrame>
       <h1 className="mb-2 text-app-lg font-bold">
         採点 {formatDateJa(date)}
       </h1>
@@ -443,10 +443,10 @@ export function GradeDatePage() {
         >
           採点を確定
         </Button>
-        <Button variant="secondary" fullWidth onClick={() => navigate("/grade")}>
+        <Button variant="secondary" fullWidth onClick={() => navigate("/parent/grades")}>
           一覧に戻る
         </Button>
       </div>
-    </AppLayout>
+    </ParentPageFrame>
   );
 }

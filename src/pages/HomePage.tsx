@@ -1,6 +1,7 @@
 /**
  * @file HomePage
- * @description 子ども向けホーム。残高・状態・各画面への導線（v5: 寝る時間選択対応）。
+ * @description 子ども向けホーム。残高・状態・各画面への導線。
+ *   保護者モード入口（パスワードモーダル）と就寝モーダル骨格を持つ（Issue #15）。
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -8,8 +9,11 @@ import { useNavigate } from "react-router-dom";
 import { QuestDeadlineCountdown } from "@/components/QuestDeadlineCountdown";
 import { QuestRegistrationCutoffCountdown } from "@/components/QuestRegistrationCutoffCountdown";
 import { QuestRulesDialog } from "@/components/QuestRulesDialog";
+import { BedtimeModal } from "@/components/BedtimeModal";
+import { ParentPasswordModal } from "@/components/ParentPasswordModal";
 import { homeQuery, queryKeys } from "@/api/queries";
 import { postRegistrationSetting } from "@/api/client";
+import { AppHeader } from "@/components/layout/AppHeader";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { LoadingScreen } from "@/components/layout/LoadingScreen";
 import { Banner } from "@/components/ui/Banner";
@@ -18,7 +22,10 @@ import { Card } from "@/components/ui/Card";
 import { useQuestDeadlineClock } from "@/hooks/useQuestDeadlineClock";
 import { isWeekendEve } from "@/lib/deadline";
 import { todayLocal } from "@/lib/date";
-import { clearBedtimeHourDraft, setBedtimeHourDraft } from "@/lib/sessionStorage";
+import {
+  clearBedtimeHourDraft,
+  setBedtimeHourDraft,
+} from "@/lib/sessionStorage";
 import type { BedtimeHour } from "@/types/api";
 
 const STATUS_LABEL = {
@@ -27,12 +34,6 @@ const STATUS_LABEL = {
   pending_ack: "結果の確認が必要です",
   completed: "今日は全部終わり！",
 } as const;
-
-const BEDTIME_OPTIONS: { value: BedtimeHour; label: string }[] = [
-  { value: 21, label: "21:00" },
-  { value: 22, label: "22:00" },
-  { value: 23, label: "23:00" },
-];
 
 /** 登録受付締切後に未着手だった場合のメッセージ */
 function missedStartMessage(cutoffLabel: string): string {
@@ -47,13 +48,17 @@ export function HomePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [rulesOpen, setRulesOpen] = useState(false);
+  const [bedtimeModalOpen, setBedtimeModalOpen] = useState(false);
+  const [parentPasswordOpen, setParentPasswordOpen] = useState(false);
   const { data, isLoading, error } = useQuery(homeQuery);
   const today = todayLocal();
   const showBedtimePicker = isWeekendEve(today);
-  const [bedtimeHour, setBedtimeHour] = useState<BedtimeHour | undefined>(undefined);
-  const [confirmedBedtimeHour, setConfirmedBedtimeHour] = useState<BedtimeHour | undefined>(
+  const [bedtimeHour, setBedtimeHour] = useState<BedtimeHour | undefined>(
     undefined,
   );
+  const [confirmedBedtimeHour, setConfirmedBedtimeHour] = useState<
+    BedtimeHour | undefined
+  >(undefined);
 
   useEffect(() => {
     if (!data) {
@@ -124,14 +129,34 @@ export function HomePage() {
   /**
    * 寝る時間を選択してサーバに保存する
    * @param {BedtimeHour} hour - 就寝時刻（時）
+   * @returns {void}
    */
   function handleBedtimeChange(hour: BedtimeHour) {
     setBedtimeHour(hour);
     registrationMutation.mutate(hour);
   }
 
+  /**
+   * 就寝ボタンのラベル
+   * @returns {string} ラベル
+   */
+  function bedtimeButtonLabel(): string {
+    if (bedtimeHour === undefined) {
+      return "今日の寝る時間を設定する";
+    }
+    return `今日の寝る時間: ${bedtimeHour}時`;
+  }
+
   return (
     <AppLayout>
+      <div className="-mx-4 mb-4 sm:-mx-8">
+        <AppHeader
+          mode="kid"
+          showHome={false}
+          onParentMode={() => setParentPasswordOpen(true)}
+        />
+      </div>
+
       <div className="flex flex-1 flex-col justify-center gap-6">
         <Card className="flex flex-col items-center justify-center text-center">
           <p className="text-lg text-muted">残り時間</p>
@@ -158,29 +183,23 @@ export function HomePage() {
             !deadline.showBonusCountdown &&
             !deadline.showRegistrationCountdown && (
               <p className="mt-2 text-sm text-muted">
-                {deadline.bonusDeadlineLabel} までに登録して、寝る準備をママが確認できたら +15分！（{deadline.registrationStartLabel}〜
+                {deadline.bonusDeadlineLabel}{" "}
+                までに登録して、寝る準備をママが確認できたら +15分！（
+                {deadline.registrationStartLabel}〜
                 {deadline.registrationCutoffLabel} 受付）
               </p>
             )}
         </Card>
 
         {showBedtimePicker && data.todayStatus === "unanswered" && (
-          <Card>
-            <p className="mb-3 text-center font-medium">今日の寝る時間</p>
-            <div className="flex gap-2">
-              {BEDTIME_OPTIONS.map((opt) => (
-                <Button
-                  key={opt.value}
-                  className="flex-1"
-                  variant={bedtimeHour === opt.value ? "primary" : "secondary"}
-                  onClick={() => handleBedtimeChange(opt.value)}
-                  disabled={registrationMutation.isPending}
-                >
-                  {opt.label}
-                </Button>
-              ))}
-            </div>
-          </Card>
+          <Button
+            fullWidth
+            variant="secondary"
+            onClick={() => setBedtimeModalOpen(true)}
+            disabled={registrationMutation.isPending}
+          >
+            {bedtimeButtonLabel()}
+          </Button>
         )}
 
         {deadline.showBonusCountdown && (
@@ -216,17 +235,33 @@ export function HomePage() {
             </Button>
           )}
           {data.questAction === "retry" && (
-            <Button fullWidth variant="secondary" onClick={() => navigate("/quest")}>
+            <Button
+              fullWidth
+              variant="secondary"
+              onClick={() => navigate("/quest")}
+            >
               やり直す
             </Button>
           )}
-          <Button fullWidth variant="secondary" onClick={() => setRulesOpen(true)}>
+          <Button
+            fullWidth
+            variant="secondary"
+            onClick={() => setRulesOpen(true)}
+          >
             クエストのルール
           </Button>
-          <Button fullWidth variant="secondary" onClick={() => navigate("/results")}>
+          <Button
+            fullWidth
+            variant="secondary"
+            onClick={() => navigate("/results")}
+          >
             採点結果
           </Button>
-          <Button fullWidth variant="secondary" onClick={() => navigate("/timer")}>
+          <Button
+            fullWidth
+            variant="secondary"
+            onClick={() => navigate("/timer")}
+          >
             タイマー
           </Button>
         </div>
@@ -239,16 +274,22 @@ export function HomePage() {
         isRestDayEve={showBedtimePicker}
       />
 
-      <div className="pointer-events-none fixed inset-x-0 bottom-4 z-10 mx-auto flex max-w-lg justify-end px-4">
-        <Button
-          className="pointer-events-auto min-h-10 px-4 py-2 text-base opacity-70"
-          variant="secondary"
-          onClick={() => navigate("/grade/login")}
-          aria-label="採点画面へ"
-        >
-          採点
-        </Button>
-      </div>
+      <BedtimeModal
+        open={bedtimeModalOpen}
+        onClose={() => setBedtimeModalOpen(false)}
+        selectedHour={bedtimeHour}
+        onSelect={handleBedtimeChange}
+        disabled={registrationMutation.isPending}
+      />
+
+      <ParentPasswordModal
+        open={parentPasswordOpen}
+        onSuccess={() => {
+          setParentPasswordOpen(false);
+          navigate("/parent");
+        }}
+        onDismiss={() => setParentPasswordOpen(false)}
+      />
     </AppLayout>
   );
 }

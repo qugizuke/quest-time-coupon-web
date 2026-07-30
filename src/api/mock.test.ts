@@ -554,3 +554,141 @@ describe("mockApi registrationReopen 受付再開", () => {
     expect(result.submittedAt).toBeTruthy();
   });
 });
+
+describe("mockApi questExemptions 後付け救済・未来日除外", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    clearMockHomeModeFlags();
+    resetMockStore();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    clearMockHomeModeFlags();
+    resetMockStore();
+  });
+
+  it("後付け免除で未 ack の未登録 -60 を exempt に置換し確認できない", async () => {
+    const date = "2026-07-01";
+    vi.setSystemTime(new Date(2026, 6, 1, 21, 30, 0));
+
+    await mockApi<HomeData>("home", undefined, { date });
+    const before = await mockApi<{
+      items: Array<{
+        date: string;
+        reasonCode: string;
+        totalPoints: number;
+        requiresAck: boolean;
+        acknowledged: boolean;
+      }>;
+    }>("results");
+    const missed = before.items.find((i) => i.date === date);
+    expect(missed?.reasonCode).toBe("unregistered");
+    expect(missed?.totalPoints).toBe(-60);
+    expect(missed?.requiresAck).toBe(true);
+
+    const homeBefore = await mockApi<HomeData>("home", undefined, { date });
+    const balanceBefore = homeBefore.displayBalance;
+
+    const exemption = await mockApi<{
+      changedDates: string[];
+      skippedDates: string[];
+    }>("questExemptions", {
+      method: "POST",
+      body: JSON.stringify({ op: "add", startDate: date, endDate: date }),
+    });
+    expect(exemption.changedDates).toContain(date);
+
+    const after = await mockApi<{
+      items: Array<{
+        date: string;
+        reasonCode: string;
+        totalPoints: number;
+        requiresAck: boolean;
+        acknowledged: boolean;
+      }>;
+    }>("results");
+    const exempt = after.items.find((i) => i.date === date);
+    expect(exempt?.reasonCode).toBe("exempt");
+    expect(exempt?.totalPoints).toBe(0);
+    expect(exempt?.requiresAck).toBe(false);
+    expect(exempt?.acknowledged).toBe(true);
+    expect(after.items.some((i) => i.date === date && i.reasonCode === "unregistered")).toBe(
+      false,
+    );
+
+    await expect(
+      mockApi("resultsAck", {
+        method: "POST",
+        body: JSON.stringify({ date }),
+      }),
+    ).rejects.toThrow("免除日の結果は確認不要です");
+
+    const homeAfter = await mockApi<HomeData>("home", undefined, { date });
+    expect(homeAfter.displayBalance).toBe(balanceBefore);
+  });
+
+  it("後付け免除で ack 済み未登録の -60 を残高へ冪等復元する", async () => {
+    const date = "2026-07-02";
+    vi.setSystemTime(new Date(2026, 6, 2, 21, 30, 0));
+
+    await mockApi<HomeData>("home", undefined, { date });
+    const homeBeforeAck = await mockApi<HomeData>("home", undefined, { date });
+    const balanceBeforeAck = homeBeforeAck.displayBalance;
+
+    const ack = await mockApi<{ appliedDelta: number; displayBalance: number }>(
+      "resultsAck",
+      {
+        method: "POST",
+        body: JSON.stringify({ date }),
+      },
+    );
+    expect(ack.appliedDelta).toBe(-60);
+    expect(ack.displayBalance).toBe(Math.max(0, balanceBeforeAck - 60));
+
+    const exemption = await mockApi<{ changedDates: string[] }>("questExemptions", {
+      method: "POST",
+      body: JSON.stringify({ op: "add", startDate: date, endDate: date }),
+    });
+    expect(exemption.changedDates).toContain(date);
+
+    const homeAfter = await mockApi<HomeData>("home", undefined, { date });
+    expect(homeAfter.displayBalance).toBe(balanceBeforeAck);
+
+    const results = await mockApi<{
+      items: Array<{ date: string; reasonCode: string; totalPoints: number }>;
+    }>("results");
+    expect(results.items.find((i) => i.date === date)?.reasonCode).toBe("exempt");
+
+    // 冪等: 同じ期間を再 add しても残高は変わらない
+    await mockApi("questExemptions", {
+      method: "POST",
+      body: JSON.stringify({ op: "add", startDate: date, endDate: date }),
+    });
+    const homeIdempotent = await mockApi<HomeData>("home", undefined, { date });
+    expect(homeIdempotent.displayBalance).toBe(balanceBeforeAck);
+  });
+
+  it("未来の免除日は results に載せない", async () => {
+    vi.setSystemTime(new Date(2026, 6, 30, 12, 0, 0));
+    const past = "2026-07-29";
+    const future = "2026-08-05";
+
+    await mockApi("questExemptions", {
+      method: "POST",
+      body: JSON.stringify({ op: "add", startDate: past, endDate: future }),
+    });
+
+    const results = await mockApi<{
+      items: Array<{ date: string; reasonCode: string }>;
+    }>("results");
+    const dates = results.items
+      .filter((i) => i.reasonCode === "exempt")
+      .map((i) => i.date);
+
+    expect(dates).toContain(past);
+    expect(dates).toContain("2026-07-30");
+    expect(dates.some((d) => d > "2026-07-30")).toBe(false);
+    expect(dates).not.toContain(future);
+  });
+});

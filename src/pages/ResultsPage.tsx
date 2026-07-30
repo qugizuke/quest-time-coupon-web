@@ -131,7 +131,11 @@ export function ResultsPage() {
   /** 未確認バナー経由（`?unacked=1`）のとき最古未確認週へ */
   const focusOldestUnacked = searchParams.get("unacked") === "1";
 
-  const items = data?.items ?? [];
+  /** Result は今日以前のみ（未来の免除日は確定結果として出さない） */
+  const items = useMemo(
+    () => (data?.items ?? []).filter((item) => item.date <= today),
+    [data?.items, today],
+  );
 
   useEffect(() => {
     if (!data || weekInitialized) return;

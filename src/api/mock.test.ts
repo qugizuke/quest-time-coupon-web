@@ -538,7 +538,8 @@ describe("mockApi registrationReopen 受付再開", () => {
 
   it("再開枠内なら締切後も回答できる", async () => {
     const date = "2026-06-07";
-    vi.setSystemTime(new Date(2026, 5, 7, 21, 30, 0));
+    // endsAt は +09:00 絶対時刻。システム時刻も JST 明示（TZ=Asia/Tokyo 前提）
+    vi.setSystemTime(new Date("2026-06-07T21:30:00+09:00"));
 
     await mockApi("registrationReopen", {
       method: "POST",
@@ -548,7 +549,7 @@ describe("mockApi registrationReopen 受付再開", () => {
       }),
     });
 
-    vi.setSystemTime(new Date(2026, 5, 7, 21, 45, 0));
+    vi.setSystemTime(new Date("2026-06-07T21:45:00+09:00"));
 
     const result = await mockApi<{ submittedAt: string }>("answers", {
       method: "POST",

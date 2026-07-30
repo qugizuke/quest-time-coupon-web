@@ -11,8 +11,8 @@
     "build": "npm run copy-quests && npm run copy-adjustments && tsc -b && vite build",
     "start": "superstatic dist --port ${PORT:-8080} --host 0.0.0.0 --config superstatic.json",
     "preview": "vite preview",
-    "test": "vitest run --passWithNoTests",
-    "test:watch": "vitest",
+    "test": "TZ=Asia/Tokyo vitest run --passWithNoTests",
+    "test:watch": "TZ=Asia/Tokyo vitest",
     "copy-quests": "cp quests/daily.json public/quests/daily.json",
     "copy-adjustments": "cp adjustments/grade.json public/adjustments/grade.json"
   },

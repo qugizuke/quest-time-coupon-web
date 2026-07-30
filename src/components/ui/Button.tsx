@@ -1,12 +1,19 @@
 /**
  * @file Button コンポーネント
- * @description primary / secondary / danger バリアントのタッチ向けボタン。
+ * @description Figma v6 準拠の primary / secondary / danger / ghost バリアント。
+ * 茶枠＋押し出し影の主 CTA をデフォルトとする（screen-design.md §4.1）。
  */
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
 /** ボタンバリアント */
-export type ButtonVariant = "primary" | "secondary" | "danger";
+export type ButtonVariant = "primary" | "secondary" | "danger" | "ghost";
 
+/**
+ * @typedef {object} ButtonProps
+ * @property {ReactNode} children - ラベル
+ * @property {ButtonVariant} [variant] - 見た目
+ * @property {boolean} [fullWidth] - 全幅
+ */
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** @type {ReactNode} ラベル */
   children: ReactNode;
@@ -17,13 +24,18 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variantClass: Record<ButtonVariant, string> = {
-  primary: "bg-primary text-white hover:opacity-90",
-  secondary: "bg-white text-primary border-2 border-primary hover:bg-primary/5",
-  danger: "bg-danger text-white hover:opacity-90",
+  primary:
+    "border-[3px] border-border bg-primary text-white shadow-[var(--shadow-primary)] hover:brightness-105 active:translate-y-[2px] active:shadow-none",
+  secondary:
+    "border-[3px] border-border bg-surface text-ink shadow-[var(--shadow-secondary)] hover:bg-surface-soft active:translate-y-[2px] active:shadow-none",
+  danger:
+    "border-[3px] border-border bg-danger text-white shadow-[var(--shadow-danger)] hover:brightness-105 active:translate-y-[2px] active:shadow-none",
+  ghost:
+    "border border-border-chip bg-chip text-chip-ink hover:bg-surface-warm",
 };
 
 /**
- * タッチ向けボタン
+ * タッチ向けボタン（Figma 全寄せ土台）
  * @param {ButtonProps} props - ボタン props
  * @returns {JSX.Element} ボタン
  */
@@ -40,7 +52,7 @@ export function Button({
       type="button"
       disabled={disabled}
       className={[
-        "inline-flex min-h-touch items-center justify-center rounded-default px-6 py-3 text-lg font-semibold transition-opacity disabled:cursor-not-allowed disabled:opacity-40",
+        "inline-flex min-h-touch items-center justify-center rounded-default px-6 py-3 text-lg font-semibold transition-[transform,box-shadow,filter] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none",
         variantClass[variant],
         fullWidth ? "w-full" : "",
         className,

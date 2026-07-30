@@ -97,25 +97,17 @@ npx -y firebase-tools@latest apphosting:secrets:grantaccess VITE_API_KEY \
 
 未設定でも配信は成功するが、API 呼び出しは `UNAUTHORIZED`（401）になる。
 
-### 旧経路: GitHub Pages（二重デプロイ注意）
+### 旧経路: GitHub Pages（廃止）
 
-`.github/workflows/pages.yml` は過去の GitHub Pages デプロイ用。**App Hosting と二重になる**。
+GitHub Pages（`.github/workflows/pages.yml`）は **廃止済み**（ファイル削除）。本番は Firebase App Hosting のみ。
 
-| 方針 | 内容 |
-| --- | --- |
-| 現状 | workflow はリポジトリに残存（削除していない） |
-| 推奨 | App Hosting のみにする場合、`pages.yml` を無効化（削除 or `on:` をコメントアウト） |
-| 注意 | 無効化は本番 URL・ブックマーク影響の確認後に CEO 判断で実施。エージェントは勝手に削除しない |
-
-旧 Pages URL（参考）: <https://qugizuke.github.io/quest-time-coupon-web/>
+旧 Pages URL（参考・非運用）: <https://qugizuke.github.io/quest-time-coupon-web/>
 
 本番相当のローカル確認（ルート base）:
 
 ```bash
 npm run build && npx vite preview
 ```
-
-（旧 Pages 向けに `GITHUB_PAGES=true` で base 付きビルドも可能だが、App Hosting 本番では通常 `base: "/"`）
 
 ## 関連リポジトリ
 
@@ -152,5 +144,5 @@ npm run build && npx vite preview
 | UI | **React 19** + React Router 7 |
 | スタイル | **Tailwind CSS 4** |
 | データ取得 | TanStack Query 5 |
-| ホスティング | **Firebase App Hosting** + superstatic（旧: GitHub Pages） |
+| ホスティング | **Firebase App Hosting** + superstatic（GitHub Pages は廃止） |
 | API | **Firebase Cloud Functions v2**（旧: Google Apps Script） |

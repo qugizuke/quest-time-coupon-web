@@ -1,9 +1,9 @@
 /**
  * @file QuestConfirmPage
- * @description 回答一覧の最終確認と登録。
+ * @description 回答一覧の最終確認と登録。条件付きで翌日起床時刻を設定する（Issue #16）。
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { postAnswers } from "@/api/client";
 import { homeQuery, queryKeys } from "@/api/queries";
@@ -14,11 +14,27 @@ import { todayLocal } from "@/lib/date";
 import {
   isBeforeQuestRegistrationStart,
   isPastQuestRegistrationCutoff,
+  isWeekendEve,
 } from "@/lib/deadline";
+import {
+  DEFAULT_WAKE_UP,
+  shouldShowWakeUpSetting,
+  WAKE_UP_OPTIONS,
+} from "@/lib/homeMode";
 import { childAnswerLabel } from "@/lib/labels";
-import { getQuestDraft, clearQuestDraft, getBedtimeHourDraft } from "@/lib/sessionStorage";
-import { isWeekendEve } from "@/lib/deadline";
-import type { BedtimeHour, ChildAnswer, DailyQuests, QuestDefinition, QuestDraft } from "@/types/api";
+import {
+  getQuestDraft,
+  clearQuestDraft,
+  getBedtimeHourDraft,
+} from "@/lib/sessionStorage";
+import type {
+  BedtimeHour,
+  ChildAnswer,
+  DailyQuests,
+  QuestDefinition,
+  QuestDraft,
+  WakeUpTime,
+} from "@/types/api";
 
 /**
  * API に送信する回答を下書きから構築する
@@ -81,6 +97,16 @@ function buildConfirmationItems(
 }
 
 /**
+ * 起床ラベルを表示用に変換する
+ * @param {WakeUpTime} time - 起床時刻
+ * @returns {string} 例: 8:00
+ */
+function wakeUpLabel(time: WakeUpTime): string {
+  const [h, m] = time.split(":");
+  return `${Number(h)}:${m}`;
+}
+
+/**
  * 最終確認画面
  * @returns {JSX.Element} ページ
  */
@@ -91,6 +117,7 @@ export function QuestConfirmPage() {
   const { data: daily } = useDailyQuests();
   const { data: homeData, isLoading: isHomeLoading } = useQuery(homeQuery);
   const draft = getQuestDraft(date);
+  const [wakeUpTime, setWakeUpTime] = useState<WakeUpTime>(DEFAULT_WAKE_UP);
   let confirmationItems:
     | { questId: string; title: string; childAnswer: ChildAnswer }[]
     | null = null;
@@ -107,9 +134,15 @@ export function QuestConfirmPage() {
     }
   }
 
+  const showWakeUp =
+    !!homeData &&
+    !homeData.isExemptDay &&
+    shouldShowWakeUpSetting(date, homeData.isVacationMode);
+  const vacationMode = homeData?.isVacationMode === true;
+
   useEffect(() => {
     if (!homeData) return;
-    if (homeData.questAction === "none") {
+    if (homeData.isExemptDay || homeData.questAction === "none") {
       navigate("/", { replace: true });
       return;
     }
@@ -130,10 +163,17 @@ export function QuestConfirmPage() {
         throw new Error("QuestConfirmPage: 下書きまたは定義がありません");
       }
       const answers = buildSubmittableAnswers(daily, draft);
-      const bedtimeHour: BedtimeHour | undefined = isWeekendEve(date)
+      const canSendBedtime =
+        isWeekendEve(date) || !!homeData?.isVacationMode;
+      const bedtimeHour: BedtimeHour | undefined = canSendBedtime
         ? (getBedtimeHourDraft(date) ?? homeData?.bedtimeHour)
         : undefined;
-      return postAnswers({ date, answers, bedtimeHour });
+      return postAnswers({
+        date,
+        answers,
+        bedtimeHour,
+        wakeUpTime: showWakeUp ? wakeUpTime : undefined,
+      });
     },
     onSuccess: () => {
       clearQuestDraft(date);
@@ -144,7 +184,7 @@ export function QuestConfirmPage() {
 
   if (isHomeLoading) {
     return (
-      <ChildPageFrame>
+      <ChildPageFrame vacationMode={vacationMode}>
         <div className="flex flex-1 items-center justify-center">
           <p className="text-muted">読み込み中…</p>
         </div>
@@ -154,7 +194,7 @@ export function QuestConfirmPage() {
 
   if (!draft || !daily || !confirmationItems || draftError) {
     return (
-      <ChildPageFrame>
+      <ChildPageFrame vacationMode={vacationMode}>
         <p className="text-danger">
           {draftError ?? "下書きが見つかりません。"}
         </p>
@@ -166,10 +206,8 @@ export function QuestConfirmPage() {
   }
 
   return (
-    <ChildPageFrame>
-      <h1 className="mb-4 text-app-lg font-bold">
-        最後の確認
-      </h1>
+    <ChildPageFrame vacationMode={vacationMode}>
+      <h1 className="mb-4 text-app-lg font-bold">最後の確認</h1>
       <ul className="mb-6 flex flex-col gap-2">
         {confirmationItems.map((item) => (
           <li
@@ -183,16 +221,42 @@ export function QuestConfirmPage() {
           </li>
         ))}
       </ul>
+
+      {showWakeUp && (
+        <section className="mb-6" data-testid="wake-up-section">
+          <h2 className="mb-3 text-base font-bold">明日の起きる時間</h2>
+          <div className="flex flex-wrap gap-2">
+            {WAKE_UP_OPTIONS.map((option) => (
+              <Button
+                key={option}
+                variant={wakeUpTime === option ? "primary" : "secondary"}
+                onClick={() => setWakeUpTime(option)}
+              >
+                {wakeUpLabel(option)}
+              </Button>
+            ))}
+          </div>
+        </section>
+      )}
+
       {mutation.error && (
         <p className="mb-4 text-danger">
           {mutation.error instanceof Error ? mutation.error.message : "登録失敗"}
         </p>
       )}
       <div className="flex flex-col gap-3">
-        <Button fullWidth onClick={() => mutation.mutate()} disabled={mutation.isPending}>
+        <Button
+          fullWidth
+          onClick={() => mutation.mutate()}
+          disabled={mutation.isPending}
+        >
           登録する
         </Button>
-        <Button fullWidth variant="secondary" onClick={() => navigate("/quest")}>
+        <Button
+          fullWidth
+          variant="secondary"
+          onClick={() => navigate("/quest")}
+        >
           修正する
         </Button>
       </div>

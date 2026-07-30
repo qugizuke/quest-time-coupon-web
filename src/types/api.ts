@@ -10,6 +10,9 @@ export type ChildAnswer = 1 | 0 | -1;
 /** 就寝時刻（時） */
 export type BedtimeHour = 21 | 22 | 23;
 
+/** 翌日の起床時刻（confirm・30分刻み） */
+export type WakeUpTime = "07:00" | "07:30" | "08:00" | "08:30" | "09:00";
+
 /** API 共通レスポンス */
 export interface ApiResponse<T> {
   ok: boolean;
@@ -40,6 +43,10 @@ export interface HomeData {
   bedtimeHour?: BedtimeHour;
   /** 休日前日（翌日が土日または祝日）か */
   isWeekendEve?: boolean;
+  /** クエスト免除日か（モック可・本接続は F） */
+  isExemptDay: boolean;
+  /** 長期休みモード中か（モック可・本接続は F） */
+  isVacationMode: boolean;
 }
 
 /** クエストカテゴリ（routine=日々のルーティン, reminder=毎日注意されているもの） */

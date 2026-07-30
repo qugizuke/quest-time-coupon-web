@@ -1,8 +1,9 @@
 /**
  * @file モック API
  * @description API（Cloud Functions）未接続時の開発用インメモリ API（v5 対応）。
+ *   長期休み／免除はローカルフラグ（本接続は Issue F）。
  */
-import type { ChildAnswer, GradeAdjustment, HomeData } from "@/types/api";
+import type { ChildAnswer, GradeAdjustment, HomeData, WakeUpTime } from "@/types/api";
 import { todayLocal } from "@/lib/date";
 import {
   isBeforeQuestRegistrationStart,
@@ -11,6 +12,7 @@ import {
   isWeekendEve,
   resolveQuestDeadlineBedtimeHour,
 } from "@/lib/deadline";
+import { canChildSaveBedtime } from "@/lib/homeMode";
 import {
   BEDTIME_PREP_QUEST_ID,
   calcBedtimePrepFalseClaimPenalty,
@@ -19,6 +21,12 @@ import {
 import { isUnknownChildAnswer } from "@/lib/labels";
 import daily from "../../quests/daily.json";
 import adjustmentDefinitions from "../../adjustments/grade.json";
+
+/** @type {string} モック長期休みフラグ（localStorage） */
+const MOCK_VACATION_KEY = "qtc:mock:vacation";
+
+/** @type {string} モック免除フラグ（localStorage） */
+const MOCK_EXEMPT_KEY = "qtc:mock:exempt";
 
 interface MockStore {
   balanceMinutes: number;
@@ -29,12 +37,17 @@ interface MockStore {
   acknowledgedDates: Set<string>;
   missedRegistrationDates: Set<string>;
   bedtimeByDate: Map<string, number>;
+  wakeUpByDate: Map<string, WakeUpTime>;
   submittedAtByDate: Map<string, string>;
   adjustmentsByDate: Map<string, GradeAdjustment[]>;
+  /** テスト用オーバーライド（undefined なら localStorage） */
+  vacationModeOverride?: boolean;
+  /** テスト用免除日セット（未設定なら localStorage の当日免除） */
+  exemptDatesOverride?: Set<string>;
 }
 
 const store: MockStore = {
-  balanceMinutes: 0,
+  balanceMinutes: 60,
   penaltyMinutes: 0,
   answers: new Map(),
   grades: new Map(),
@@ -42,9 +55,75 @@ const store: MockStore = {
   acknowledgedDates: new Set(),
   missedRegistrationDates: new Set(),
   bedtimeByDate: new Map(),
+  wakeUpByDate: new Map(),
   submittedAtByDate: new Map(),
   adjustmentsByDate: new Map(),
 };
+
+/**
+ * localStorage からモックフラグを読む（SSR／テストで失敗しても false）
+ * @param {string} key - キー
+ * @returns {boolean} "1" なら true
+ */
+function readMockFlag(key: string): boolean {
+  try {
+    if (typeof localStorage === "undefined") return false;
+    return localStorage.getItem(key) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * モックの長期休みモードを返す
+ * @returns {boolean} モード中なら true
+ */
+function resolveMockVacationMode(): boolean {
+  if (store.vacationModeOverride !== undefined) {
+    return store.vacationModeOverride;
+  }
+  return readMockFlag(MOCK_VACATION_KEY);
+}
+
+/**
+ * モックの免除日判定
+ * @param {string} date - YYYY-MM-DD
+ * @returns {boolean} 免除日なら true
+ */
+function resolveMockExemptDay(date: string): boolean {
+  if (store.exemptDatesOverride) {
+    return store.exemptDatesOverride.has(date);
+  }
+  return readMockFlag(MOCK_EXEMPT_KEY);
+}
+
+/**
+ * モックの長期休み／免除フラグをテストから設定する
+ * @param {object} opts - オプション
+ * @param {boolean} [opts.vacationMode] - 長期休み
+ * @param {string[]} [opts.exemptDates] - 免除日一覧
+ * @returns {void}
+ */
+export function setMockHomeModeFlags(opts: {
+  vacationMode?: boolean;
+  exemptDates?: string[];
+}): void {
+  if (opts.vacationMode !== undefined) {
+    store.vacationModeOverride = opts.vacationMode;
+  }
+  if (opts.exemptDates !== undefined) {
+    store.exemptDatesOverride = new Set(opts.exemptDates);
+  }
+}
+
+/**
+ * モックのホームモードフラグをクリアする
+ * @returns {void}
+ */
+export function clearMockHomeModeFlags(): void {
+  store.vacationModeOverride = undefined;
+  store.exemptDatesOverride = undefined;
+}
 
 /** @type {number} 定時登録ボーナス（分） */
 const REGISTRATION_ON_TIME_BONUS = 15;
@@ -334,17 +413,28 @@ export async function mockApi<T>(
       const hasAnswers = !!dayAnswers && dayAnswers.size > 0;
       const isGraded = store.gradedDates.has(date);
       const isAcked = store.acknowledgedDates.has(date);
-      const bedtimeHour = store.bedtimeByDate.get(date);
+      const bedtimeHour = store.bedtimeByDate.get(date) as HomeData["bedtimeHour"];
+      const isExemptDay = resolveMockExemptDay(date);
+      const isVacationMode = resolveMockVacationMode();
       const pastCutoff = isPastQuestRegistrationCutoff(date, new Date(), bedtimeHour);
 
-      if (pastCutoff && !hasAnswers && !store.missedRegistrationDates.has(date)) {
+      // 免除日は未登録ペナルティ対象外
+      if (
+        !isExemptDay &&
+        pastCutoff &&
+        !hasAnswers &&
+        !store.missedRegistrationDates.has(date)
+      ) {
         store.missedRegistrationDates.add(date);
       }
 
       let todayStatus: HomeData["todayStatus"] = "unanswered";
       let questAction: HomeData["questAction"] = "start";
 
-      if (!hasAnswers) {
+      if (isExemptDay) {
+        todayStatus = "completed";
+        questAction = "none";
+      } else if (!hasAnswers) {
         if (store.missedRegistrationDates.has(date)) {
           todayStatus = isAcked ? "completed" : "pending_ack";
           questAction = "none";
@@ -375,9 +465,11 @@ export async function mockApi<T>(
         todayStatus,
         questAction,
         unacknowledgedCount,
-        canStartTimer: store.balanceMinutes > 0,
+        canStartTimer: store.balanceMinutes > 0 && unacknowledgedCount === 0,
         bedtimeHour,
         isWeekendEve: isWeekendEve(date),
+        isExemptDay,
+        isVacationMode,
       } as T;
     }
 
@@ -386,8 +478,22 @@ export async function mockApi<T>(
       if (!isValidOptionalBedtimeHour(bedtimeHour)) {
         throw new Error(`BAD_REQUEST: bedtimeHour が不正です bedtimeHour=${String(bedtimeHour)}`);
       }
-      if (!isWeekendEve(date)) {
-        throw new Error("BAD_REQUEST: 休日前日のみ bedtimeHour を設定できます");
+      const isExemptDay = resolveMockExemptDay(date);
+      const isVacationMode = resolveMockVacationMode();
+      const isWeekendEveDay = isWeekendEve(date);
+      if (
+        !canChildSaveBedtime({
+          isExemptDay,
+          isVacationMode,
+          isWeekendEveDay,
+          date,
+        })
+      ) {
+        throw new Error(
+          isExemptDay
+            ? "BAD_REQUEST: 免除日は bedtimeHour を設定できません"
+            : "BAD_REQUEST: 休日前日または長期休み（正午まで）のみ bedtimeHour を設定できます",
+        );
       }
       if (store.missedRegistrationDates.has(date) || store.gradedDates.has(date)) {
         throw new Error("ALREADY_RESULT: 結果作成済みのため設定できません");
@@ -395,29 +501,41 @@ export async function mockApi<T>(
       if (store.answers.has(date) || store.submittedAtByDate.has(date)) {
         throw new Error("ALREADY_ANSWERED: 回答後は就寝時刻を変更できません");
       }
-      const currentHour = store.bedtimeByDate.get(date);
-      if (isPastQuestRegistrationCutoff(date, new Date(), currentHour)) {
-        throw new Error("BAD_REQUEST: 登録受付締切を過ぎているため設定できません");
-      }
-      if (isPastQuestRegistrationCutoff(date, new Date(), bedtimeHour)) {
-        throw new Error("BAD_REQUEST: 変更先の登録受付締切を過ぎているため設定できません");
+      if (!isVacationMode) {
+        const currentHour = store.bedtimeByDate.get(date);
+        if (isPastQuestRegistrationCutoff(date, new Date(), currentHour)) {
+          throw new Error("BAD_REQUEST: 登録受付締切を過ぎているため設定できません");
+        }
+        if (isPastQuestRegistrationCutoff(date, new Date(), bedtimeHour)) {
+          throw new Error("BAD_REQUEST: 変更先の登録受付締切を過ぎているため設定できません");
+        }
       }
       store.bedtimeByDate.set(date, bedtimeHour);
       return { date, bedtimeHour } as T;
     }
 
     case "answers": {
-      const { date, answers, bedtimeHour } = body as {
+      const { date, answers, bedtimeHour, wakeUpTime } = body as {
         date: string;
         answers: { questId: string; childAnswer: ChildAnswer }[];
         bedtimeHour?: number;
+        wakeUpTime?: WakeUpTime;
       };
       validateMockAnswers(answers);
       if (!isValidOptionalBedtimeHour(bedtimeHour)) {
         throw new Error(`BAD_REQUEST: bedtimeHour が不正です bedtimeHour=${String(bedtimeHour)}`);
       }
-      if (bedtimeHour !== undefined && bedtimeHour !== 21 && !isWeekendEve(date)) {
-        throw new Error("BAD_REQUEST: 休日前日以外は bedtimeHour を変更できません");
+      if (resolveMockExemptDay(date)) {
+        throw new Error("BAD_REQUEST: 免除日は回答を登録できません");
+      }
+      const isVacationMode = resolveMockVacationMode();
+      if (
+        bedtimeHour !== undefined &&
+        bedtimeHour !== 21 &&
+        !isWeekendEve(date) &&
+        !isVacationMode
+      ) {
+        throw new Error("BAD_REQUEST: 休日前日・長期休み以外は bedtimeHour を変更できません");
       }
       if (store.gradedDates.has(date)) {
         throw new Error("ALREADY_GRADED: 採点済みのため上書きできません");
@@ -449,6 +567,9 @@ export async function mockApi<T>(
         date,
         savedHour ?? resolveQuestDeadlineBedtimeHour(date, bedtimeHour),
       );
+      if (wakeUpTime) {
+        store.wakeUpByDate.set(date, wakeUpTime);
+      }
       return {
         submittedAt,
         overwritten: !isNewRegistration,

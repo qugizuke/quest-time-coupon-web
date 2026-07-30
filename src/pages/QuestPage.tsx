@@ -81,7 +81,7 @@ export function QuestPage() {
 
   useEffect(() => {
     if (!homeData) return;
-    if (homeData.questAction === "none") {
+    if (homeData.isExemptDay || homeData.questAction === "none") {
       navigate("/", { replace: true });
       return;
     }
@@ -98,7 +98,7 @@ export function QuestPage() {
 
   if (isLoading || !daily || !ready || !currentQuest) {
     return (
-      <ChildPageFrame>
+      <ChildPageFrame vacationMode={homeData?.isVacationMode}>
         <div className="flex flex-1 items-center justify-center">
           <p className="text-muted">読み込み中…</p>
         </div>
@@ -109,7 +109,7 @@ export function QuestPage() {
   const choices = answerChoicesFor(currentQuest, isFollowUpMode);
 
   return (
-    <ChildPageFrame>
+    <ChildPageFrame vacationMode={homeData?.isVacationMode}>
       <div className="flex flex-1 flex-col gap-6 transition-opacity duration-300">
         <p className="text-center text-muted">
           {isFollowUpMode ? "追問" : `${draft.index + 1} / ${daily.quests.length}`}

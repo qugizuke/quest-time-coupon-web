@@ -12,7 +12,11 @@ import {
   isWeekendEve,
   resolveQuestDeadlineBedtimeHour,
 } from "@/lib/deadline";
-import { canChildSaveBedtime } from "@/lib/homeMode";
+import {
+  canChildSaveBedtime,
+  evaluateParentBedtimeChange,
+  getParentBedtimeChangeDeadline,
+} from "@/lib/homeMode";
 import {
   BEDTIME_PREP_QUEST_ID,
   calcBedtimePrepFalseClaimPenalty,
@@ -21,6 +25,7 @@ import {
 import { isUnknownChildAnswer } from "@/lib/labels";
 import { isParentGradableAnswer } from "@/lib/gradeUi";
 import {
+  getReopenUntil,
   hasUsedRegistrationReopen,
   isExemptOn,
   isVacationActiveOn,
@@ -192,6 +197,28 @@ function isValidOptionalBedtimeHour(bedtimeHour: number | undefined): boolean {
     bedtimeHour === 22 ||
     bedtimeHour === 23
   );
+}
+
+/**
+ * 再開受付終了時刻をメモリ／localStorage から復元する
+ * @param {string} date - YYYY-MM-DD
+ * @returns {Date | undefined} 有効な終了時刻
+ */
+function resolveReopenUntil(date: string): Date | undefined {
+  const cached = store.reopenUntilByDate.get(date);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const iso = getReopenUntil(date);
+  if (!iso) {
+    return undefined;
+  }
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) {
+    return undefined;
+  }
+  store.reopenUntilByDate.set(date, parsed);
+  return parsed;
 }
 
 /**
@@ -610,7 +637,7 @@ export async function mockApi<T>(
         if (isBeforeQuestRegistrationStart(date, new Date(), hour)) {
           throw new Error("BAD_REQUEST: 登録受付開始前のため回答を保存できません");
         }
-        const reopenUntil = store.reopenUntilByDate.get(date);
+        const reopenUntil = resolveReopenUntil(date);
         const reopenActive =
           reopenUntil !== undefined && reopenUntil.getTime() > Date.now();
         if (!reopenActive && isPastQuestRegistrationCutoff(date, new Date(), hour)) {
@@ -784,7 +811,7 @@ export async function mockApi<T>(
       store.missedRegistrationDates.delete(date);
       store.reopenUntilByDate.set(date, untilDate);
       markRegistrationReopenUsed(date);
-      setReopenUntil(untilDate.toISOString());
+      setReopenUntil(date, untilDate.toISOString());
       return { date, until: untilDate.toISOString() } as T;
     }
 
@@ -793,6 +820,36 @@ export async function mockApi<T>(
       if (!isValidOptionalBedtimeHour(bedtimeHour) || bedtimeHour === undefined) {
         throw new Error(
           `BAD_REQUEST: bedtimeHour は 21/22/23 のみです bedtimeHour=${String(bedtimeHour)}`,
+        );
+      }
+      const now = new Date();
+      const currentHour = store.bedtimeByDate.get(date);
+      const evaluation = evaluateParentBedtimeChange({
+        date,
+        today,
+        isExemptDay: resolveMockExemptDay(date),
+        isVacationMode: resolveMockVacationMode(date),
+        isWeekendEveDay: isWeekendEve(date),
+        hasAnswers: store.answers.has(date) || store.submittedAtByDate.has(date),
+        hasResult:
+          store.gradedDates.has(date) ||
+          store.rejectedDates.has(date) ||
+          store.missedRegistrationDates.has(date),
+        bedtimeHour: currentHour,
+        now,
+      });
+      if (!evaluation.allowed) {
+        if (evaluation.reason === "has_result") {
+          throw new Error(`ALREADY_RESULT: ${evaluation.message}`);
+        }
+        if (evaluation.reason === "has_answers") {
+          throw new Error(`ALREADY_ANSWERED: ${evaluation.message}`);
+        }
+        throw new Error(`FORBIDDEN_STATE: ${evaluation.message}`);
+      }
+      if (now.getTime() >= getParentBedtimeChangeDeadline(date, bedtimeHour).getTime()) {
+        throw new Error(
+          "FORBIDDEN_STATE: 変更先の就寝1時間前を過ぎているため変更できません",
         );
       }
       store.bedtimeByDate.set(date, bedtimeHour);

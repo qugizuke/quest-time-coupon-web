@@ -3,7 +3,10 @@
  * @description 通常／免除／長期休み／免除×長期休みの判定と、就寝・起床 UI の表示条件。
  * @limitation 本接続（Issue F）前は HomeData のモックフラグを正とする。
  */
-import { isWeekendEve } from "@/lib/deadline";
+import {
+  isWeekendEve,
+  resolveQuestDeadlineBedtimeHour,
+} from "@/lib/deadline";
 import type { BedtimeHour, TodayStatus, WakeUpTime } from "@/types/api";
 
 /** ホーム UI バリアント（Figma kid-home*） */
@@ -15,6 +18,16 @@ export type HomeVariant =
 
 /** 就寝 UI の表示モード */
 export type BedtimeUiMode = "hidden" | "settable" | "display" | "locked21";
+
+/** 保護者就寝変更が不可な理由 */
+export type ParentBedtimeBlockReason =
+  | "not_today"
+  | "exempt"
+  | "not_target_day"
+  | "has_result"
+  | "has_answers"
+  | "before_child_deadline"
+  | "past_parent_deadline";
 
 /** 起床候補（7:00〜9:00・30分刻み） */
 export const WAKE_UP_OPTIONS: WakeUpTime[] = [
@@ -65,6 +78,96 @@ export function isBeforeVacationBedtimeCutoff(
   now: Date = new Date(),
 ): boolean {
   return now.getTime() < getVacationBedtimeCutoff(date).getTime();
+}
+
+/**
+ * 保護者の就寝変更期限（就寝 1 時間前）を返す
+ * @param {string} date - YYYY-MM-DD
+ * @param {number} [bedtimeHour] - 設定中／変更先の就寝時刻
+ * @returns {Date} 変更可能な終端（この時刻以降は不可）
+ */
+export function getParentBedtimeChangeDeadline(
+  date: string,
+  bedtimeHour?: number,
+): Date {
+  const hour = resolveQuestDeadlineBedtimeHour(date, bedtimeHour);
+  const [y, m, d] = date.split("-").map(Number);
+  return new Date(y, m - 1, d, hour - 1, 0, 0, 0);
+}
+
+/**
+ * 保護者が当日就寝を変更できるか（wireframes §4.4 / api-tobe-f-contract）
+ * @param {object} opts - 判定材料
+ * @returns {{ allowed: boolean; reason: ParentBedtimeBlockReason | null; message: string }} 判定結果
+ */
+export function evaluateParentBedtimeChange(opts: {
+  date: string;
+  today: string;
+  isExemptDay: boolean;
+  isVacationMode: boolean;
+  isWeekendEveDay: boolean;
+  hasAnswers: boolean;
+  hasResult: boolean;
+  bedtimeHour?: number;
+  now?: Date;
+}): {
+  allowed: boolean;
+  reason: ParentBedtimeBlockReason | null;
+  message: string;
+} {
+  const now = opts.now ?? new Date();
+  if (opts.date !== opts.today) {
+    return {
+      allowed: false,
+      reason: "not_today",
+      message: "当日以外の就寝時刻は変更できません",
+    };
+  }
+  if (opts.isExemptDay) {
+    return {
+      allowed: false,
+      reason: "exempt",
+      message: "免除日は就寝時刻を変更できません",
+    };
+  }
+  if (!opts.isVacationMode && !opts.isWeekendEveDay) {
+    return {
+      allowed: false,
+      reason: "not_target_day",
+      message: "休日前日または長期休みモード中のみ就寝時刻を変更できます",
+    };
+  }
+  if (opts.hasResult) {
+    return {
+      allowed: false,
+      reason: "has_result",
+      message: "結果作成済みのため就寝時刻を変更できません",
+    };
+  }
+  if (opts.hasAnswers) {
+    return {
+      allowed: false,
+      reason: "has_answers",
+      message: "回答提出後は就寝時刻を変更できません",
+    };
+  }
+  // 長期休み: 子ども期限（正午）後〜就寝1時間前
+  if (opts.isVacationMode && isBeforeVacationBedtimeCutoff(opts.date, now)) {
+    return {
+      allowed: false,
+      reason: "before_child_deadline",
+      message: "正午までは子ども側で設定してください（保護者変更は正午以降）",
+    };
+  }
+  const deadline = getParentBedtimeChangeDeadline(opts.date, opts.bedtimeHour);
+  if (now.getTime() >= deadline.getTime()) {
+    return {
+      allowed: false,
+      reason: "past_parent_deadline",
+      message: "就寝1時間前を過ぎているため変更できません",
+    };
+  }
+  return { allowed: true, reason: null, message: "" };
 }
 
 /**

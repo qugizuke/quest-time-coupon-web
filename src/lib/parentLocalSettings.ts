@@ -14,8 +14,8 @@ const EXEMPT_PERIODS_KEY = "qtc:mock:exemptPeriods";
 /** @type {string} 登録再開使用フラグ（日付ごと） */
 const REOPEN_USED_KEY = "qtc:mock:reopenUsed";
 
-/** @type {string} 再開受付終了時刻 ISO */
-const REOPEN_UNTIL_KEY = "qtc:mock:reopenUntil";
+/** @type {string} 再開受付終了時刻（日付 → ISO） */
+const REOPEN_UNTIL_KEY = "qtc:mock:reopenUntilByDate";
 
 /** @type {string} mock.ts と共有する長期休みフラグ */
 export const MOCK_VACATION_FLAG_KEY = "qtc:mock:vacation";
@@ -261,30 +261,25 @@ export function markRegistrationReopenUsed(date: string): void {
 }
 
 /**
- * 再開受付の終了時刻を保存する
+ * 再開受付の終了時刻を日付付きで保存する
+ * @param {string} date - YYYY-MM-DD
  * @param {string} untilIso - ISO 日時
  * @returns {void}
  */
-export function setReopenUntil(untilIso: string): void {
-  try {
-    if (typeof localStorage === "undefined") return;
-    localStorage.setItem(REOPEN_UNTIL_KEY, untilIso);
-  } catch (error) {
-    console.error("setReopenUntil: 保存失敗", error);
-  }
+export function setReopenUntil(date: string, untilIso: string): void {
+  const map = readJson<Record<string, string>>(REOPEN_UNTIL_KEY) ?? {};
+  map[date] = untilIso;
+  writeJson(REOPEN_UNTIL_KEY, map);
 }
 
 /**
- * 再開受付の終了時刻を取得する
+ * 再開受付の終了時刻を日付付きで取得する
+ * @param {string} date - YYYY-MM-DD
  * @returns {string | null} ISO 日時
  */
-export function getReopenUntil(): string | null {
-  try {
-    if (typeof localStorage === "undefined") return null;
-    return localStorage.getItem(REOPEN_UNTIL_KEY);
-  } catch {
-    return null;
-  }
+export function getReopenUntil(date: string): string | null {
+  const map = readJson<Record<string, string>>(REOPEN_UNTIL_KEY) ?? {};
+  return map[date] ?? null;
 }
 
 /**

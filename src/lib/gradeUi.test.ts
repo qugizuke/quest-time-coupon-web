@@ -20,9 +20,9 @@ describe("gradeUi", () => {
     expect(isNegativeChildAnswer(1)).toBe(false);
   });
 
-  it("送信用 actualDone を決める", () => {
+  it("送信用 actualDone を決める（否定・わからないは送信スキップ）", () => {
     expect(resolveActualDoneForSubmit(-1, undefined)).toBeUndefined();
-    expect(resolveActualDoneForSubmit(0, undefined)).toBe(false);
+    expect(resolveActualDoneForSubmit(0, undefined)).toBeUndefined();
     expect(resolveActualDoneForSubmit(1, true)).toBe(true);
     expect(resolveActualDoneForSubmit(1, false)).toBe(false);
     expect(() => resolveActualDoneForSubmit(1, undefined)).toThrow(/未採点/);

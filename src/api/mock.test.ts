@@ -1,9 +1,11 @@
 /**
  * @file モック API の単体テスト
  * @description 受付開始・締切チェックと retry 保存の挙動を検証する。
+ * @vitest-environment jsdom
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearMockHomeModeFlags, mockApi, resetMockStore, setMockHomeModeFlags } from "./mock";
+import { clearParentLocalSettings } from "@/lib/parentLocalSettings";
 import type { ChildAnswer, HomeData } from "@/types/api";
 
 const sampleAnswers: { questId: string; childAnswer: ChildAnswer }[] = [
@@ -340,5 +342,214 @@ describe("mockApi home 免除・長期休み", () => {
     expect(after.canStartTimer).toBe(true);
 
     vi.useRealTimers();
+  });
+});
+
+describe("mockApi grade 否定・わからない混在", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    clearMockHomeModeFlags();
+    clearParentLocalSettings();
+    resetMockStore();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    clearMockHomeModeFlags();
+    clearParentLocalSettings();
+    resetMockStore();
+  });
+
+  it("否定・わからないを含む日でも肯定分のみの POST で採点できる", async () => {
+    const date = "2026-06-08";
+    vi.setSystemTime(new Date(2026, 5, 8, 20, 30, 0));
+
+    const mixedAnswers: { questId: string; childAnswer: ChildAnswer }[] = [
+      { questId: "bedtime-prep", childAnswer: 1 },
+      { questId: "sleep-on-time-yesterday", childAnswer: 0 },
+      { questId: "brush-teeth-gargle-am", childAnswer: -1 },
+      { questId: "wash-hands-gargle-after-school", childAnswer: 1 },
+      { questId: "save-water-hot-water", childAnswer: 1 },
+      { questId: "listen-to-mama-before-warning", childAnswer: 1 },
+    ];
+
+    await mockApi("answers", {
+      method: "POST",
+      body: JSON.stringify({ date, answers: mixedAnswers, bedtimeHour: 21 }),
+    });
+
+    const graded = await mockApi<{ gradedAt: string }>("grade", {
+      method: "POST",
+      body: JSON.stringify({
+        date,
+        grades: [
+          { questId: "bedtime-prep", actualDone: true },
+          { questId: "wash-hands-gargle-after-school", actualDone: true },
+          { questId: "save-water-hot-water", actualDone: false },
+          { questId: "listen-to-mama-before-warning", actualDone: true },
+        ],
+      }),
+    });
+    expect(graded.gradedAt).toBeTruthy();
+
+    const detail = await mockApi<{
+      items: { questId: string; actualDone: boolean | null }[];
+    }>("grade", undefined, { date });
+    const byId = new Map(detail.items.map((item) => [item.questId, item.actualDone]));
+    expect(byId.get("sleep-on-time-yesterday")).toBe(false);
+    expect(byId.get("brush-teeth-gargle-am")).toBeNull();
+    expect(byId.get("save-water-hot-water")).toBe(false);
+  });
+
+  it("否定回答を payload に含めると BAD_REQUEST", async () => {
+    const date = "2026-06-09";
+    vi.setSystemTime(new Date(2026, 5, 9, 20, 30, 0));
+
+    await mockApi("answers", {
+      method: "POST",
+      body: JSON.stringify({
+        date,
+        answers: sampleAnswers.map((answer) =>
+          answer.questId === "sleep-on-time-yesterday"
+            ? { ...answer, childAnswer: 0 as const }
+            : answer,
+        ),
+        bedtimeHour: 21,
+      }),
+    });
+
+    await expect(
+      mockApi("grade", {
+        method: "POST",
+        body: JSON.stringify({
+          date,
+          grades: [
+            { questId: "bedtime-prep", actualDone: true },
+            { questId: "sleep-on-time-yesterday", actualDone: false },
+            { questId: "brush-teeth-gargle-am", actualDone: true },
+            { questId: "wash-hands-gargle-after-school", actualDone: true },
+            { questId: "save-water-hot-water", actualDone: true },
+            { questId: "listen-to-mama-before-warning", actualDone: true },
+          ],
+        }),
+      }),
+    ).rejects.toThrow("肯定回答以外は採点不要");
+  });
+});
+
+describe("mockApi parentBedtime 制約", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    clearMockHomeModeFlags();
+    clearParentLocalSettings();
+    resetMockStore();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    clearMockHomeModeFlags();
+    clearParentLocalSettings();
+    resetMockStore();
+  });
+
+  it("長期休み・正午以降なら就寝を変更できる", async () => {
+    const date = "2026-08-11";
+    vi.setSystemTime(new Date(2026, 7, 11, 13, 0, 0));
+    setMockHomeModeFlags({ vacationMode: true });
+
+    const saved = await mockApi<{ bedtimeHour: number }>("parentBedtime", {
+      method: "POST",
+      body: JSON.stringify({ date, bedtimeHour: 22 }),
+    });
+    expect(saved.bedtimeHour).toBe(22);
+  });
+
+  it("免除日は拒否する", async () => {
+    const date = "2026-08-11";
+    vi.setSystemTime(new Date(2026, 7, 11, 13, 0, 0));
+    setMockHomeModeFlags({ vacationMode: true, exemptDates: [date] });
+
+    await expect(
+      mockApi("parentBedtime", {
+        method: "POST",
+        body: JSON.stringify({ date, bedtimeHour: 22 }),
+      }),
+    ).rejects.toThrow("免除日");
+  });
+
+  it("回答提出後は拒否する", async () => {
+    const date = "2026-08-11";
+    vi.setSystemTime(new Date(2026, 7, 11, 13, 0, 0));
+    setMockHomeModeFlags({ vacationMode: true });
+
+    await mockApi("parentBedtime", {
+      method: "POST",
+      body: JSON.stringify({ date, bedtimeHour: 23 }),
+    });
+
+    vi.setSystemTime(new Date(2026, 7, 11, 22, 15, 0));
+    await mockApi("answers", {
+      method: "POST",
+      body: JSON.stringify({ date, answers: sampleAnswers }),
+    });
+
+    await expect(
+      mockApi("parentBedtime", {
+        method: "POST",
+        body: JSON.stringify({ date, bedtimeHour: 22 }),
+      }),
+    ).rejects.toThrow("回答提出後");
+  });
+
+  it("就寝1時間前以降は拒否する", async () => {
+    const date = "2026-08-11";
+    vi.setSystemTime(new Date(2026, 7, 11, 20, 0, 0));
+    setMockHomeModeFlags({ vacationMode: true });
+
+    await expect(
+      mockApi("parentBedtime", {
+        method: "POST",
+        body: JSON.stringify({ date, bedtimeHour: 21 }),
+      }),
+    ).rejects.toThrow("就寝1時間前");
+  });
+});
+
+describe("mockApi registrationReopen リロード耐性", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    clearMockHomeModeFlags();
+    clearParentLocalSettings();
+    resetMockStore();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    clearMockHomeModeFlags();
+    clearParentLocalSettings();
+    resetMockStore();
+  });
+
+  it("再開後にメモリストアを消しても localStorage から復元して回答できる", async () => {
+    const date = "2026-06-07";
+    vi.setSystemTime(new Date(2026, 5, 7, 21, 30, 0));
+
+    await mockApi("registrationReopen", {
+      method: "POST",
+      body: JSON.stringify({
+        date,
+        until: new Date(2026, 5, 7, 22, 30, 0).toISOString(),
+      }),
+    });
+
+    // リロード相当: メモリ上の再開枠だけ消す（localStorage は残す）
+    resetMockStore();
+    vi.setSystemTime(new Date(2026, 5, 7, 21, 45, 0));
+
+    const result = await mockApi<{ submittedAt: string }>("answers", {
+      method: "POST",
+      body: JSON.stringify({ date, answers: sampleAnswers, bedtimeHour: 21 }),
+    });
+    expect(result.submittedAt).toBeTruthy();
   });
 });

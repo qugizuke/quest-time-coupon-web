@@ -4,7 +4,7 @@
  *   Figma 差分は仕様勝ち: 就寝に 22:30 なし、D12 ボーナス増加文言なし。
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { postParentBedtime } from "@/api/client";
 import { homeQuery, queryKeys } from "@/api/queries";
@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { todayLocal } from "@/lib/date";
+import { evaluateParentBedtimeChange } from "@/lib/homeMode";
 import {
   addExemptPeriod,
   getExemptPeriods,
@@ -59,6 +60,29 @@ export function ParentSettingsPage() {
       setBedtimeHour(home.bedtimeHour);
     }
   }, [home?.bedtimeHour]);
+
+  const bedtimeChange = useMemo(() => {
+    if (!home) {
+      return {
+        allowed: false,
+        reason: "not_today" as const,
+        message: "読み込み中です",
+      };
+    }
+    const hasAnswers = home.todayStatus === "answered_ungraded";
+    const hasResult =
+      home.todayStatus === "pending_ack" || home.todayStatus === "completed";
+    return evaluateParentBedtimeChange({
+      date: today,
+      today,
+      isExemptDay: Boolean(home.isExemptDay),
+      isVacationMode: Boolean(home.isVacationMode),
+      isWeekendEveDay: Boolean(home.isWeekendEve),
+      hasAnswers,
+      hasResult,
+      bedtimeHour: home.bedtimeHour,
+    });
+  }, [home, today]);
 
   const bedtimeMutation = useMutation({
     mutationFn: (hour: BedtimeHour) =>
@@ -283,28 +307,37 @@ export function ParentSettingsPage() {
 
       <Card className="mb-4">
         <h2 className="mb-2 font-bold text-ink">当日の就寝（保護者変更）</h2>
-        <p className="mb-3 text-sm text-muted">
-          候補は 21 / 22 / 23 のみです（仕様勝ち・22:30 なし）。
-        </p>
-        <div className="mb-3 flex gap-2">
-          {BEDTIME_OPTIONS.map((hour) => (
+        {bedtimeChange.allowed ? (
+          <>
+            <p className="mb-3 text-sm text-muted">
+              候補は 21 / 22 / 23 のみです（仕様勝ち・22:30 なし）。子ども期限後〜就寝1時間前まで変更できます。
+            </p>
+            <div className="mb-3 flex gap-2">
+              {BEDTIME_OPTIONS.map((hour) => (
+                <Button
+                  key={hour}
+                  className="flex-1"
+                  variant={bedtimeHour === hour ? "primary" : "secondary"}
+                  onClick={() => setBedtimeHour(hour)}
+                >
+                  {hour}時
+                </Button>
+              ))}
+            </div>
             <Button
-              key={hour}
-              className="flex-1"
-              variant={bedtimeHour === hour ? "primary" : "secondary"}
-              onClick={() => setBedtimeHour(hour)}
+              fullWidth
+              disabled={bedtimeMutation.isPending}
+              onClick={() => bedtimeMutation.mutate(bedtimeHour)}
             >
-              {hour}時
+              就寝時刻を保存
             </Button>
-          ))}
-        </div>
-        <Button
-          fullWidth
-          disabled={bedtimeMutation.isPending}
-          onClick={() => bedtimeMutation.mutate(bedtimeHour)}
-        >
-          就寝時刻を保存
-        </Button>
+          </>
+        ) : (
+          <p className="text-sm text-muted" data-testid="bedtime-change-blocked">
+            {bedtimeChange.message ||
+              "現在は就寝時刻を変更できません（子ども期限後〜就寝1時間前のみ）。"}
+          </p>
+        )}
       </Card>
 
       <Button fullWidth variant="secondary" onClick={() => navigate("/parent")}>

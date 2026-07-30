@@ -5,6 +5,7 @@
 import { describe, expect, it } from "vitest";
 import {
   canChildSaveBedtime,
+  evaluateParentBedtimeChange,
   resolveBedtimeUiMode,
   resolveHomeVariant,
   shouldShowWakeUpSetting,
@@ -116,5 +117,69 @@ describe("canChildSaveBedtime", () => {
         now: new Date(2026, 6, 30, 13, 0, 0),
       }),
     ).toBe(false);
+  });
+});
+
+describe("evaluateParentBedtimeChange", () => {
+  const base = {
+    date: "2026-07-03",
+    today: "2026-07-03",
+    isExemptDay: false,
+    isVacationMode: false,
+    isWeekendEveDay: true,
+    hasAnswers: false,
+    hasResult: false,
+    bedtimeHour: 22 as const,
+    now: new Date(2026, 6, 3, 18, 0, 0),
+  };
+
+  it("休日前日・期限内なら変更可", () => {
+    expect(evaluateParentBedtimeChange(base).allowed).toBe(true);
+  });
+
+  it("免除日は不可", () => {
+    expect(
+      evaluateParentBedtimeChange({ ...base, isExemptDay: true }).reason,
+    ).toBe("exempt");
+  });
+
+  it("回答提出後は不可", () => {
+    expect(
+      evaluateParentBedtimeChange({ ...base, hasAnswers: true }).reason,
+    ).toBe("has_answers");
+  });
+
+  it("結果作成後は不可", () => {
+    expect(
+      evaluateParentBedtimeChange({ ...base, hasResult: true }).reason,
+    ).toBe("has_result");
+  });
+
+  it("就寝1時間前以降は不可", () => {
+    expect(
+      evaluateParentBedtimeChange({
+        ...base,
+        now: new Date(2026, 6, 3, 21, 0, 0),
+      }).reason,
+    ).toBe("past_parent_deadline");
+  });
+
+  it("長期休みは正午以降〜就寝1時間前", () => {
+    expect(
+      evaluateParentBedtimeChange({
+        ...base,
+        isWeekendEveDay: false,
+        isVacationMode: true,
+        now: new Date(2026, 6, 3, 10, 0, 0),
+      }).reason,
+    ).toBe("before_child_deadline");
+    expect(
+      evaluateParentBedtimeChange({
+        ...base,
+        isWeekendEveDay: false,
+        isVacationMode: true,
+        now: new Date(2026, 6, 3, 13, 0, 0),
+      }).allowed,
+    ).toBe(true);
   });
 });

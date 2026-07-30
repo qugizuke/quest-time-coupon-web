@@ -31,7 +31,8 @@ export function isNegativeChildAnswer(
  * 採点確定 payload 用の actualDone を決める
  * @param {ChildAnswer} childAnswer - 子どもの回答
  * @param {boolean | undefined} selected - 保護者の ◯✗（肯定時のみ）
- * @returns {boolean | undefined} 送信する actualDone。わからないは undefined（スキップ）
+ * @returns {boolean | undefined} 送信する actualDone。
+ *   否定・わからないは表示のみのため undefined（スキップ）。否定は API/mock 側で自動未達。
  * @throws {Error} 肯定なのに未選択の場合
  */
 export function resolveActualDoneForSubmit(
@@ -42,7 +43,7 @@ export function resolveActualDoneForSubmit(
     return undefined;
   }
   if (isNegativeChildAnswer(childAnswer)) {
-    return false;
+    return undefined;
   }
   if (selected === undefined) {
     throw new Error(

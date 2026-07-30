@@ -1,10 +1,17 @@
 /**
  * @file Dialog コンポーネント
- * @description モーダルダイアログ。オーバーレイクリック・Esc・閉じるボタンで閉じる。
+ * @description モーダル枠（オーバーレイ・Esc・閉じる）。Figma の茶枠カードに寄せる。
  */
 import { useEffect, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 
+/**
+ * @typedef {object} DialogProps
+ * @property {boolean} open - 表示中か
+ * @property {() => void} onClose - 閉じる
+ * @property {string} title - タイトル
+ * @property {ReactNode} children - 本文
+ */
 interface DialogProps {
   /** @type {boolean} 表示中か */
   open: boolean;
@@ -45,7 +52,7 @@ export function Dialog({ open, onClose, title, children }: DialogProps) {
     >
       <button
         type="button"
-        className="absolute inset-0 bg-black/40"
+        className="absolute inset-0 bg-overlay backdrop-blur-sm"
         aria-label="ダイアログを閉じる"
         onClick={onClose}
       />
@@ -53,15 +60,15 @@ export function Dialog({ open, onClose, title, children }: DialogProps) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="dialog-title"
-        className="relative z-10 flex max-h-[85vh] w-full max-w-lg flex-col rounded-default bg-white shadow-lg"
+        className="relative z-10 flex max-h-[85vh] w-full max-w-lg flex-col rounded-card border-4 border-border-soft bg-surface shadow-[var(--shadow-card)]"
       >
-        <div className="border-b border-gray-200 px-4 py-3">
-          <h2 id="dialog-title" className="text-app-lg font-bold">
+        <div className="border-b border-border-soft px-4 py-3">
+          <h2 id="dialog-title" className="text-app-lg font-bold text-ink">
             {title}
           </h2>
         </div>
-        <div className="overflow-y-auto px-4 py-4">{children}</div>
-        <div className="border-t border-gray-200 px-4 py-3">
+        <div className="overflow-y-auto px-4 py-4 text-ink">{children}</div>
+        <div className="border-t border-border-soft px-4 py-3">
           <Button fullWidth variant="secondary" onClick={onClose}>
             閉じる
           </Button>

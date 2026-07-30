@@ -1,29 +1,90 @@
 @import "tailwindcss";
 
 /**
- * Quest Time Coupon デザイントークン
- * screen-design.md / detail-design.md §7.2.1 に準拠
+ * Quest Time Coupon デザイントークン（A0 / Issue #14）
+ *
+ * @description
+ * Figma v6（fileKey: gipuG41Jk5UuwwEm82Hn6l）から抽出した色・余白・文字サイズを
+ * Tailwind CSS 4 `@theme` に定義する。screen-design.md §4.1・§11 A0 準拠。
+ *
+ * @remarks
+ * - as-is（`#F7F4EF` / `#4A90A4` 等）は使わない（UI 刷新・全寄せ）
+ * - Figma Variables は空のため、主要フレームのスタイルから抽出
+ * - 後続 Issue（A〜E）はこのトークン名を参照すること
+ * - 仕様勝ち差分（免除日就寝など）は画面実装側で扱う（本ファイルは見た目トークンのみ）
  */
 @theme {
-  --color-bg: #f7f4ef;
-  --color-primary: #4a90a4;
-  --color-success: #5a9a6e;
-  --color-warning: #d4a03c;
-  --color-danger: #c45c5c;
-  --color-muted: #9a9a9a;
-  --radius-default: 12px;
-  --font-size-base: 18px;
-  --font-size-lg: 24px;
-  --font-size-xl: 48px;
+  /* --- 背景 --- */
+  --color-bg: #f7f3e3;
+  --color-bg-header: #faf2e0;
+  --color-bg-vacation: #e1f0fa;
+  --color-bg-vacation-header: #d2e8f8;
+  --color-bg-parent: #edf2f7;
+  --color-bg-parent-header: #dde4ed;
+  --color-surface: #fffdfa;
+  --color-surface-warm: #fff4db;
+  --color-surface-soft: #faf8f2;
+  --color-danger-soft: #fff0f2;
+  --color-info-soft: #e8f1ff;
+  --color-success-soft: #edfad9;
+  --color-nav-results: #c8e6b4;
+  --color-nav-timer: #d2c8f5;
+
+  /* --- ブランド／セマンティック色 --- */
+  --color-primary: #ff9f1c;
+  --color-primary-shadow: #e08300;
+  --color-secondary: #e07a2e;
+  --color-info: #3a86ff;
+  --color-success: #38b000;
+  --color-success-deep: #2d6423;
+  --color-warning: #e07a2e;
+  --color-danger: #ff5a5f;
+  --color-muted: #8d7066;
+  --color-muted-strong: #a38b80;
+  --color-ink: #4a2c21;
+  --color-ink-brand: #59401a;
+  --color-ink-brand-sub: #8c734d;
+  --color-border: #5e3a21;
+  --color-border-soft: #e5d9bf;
+  --color-border-chip: #d9c7a6;
+  --color-chip: #f2e5d1;
+  --color-chip-ink: #735933;
+  --color-vacation-badge: #3ca5dc;
+  --color-timer-ink: #4b328c;
+  --color-overlay: rgb(74 59 50 / 0.6);
+
+  /* --- 角丸 --- */
+  --radius-sm: 8px;
+  --radius-default: 16px;
+  --radius-card: 24px;
+  --radius-pill: 100px;
+
+  /* --- 文字サイズ（子ども向けタッチ UI） --- */
+  --font-size-base: 16px;
+  --font-size-lg: 18px;
+  --font-size-xl: 28px;
+  --font-size-display: 72px;
+  --font-size-timer: 96px;
   --text-app-lg: var(--font-size-lg);
-  --text-app-xl: var(--font-size-xl);
-  --min-height-touch: 48px;
+  --text-app-xl: var(--font-size-display);
+  --text-app-timer: var(--font-size-timer);
+
+  /* --- タッチ領域 --- */
+  --min-height-touch: 56px;
+  --spacing-page: 32px;
+  --spacing-section: 24px;
+
+  /* --- 影（プライマリ CTA の押し出し） --- */
+  --shadow-primary: 0 5px 0 0 #e08300;
+  --shadow-secondary: 0 5px 0 0 #d2c9b5;
+  --shadow-card: 0 8px 8px 0 rgb(94 58 33 / 0.1);
 }
 
 @layer base {
   html {
     font-size: var(--font-size-base);
     font-family:
+      "Kosugi Maru",
       "Hiragino Sans",
       "Hiragino Kaku Gothic ProN",
       Meiryo,
@@ -31,10 +92,21 @@
   }
 
   body {
-    @apply m-0 min-h-screen bg-bg text-gray-900 antialiased;
+    @apply m-0 min-h-screen bg-bg text-ink antialiased;
   }
 
   #root {
     @apply min-h-screen;
+  }
+
+  /**
+   * 残高・タイマー数字用（Figma: Outfit Black）
+   */
+  .font-display {
+    font-family:
+      Outfit,
+      "Kosugi Maru",
+      sans-serif;
+    font-weight: 900;
   }
 }

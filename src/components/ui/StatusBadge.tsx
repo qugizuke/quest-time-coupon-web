@@ -29,7 +29,7 @@ const toneClass: Record<StatusBadgeTone, string> = {
   info: "bg-info-soft text-info",
   warning: "border border-warning bg-surface-warm text-warning",
   danger: "border border-danger bg-danger-soft text-danger",
-  muted: "bg-[#f0eeec] text-muted-strong",
+  muted: "bg-muted-soft text-muted-strong",
 };
 
 /**

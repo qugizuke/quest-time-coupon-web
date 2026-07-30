@@ -27,6 +27,7 @@
   --color-danger-soft: #fff0f2;
   --color-info-soft: #e8f1ff;
   --color-success-soft: #edfad9;
+  --color-muted-soft: #f0eeec;
   --color-nav-results: #c8e6b4;
   --color-nav-timer: #d2c8f5;
 
@@ -39,16 +40,23 @@
   --color-success-deep: #2d6423;
   --color-warning: #e07a2e;
   --color-danger: #ff5a5f;
+  --color-danger-shadow: #d9484d;
   --color-muted: #8d7066;
   --color-muted-strong: #a38b80;
   --color-ink: #4a2c21;
   --color-ink-brand: #59401a;
   --color-ink-brand-sub: #8c734d;
+  --color-ink-brand-parent: #593326;
+  --color-ink-brand-parent-sub: #8c6659;
   --color-border: #5e3a21;
   --color-border-soft: #e5d9bf;
+  --color-border-parent-soft: #ebd9d1;
   --color-border-chip: #d9c7a6;
+  --color-border-parent-chip: #99a6bf;
   --color-chip: #f2e5d1;
   --color-chip-ink: #735933;
+  --color-parent-chip: #f2f5fa;
+  --color-parent-chip-ink: #4d5973;
   --color-vacation-badge: #3ca5dc;
   --color-timer-ink: #4b328c;
   --color-overlay: rgb(74 59 50 / 0.6);
@@ -77,6 +85,7 @@
   /* --- 影（プライマリ CTA の押し出し） --- */
   --shadow-primary: 0 5px 0 0 #e08300;
   --shadow-secondary: 0 5px 0 0 #d2c9b5;
+  --shadow-danger: 0 5px 0 0 #d9484d;
   --shadow-card: 0 8px 8px 0 rgb(94 58 33 / 0.1);
 }
 

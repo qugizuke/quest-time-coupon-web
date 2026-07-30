@@ -1,6 +1,7 @@
 /**
  * @file AppHeader
  * @description 子ども／保護者共通ヘッダー土台（ブランド・ホーム・長期休みバッジ・保護者モード）。
+ * mode に応じて枠・ブランド文字・アクション色までヘッダー全体のパレットを切り替える。
  * 後続 Issue A で導線（ParentGuard・モーダル）を接続する。
  */
 import type { ReactNode } from "react";
@@ -48,14 +49,18 @@ export function AppHeader({
 }: AppHeaderProps) {
   const isParent = mode === "parent";
   const barClass = isParent
-    ? "bg-bg-parent-header"
+    ? "border-border-parent-soft bg-bg-parent-header"
     : vacationMode
-      ? "bg-bg-vacation-header"
-      : "bg-bg-header";
+      ? "border-border-soft bg-bg-vacation-header"
+      : "border-border-soft bg-bg-header";
+  const brandClass = isParent ? "text-ink-brand-parent" : "text-ink-brand";
+  const brandSubClass = isParent
+    ? "text-ink-brand-parent-sub"
+    : "text-ink-brand-sub";
 
   return (
     <header
-      className={`flex h-16 w-full items-center gap-3 border border-border-soft px-4 sm:px-7 ${barClass}`}
+      className={`flex h-16 w-full items-center gap-3 border px-4 sm:px-7 ${barClass}`}
     >
       <div
         className="flex size-9 shrink-0 items-center justify-center rounded-sm bg-primary text-lg text-white"
@@ -64,8 +69,10 @@ export function AppHeader({
         ★
       </div>
       <div className="min-w-0">
-        <p className="truncate text-base leading-tight text-ink-brand">クエストタイム</p>
-        <p className="truncate text-[9px] leading-tight text-ink-brand-sub">
+        <p className={`truncate text-base leading-tight ${brandClass}`}>
+          クエストタイム
+        </p>
+        <p className={`truncate text-[9px] leading-tight ${brandSubClass}`}>
           Quest Time Coupon
         </p>
       </div>
@@ -94,7 +101,7 @@ export function AppHeader({
         <button
           type="button"
           onClick={onExitParentMode}
-          className="rounded-sm border border-[#99a6bf] bg-[#f2f5fa] px-3 py-1.5 text-xs text-[#4d5973]"
+          className="rounded-sm border border-border-parent-chip bg-parent-chip px-3 py-1.5 text-xs text-parent-chip-ink"
         >
           🔓 保護者モードを終了
         </button>

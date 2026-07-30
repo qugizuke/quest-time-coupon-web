@@ -29,7 +29,7 @@ const variantClass: Record<ButtonVariant, string> = {
   secondary:
     "border-[3px] border-border bg-surface text-ink shadow-[var(--shadow-secondary)] hover:bg-surface-soft active:translate-y-[2px] active:shadow-none",
   danger:
-    "border-[3px] border-border bg-danger text-white shadow-[0_5px_0_0_#d9484d] hover:brightness-105 active:translate-y-[2px] active:shadow-none",
+    "border-[3px] border-border bg-danger text-white shadow-[var(--shadow-danger)] hover:brightness-105 active:translate-y-[2px] active:shadow-none",
   ghost:
     "border border-border-chip bg-chip text-chip-ink hover:bg-surface-warm",
 };

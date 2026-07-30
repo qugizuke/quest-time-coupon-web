@@ -1,6 +1,7 @@
 /**
  * @file AppLayout
  * @description 共通レイアウト（子ども＝クリーム背景・保護者＝ブルーグレー切替可）。
+ * 背景は viewport 全幅・全高の外側コンテナに付け、最大幅は内側コンテンツのみに適用する。
  */
 import type { ReactNode } from "react";
 
@@ -29,10 +30,10 @@ const surfaceClass = {
  */
 export function AppLayout({ children, surface = "kid" }: AppLayoutProps) {
   return (
-    <main
-      className={`mx-auto flex min-h-screen w-full max-w-5xl flex-col px-4 py-6 sm:px-8 ${surfaceClass[surface]}`}
-    >
-      {children}
-    </main>
+    <div className={`min-h-screen w-full ${surfaceClass[surface]}`}>
+      <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col px-4 py-6 sm:px-8">
+        {children}
+      </main>
+    </div>
   );
 }

@@ -1,6 +1,6 @@
 /**
  * @file GradeListPage
- * @description 保護者採点日一覧（月曜始まり週ナビ）。results 週 UI は Issue #17。
+ * @description 保護者採点日一覧（月曜始まり週ナビ）。status / isExempt は gradeDates API を正とする。
  */
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -11,7 +11,6 @@ import { LoadingScreen } from "@/components/layout/LoadingScreen";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge, type StatusBadgeTone } from "@/components/ui/StatusBadge";
 import { formatDateJa, todayLocal } from "@/lib/date";
-import { isExemptOn } from "@/lib/parentLocalSettings";
 import {
   formatWeekLabel,
   getMondayWithOffset,
@@ -66,8 +65,11 @@ export function GradeListPage() {
       }
     >();
     for (const item of data?.dates ?? []) {
+      // gradeDates API を正とする（localStorage の免除は参照しない）
+      const status: GradeListStatus =
+        item.isExempt || item.status === "exempt" ? "exempt" : item.status;
       map.set(item.date, {
-        status: item.status,
+        status,
         ungradedCount: item.ungradedCount,
         totalPoints: item.totalPoints,
       });
@@ -116,9 +118,7 @@ export function GradeListPage() {
       <ul className="flex flex-col gap-2">
         {weekDates.map((date) => {
           const api = byDate.get(date);
-          const status: GradeListStatus = isExemptOn(date)
-            ? "exempt"
-            : (api?.status ?? "unanswered");
+          const status: GradeListStatus = api?.status ?? "unanswered";
           const clickable = status === "ungraded" || status === "graded";
           const points = api?.totalPoints;
           const rightLabel =

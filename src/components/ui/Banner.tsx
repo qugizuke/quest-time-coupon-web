@@ -1,6 +1,6 @@
 /**
  * @file Banner コンポーネント
- * @description 未確認採点結果などへの誘導バナー（Figma: 青地＋茶枠）。
+ * @description 未確認採点結果などへの誘導バナー（Figma: 青地＋茶枠・★／→）。
  */
 import type { ReactNode } from "react";
 
@@ -36,11 +36,21 @@ export function Banner({ children, onClick, tone = "info" }: BannerProps) {
       type="button"
       onClick={onClick}
       className={[
-        "w-full rounded-default border-[3px] px-4 py-3 text-left text-base font-medium transition-transform duration-200 hover:scale-[1.01]",
+        "flex w-full items-center gap-3 rounded-default border-[3px] px-4 py-4 text-left text-[15px] font-medium transition-transform duration-200 hover:scale-[1.01]",
         toneClass[tone],
       ].join(" ")}
     >
-      {children}
+      {tone === "info" && (
+        <span className="shrink-0 text-lg" aria-hidden>
+          ★
+        </span>
+      )}
+      <span className="min-w-0 flex-1">{children}</span>
+      {tone === "info" && (
+        <span className="shrink-0 text-lg" aria-hidden>
+          →
+        </span>
+      )}
     </button>
   );
 }

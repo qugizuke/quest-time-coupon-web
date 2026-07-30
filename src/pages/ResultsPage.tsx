@@ -105,12 +105,12 @@ function registrationTimingLabel(adjustment: number, reason?: string): string {
  */
 function registrationTimingClassName(adjustment: number): string {
   if (adjustment > 0) {
-    return "border-2 border-success bg-success/10 text-gray-900";
+    return "border-2 border-success bg-success/10 text-ink";
   }
   if (adjustment < 0) {
-    return "border-2 border-danger bg-danger/10 text-gray-900";
+    return "border-2 border-danger bg-danger/10 text-ink";
   }
-  return "border-2 border-warning bg-warning/20 text-gray-900";
+  return "border-2 border-warning bg-warning/20 text-ink";
 }
 
 /**
@@ -225,11 +225,9 @@ export function ResultsPage() {
 
   return (
     <ChildPageFrame>
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-6">
+        <p className="text-sm text-muted">📊 週ごとの結果</p>
         <h1 className="text-app-lg font-bold">採点結果</h1>
-        <Button variant="secondary" onClick={() => navigate("/")}>
-          ホーム
-        </Button>
       </div>
 
       {!selected && (
@@ -273,11 +271,11 @@ export function ResultsPage() {
                     data-testid={`results-day-${date}`}
                     data-reason-code={item?.reasonCode ?? ""}
                     data-unacked={unacked ? "true" : "false"}
-                    className={`flex w-full items-center justify-between rounded-default px-4 py-3 text-left shadow-sm ${
+                    className={`flex w-full items-center justify-between rounded-default px-4 py-3 text-left ${
                       clickable
                         ? unacked
-                          ? "border-2 border-danger bg-white"
-                          : "border border-border bg-white"
+                          ? "border-[3px] border-danger bg-surface shadow-[var(--shadow-card)]"
+                          : "border-[3px] border-border bg-surface shadow-[var(--shadow-card)]"
                         : "cursor-default border border-transparent bg-muted-soft text-muted"
                     }`}
                   >
@@ -296,16 +294,17 @@ export function ResultsPage() {
           <Card
             className={
               selected.reasonCode === "exempt"
-                ? "border-2 border-border"
+                ? "border-[3px] border-border"
                 : selected.totalPoints >= 0
-                  ? "border-2 border-success"
-                  : "border-2 border-danger"
+                  ? "border-[3px] border-success"
+                  : "border-[3px] border-danger"
             }
           >
             <p className="text-lg font-bold">{formatDateJa(selected.date)}</p>
-            <p className="text-app-lg font-bold">
+            <p className="font-display text-app-xl leading-none text-ink">
               {selected.totalPoints >= 0 ? "+" : ""}
-              {selected.totalPoints} 分
+              {selected.totalPoints}
+              <span className="ml-2 font-sans text-xl font-normal">分</span>
             </p>
             {needsAck(selected) && penaltyPreviewOffset > 0 && (
               <p className="mt-2 text-sm text-muted">
@@ -318,7 +317,7 @@ export function ResultsPage() {
           </Card>
 
           {selected.details.some((d) => isUnknownChildAnswer(d.childAnswer)) && (
-            <div className="rounded-default border-2 border-warning bg-warning/20 px-4 py-3 text-base text-gray-900">
+            <div className="rounded-default border-2 border-warning bg-warning/20 px-4 py-3 text-base text-ink">
               {UNKNOWN_ANSWER_MESSAGE}
             </div>
           )}
@@ -327,8 +326,8 @@ export function ResultsPage() {
             <div
               className={`rounded-default px-4 py-3 text-base ${
                 selected.reasonCode === "exempt"
-                  ? "border-2 border-border bg-info-soft text-gray-900"
-                  : "border-2 border-danger bg-danger/10 text-gray-900"
+                  ? "border-2 border-border bg-info-soft text-ink"
+                  : "border-2 border-danger bg-danger/10 text-ink"
               }`}
               data-testid="reason-code-message"
               data-reason-code={selected.reasonCode}
@@ -355,7 +354,7 @@ export function ResultsPage() {
           {selected.reasonCode === "normal" &&
             !!selected.bedtimePrepPenalty &&
             selected.bedtimePrepPenalty !== 0 && (
-              <div className="rounded-default border-2 border-danger bg-danger/10 px-4 py-3 text-base text-gray-900">
+              <div className="rounded-default border-2 border-danger bg-danger/10 px-4 py-3 text-base text-ink">
                 {selected.bedtimePrepPenaltyReason ??
                   `寝る準備の虚偽ペナルティ ${selected.bedtimePrepPenalty}分`}
               </div>
@@ -369,8 +368,8 @@ export function ResultsPage() {
                     key={`${adj.kind}-${adj.code}`}
                     className={`rounded-default px-4 py-3 text-base ${
                       adj.minutes > 0
-                        ? "border-2 border-success bg-success/10 text-gray-900"
-                        : "border-2 border-danger bg-danger/10 text-gray-900"
+                        ? "border-2 border-success bg-success/10 text-ink"
+                        : "border-2 border-danger bg-danger/10 text-ink"
                     }`}
                   >
                     {adj.label}: {adj.minutes > 0 ? "+" : ""}

@@ -2,6 +2,7 @@
  * @file TimerPage
  * @description クーポン時間のカウントダウンと使用記録。
  *   未確認採点結果があるときは Start 不可（screen-design §6.6）。
+ *   見た目は Figma kid-timer（大きな数字・紫アクセント）に寄せる（Issue #19）。
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -51,39 +52,51 @@ export function TimerPage() {
 
   return (
     <ChildPageFrame vacationMode={home?.isVacationMode}>
-      <div className="mb-4">
-        <h1 className="text-app-lg font-bold">タイマー</h1>
+      <div className="mb-6 flex flex-col items-center gap-2 text-center">
+        <p className="text-sm text-timer-ink">⏱️ タイマー</p>
+        <h1 className="text-app-lg font-bold text-ink">残り時間をはかろう</h1>
       </div>
 
       <Card
-        className={`flex min-h-[50vh] flex-col items-center justify-center text-center ${
-          display.isPenalty ? "bg-danger/10" : ""
-        }`}
+        className={[
+          "flex min-h-[45vh] flex-col items-center justify-center gap-3 border-4 text-center",
+          display.isPenalty
+            ? "border-danger bg-danger-soft"
+            : "border-timer-ink/30 bg-nav-timer/40",
+        ].join(" ")}
       >
-        <p className="text-lg">
+        <p className="text-lg text-muted">
           {display.isPenalty ? "超過時間" : "残り時間"}
         </p>
-        <p className="mt-4 text-app-xl font-bold text-primary">
+        <p
+          className={[
+            "font-display text-app-timer leading-none",
+            display.isPenalty ? "text-danger" : "text-timer-ink",
+          ].join(" ")}
+        >
           {display.isPenalty ? "+" : ""}
           {formatMinutesSeconds(display.seconds)}
         </p>
+        <p className="text-sm text-muted">残高 {displayBalance} 分</p>
       </Card>
 
       {blockedByUnacked && !isRunning && (
-        <div className="mt-4 text-center">
-          <p className="text-muted">採点結果を先に確認してね</p>
+        <div className="mt-6 text-center">
+          <p className="rounded-default border-[3px] border-info bg-info-soft px-4 py-3 text-info">
+            採点結果を先に確認してね
+          </p>
           <Button
-            className="mt-3"
-            variant="secondary"
+            className="mt-4"
+            variant="navResults"
             onClick={() => navigate("/results")}
           >
-            採点結果を確認する
+            📊 採点結果を確認する
           </Button>
         </div>
       )}
 
       {!blockedByUnacked && !canStart && !isRunning && displayBalance <= 0 && (
-        <p className="mt-4 text-center text-muted">
+        <p className="mt-6 text-center text-muted">
           残高がないので スタートできません
         </p>
       )}

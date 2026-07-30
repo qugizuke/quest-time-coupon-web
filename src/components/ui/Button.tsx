@@ -6,7 +6,13 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
 /** ボタンバリアント */
-export type ButtonVariant = "primary" | "secondary" | "danger" | "ghost";
+export type ButtonVariant =
+  | "primary"
+  | "secondary"
+  | "danger"
+  | "ghost"
+  | "navResults"
+  | "navTimer";
 
 /**
  * @typedef {object} ButtonProps
@@ -32,6 +38,11 @@ const variantClass: Record<ButtonVariant, string> = {
     "border-[3px] border-border bg-danger text-white shadow-[var(--shadow-danger)] hover:brightness-105 active:translate-y-[2px] active:shadow-none",
   ghost:
     "border border-border-chip bg-chip text-chip-ink hover:bg-surface-warm",
+  /** Figma ホーム「採点結果をみる」 */
+  navResults:
+    "border-0 bg-nav-results text-success-deep hover:brightness-95",
+  /** Figma ホーム「タイマーをスタート」 */
+  navTimer: "border-0 bg-nav-timer text-timer-ink hover:brightness-95",
 };
 
 /**

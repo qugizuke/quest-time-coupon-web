@@ -9,6 +9,7 @@ import { postAnswers } from "@/api/client";
 import { homeQuery, queryKeys } from "@/api/queries";
 import { ChildPageFrame } from "@/components/layout/ChildPageFrame";
 import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 import { useDailyQuests } from "@/hooks/useDailyQuests";
 import { todayLocal } from "@/lib/date";
 import {
@@ -208,35 +209,46 @@ export function QuestConfirmPage() {
   return (
     <ChildPageFrame vacationMode={vacationMode}>
       <h1 className="mb-4 text-app-lg font-bold">最後の確認</h1>
-      <ul className="mb-6 flex flex-col gap-2">
-        {confirmationItems.map((item) => (
-          <li
-            key={item.questId}
-            className="flex justify-between rounded-default bg-white px-4 py-3 shadow-sm"
-          >
-            <span>{item.title}</span>
-            <span className="font-medium">
-              {childAnswerLabel(item.childAnswer)}
-            </span>
-          </li>
-        ))}
-      </ul>
+      <Card className="mb-6 border-4 p-4">
+        <ul className="flex flex-col gap-2">
+          {confirmationItems.map((item) => (
+            <li
+              key={item.questId}
+              className="flex justify-between gap-3 rounded-default border border-border-soft bg-surface-soft px-4 py-3"
+            >
+              <span className="min-w-0">{item.title}</span>
+              <span className="shrink-0 font-medium text-ink">
+                {childAnswerLabel(item.childAnswer)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </Card>
 
       {showWakeUp && (
-        <section className="mb-6" data-testid="wake-up-section">
+        <Card className="mb-6" data-testid="wake-up-section">
           <h2 className="mb-3 text-base font-bold">明日の起きる時間</h2>
           <div className="flex flex-wrap gap-2">
-            {WAKE_UP_OPTIONS.map((option) => (
-              <Button
-                key={option}
-                variant={wakeUpTime === option ? "primary" : "secondary"}
-                onClick={() => setWakeUpTime(option)}
-              >
-                {wakeUpLabel(option)}
-              </Button>
-            ))}
+            {WAKE_UP_OPTIONS.map((option) => {
+              const selected = wakeUpTime === option;
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => setWakeUpTime(option)}
+                  className={[
+                    "min-h-touch rounded-default px-4 text-base",
+                    selected
+                      ? "border-[3px] border-info bg-info-soft text-info"
+                      : "border-2 border-border bg-surface text-ink",
+                  ].join(" ")}
+                >
+                  {wakeUpLabel(option)}
+                </button>
+              );
+            })}
           </div>
-        </section>
+        </Card>
       )}
 
       {mutation.error && (

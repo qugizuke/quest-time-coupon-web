@@ -1,17 +1,16 @@
 /**
  * @file BedtimeModal
  * @description 就寝時刻選択モーダル（独立パスなし・screen-design §6.2）。
- *   選択肢は 21 / 22 / 23 のみ。本接続は後続 Issue。
+ *   選択肢は 21 / 22 / 23 のみ。チップ見た目は Figma 流用、入口はモーダル（仕様勝ち D2）。
  */
 import { Dialog } from "@/components/ui/Dialog";
-import { Button } from "@/components/ui/Button";
 import type { BedtimeHour } from "@/types/api";
 
-/** 就寝候補 */
+/** 就寝候補（表示は HH:00） */
 const BEDTIME_OPTIONS: { value: BedtimeHour; label: string }[] = [
-  { value: 21, label: "21時" },
-  { value: 22, label: "22時" },
-  { value: 23, label: "23時" },
+  { value: 21, label: "21:00" },
+  { value: 22, label: "22:00" },
+  { value: 23, label: "23:00" },
 ];
 
 /**
@@ -49,21 +48,32 @@ export function BedtimeModal({
 }: BedtimeModalProps) {
   return (
     <Dialog open={open} onClose={onClose} title="今日の寝る時間を設定する">
-      <div className="flex flex-col gap-3" data-testid="bedtime-modal">
-        {BEDTIME_OPTIONS.map((opt) => (
-          <Button
-            key={opt.value}
-            fullWidth
-            variant={selectedHour === opt.value ? "primary" : "secondary"}
-            disabled={disabled}
-            onClick={() => {
-              onSelect(opt.value);
-              onClose();
-            }}
-          >
-            {opt.label}
-          </Button>
-        ))}
+      <div className="flex flex-col gap-4" data-testid="bedtime-modal">
+        <p className="text-sm text-muted">🛏️ 寝る時間を選んでね（21 / 22 / 23）</p>
+        <div className="flex gap-3">
+          {BEDTIME_OPTIONS.map((opt) => {
+            const selected = selectedHour === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                disabled={disabled}
+                onClick={() => {
+                  onSelect(opt.value);
+                  onClose();
+                }}
+                className={[
+                  "flex min-h-touch flex-1 items-center justify-center rounded-default text-base transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+                  selected
+                    ? "border-[3px] border-info bg-info-soft text-info"
+                    : "border-2 border-border bg-surface text-ink hover:bg-surface-soft",
+                ].join(" ")}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
     </Dialog>
   );

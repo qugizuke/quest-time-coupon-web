@@ -94,7 +94,9 @@ describe("HomePage", () => {
     );
     expect(screen.getByTestId("exempt-message")).toBeTruthy();
     expect(screen.getByTestId("nav-results")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "クエスト開始" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "⚔️ クエストをはじめる！" }),
+    ).toBeNull();
   });
 
   it("exempt-vacation では就寝 UI を出さない", () => {

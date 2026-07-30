@@ -292,7 +292,7 @@ export function ParentSettingsPage() {
 
       <Card className="mb-4" data-testid="long-vacation-card">
         <div className="mb-2 flex items-center justify-between gap-3">
-          <h2 className="font-bold text-ink">長期休みモード</h2>
+          <h2 className="font-bold text-ink">🏖️ 長期休みモード</h2>
           <StatusBadge tone={vacationConfigured ? "info" : "muted"}>
             {vacationConfigured ? "設定あり" : "未設定"}
           </StatusBadge>
@@ -441,16 +441,24 @@ export function ParentSettingsPage() {
               候補は 21 / 22 / 23 のみです（仕様勝ち・22:30 なし）。回答提出前かつ就寝1時間前まで変更できます。
             </p>
             <div className="mb-3 flex gap-2">
-              {BEDTIME_OPTIONS.map((hour) => (
-                <Button
-                  key={hour}
-                  className="flex-1"
-                  variant={bedtimeHour === hour ? "primary" : "secondary"}
-                  onClick={() => setBedtimeHour(hour)}
-                >
-                  {hour}時
-                </Button>
-              ))}
+              {BEDTIME_OPTIONS.map((hour) => {
+                const selected = bedtimeHour === hour;
+                return (
+                  <button
+                    key={hour}
+                    type="button"
+                    className={[
+                      "flex min-h-touch flex-1 items-center justify-center rounded-default text-base",
+                      selected
+                        ? "border-[3px] border-info bg-info-soft text-info"
+                        : "border-2 border-border bg-surface text-ink",
+                    ].join(" ")}
+                    onClick={() => setBedtimeHour(hour)}
+                  >
+                    {hour}:00
+                  </button>
+                );
+              })}
             </div>
             <Button
               fullWidth

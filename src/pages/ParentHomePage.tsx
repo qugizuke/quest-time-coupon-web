@@ -126,27 +126,50 @@ export function ParentHomePage() {
 
   return (
     <ParentPageFrame>
-      <h1 className="mb-4 text-app-lg font-bold text-ink">保護者ホーム</h1>
+      <div className="mb-6">
+        <p className="text-sm text-muted">保護者モード</p>
+        <h1 className="text-app-lg font-bold text-ink">きょうの運用</h1>
+      </div>
 
-      <Card className="mb-4">
-        <div className="mb-2 flex items-center justify-between gap-3">
-          <h2 className="font-bold text-ink">未採点</h2>
-          <StatusBadge tone={ungradedCount > 0 ? "warning" : "muted"}>
-            {ungradedCount}件
-          </StatusBadge>
+      {ungradedCount > 0 ? (
+        <div
+          className="mb-4 flex flex-col gap-3 rounded-default border-[3px] border-info bg-info-soft p-4 sm:flex-row sm:items-center"
+          data-testid="ungraded-banner"
+        >
+          <div className="min-w-0 flex-1">
+            <p className="font-bold text-info">【要対応】未確認のクエストがあります</p>
+            <p className="mt-1 text-sm text-ink">
+              お子様が提出したクエストが {ungradedCount}件 未採点です
+            </p>
+          </div>
+          <Button onClick={() => navigate("/parent/grades")}>
+            採点をはじめる →
+          </Button>
         </div>
-        <Button fullWidth onClick={() => navigate("/parent/grades")}>
-          採点をはじめる
-        </Button>
-      </Card>
+      ) : (
+        <Card className="mb-4">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <h2 className="font-bold text-ink">未採点</h2>
+            <StatusBadge tone="muted">0件</StatusBadge>
+          </div>
+          <Button fullWidth variant="secondary" onClick={() => navigate("/parent/grades")}>
+            採点一覧をみる
+          </Button>
+        </Card>
+      )}
 
       <Card className="mb-4">
         <div className="mb-2 flex items-center justify-between gap-3">
-          <h2 className="font-bold text-ink">登録状況</h2>
+          <h2 className="font-bold text-ink">📅 本日の回答・登録状況</h2>
           <StatusBadge tone={registrationTone}>{registrationStatus}</StatusBadge>
         </div>
         {(parentHome.isExemptToday || registrationStatus === "免除") && (
           <p className="text-sm text-muted">今日はクエスト免除です</p>
+        )}
+        {registrationStatus === "締切超過" && (
+          <p className="text-sm text-muted">
+            本日は登録締め切り時間を過ぎているため、お子様側からの提出はロックされています。
+          </p>
         )}
         {parentHome.registrationReopen.isOpen &&
           parentHome.registrationReopen.endsAt && (
@@ -165,7 +188,6 @@ export function ParentHomePage() {
           {!reopenOpen ? (
             <Button
               fullWidth
-              variant="secondary"
               onClick={() => {
                 setReopenOpen(true);
                 setReopenUntil(reopenOptions[0]?.value ?? "");
@@ -222,30 +244,66 @@ export function ParentHomePage() {
         </Card>
       )}
 
-      <Card className="mb-4">
-        <div className="mb-2 flex items-center justify-between gap-3">
-          <h2 className="font-bold text-ink">長期休み</h2>
-          <StatusBadge tone={vacationActive ? "info" : "muted"}>
-            {vacationActive ? "モード中" : "オフ"}
-          </StatusBadge>
-        </div>
-        {vacationPeriod ? (
-          <p className="text-sm text-muted" data-testid="vacation-period">
-            {vacationPeriod.startDate} 〜 {vacationPeriod.endDate}
-            （変更は設定へ）
-          </p>
-        ) : (
-          <p className="text-sm text-muted">期間未設定。操作は設定から行えます。</p>
-        )}
-      </Card>
+      <div className="mb-4 grid gap-4 sm:grid-cols-2">
+        <Card>
+          <h2 className="mb-2 font-bold text-ink">🏖️ 長期休みモード</h2>
+          <div
+            className={[
+              "rounded-default border-[3px] px-3 py-3",
+              vacationActive
+                ? "border-primary bg-surface-warm"
+                : "border-border-soft bg-surface-soft",
+            ].join(" ")}
+          >
+            <p className="text-sm text-muted">現在</p>
+            <p
+              className={[
+                "text-lg font-bold",
+                vacationActive ? "text-primary" : "text-muted",
+              ].join(" ")}
+            >
+              {vacationActive ? "モード中" : "オフ"}
+            </p>
+            {vacationPeriod ? (
+              <p className="mt-1 text-sm text-muted" data-testid="vacation-period">
+                期間：{vacationPeriod.startDate} 〜 {vacationPeriod.endDate}
+              </p>
+            ) : (
+              <p className="mt-1 text-sm text-muted">期間未設定</p>
+            )}
+          </div>
+          <p className="mt-2 text-xs text-muted">変更は各種設定から行えます</p>
+        </Card>
 
-      <Button
-        fullWidth
-        variant="secondary"
-        onClick={() => navigate("/parent/settings")}
-      >
-        設定
-      </Button>
+        <Card>
+          <h2 className="mb-3 font-bold text-ink">⚙️ 設定クイックメニュー</h2>
+          <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => navigate("/parent/settings")}
+              className="flex w-full items-center justify-between rounded-default border border-border-parent-chip bg-surface px-4 py-3 text-left text-sm text-ink hover:bg-parent-chip"
+            >
+              <span>特定日のクエスト免除を設定</span>
+              <span aria-hidden>→</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate("/parent/settings")}
+              className="flex w-full items-center justify-between rounded-default border border-border-parent-chip bg-surface px-4 py-3 text-left text-sm text-ink hover:bg-parent-chip"
+            >
+              <span>本日の目標就寝時間を上書きする</span>
+              <span aria-hidden>→</span>
+            </button>
+            <Button
+              fullWidth
+              variant="secondary"
+              onClick={() => navigate("/parent/settings")}
+            >
+              設定へ
+            </Button>
+          </div>
+        </Card>
+      </div>
     </ParentPageFrame>
   );
 }

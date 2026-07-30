@@ -88,7 +88,7 @@ export function AppHeader({
       )}
 
       {vacationMode && !isParent && (
-        <span className="rounded-sm bg-vacation-badge px-3 py-1.5 text-xs text-white">
+        <span className="rounded-pill bg-vacation-badge px-3 py-1.5 text-xs text-white">
           🏖️ 長期休みモード
         </span>
       )}

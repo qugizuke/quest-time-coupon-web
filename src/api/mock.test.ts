@@ -3,7 +3,7 @@
  * @description 受付開始・締切チェックと retry 保存の挙動を検証する。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clearMockHomeModeFlags, mockApi, setMockHomeModeFlags } from "./mock";
+import { clearMockHomeModeFlags, mockApi, resetMockStore, setMockHomeModeFlags } from "./mock";
 import type { ChildAnswer, HomeData } from "@/types/api";
 
 const sampleAnswers: { questId: string; childAnswer: ChildAnswer }[] = [
@@ -275,11 +275,11 @@ describe("mockApi registrationSetting 競合ガード", () => {
 
 describe("mockApi home 免除・長期休み", () => {
   beforeEach(() => {
-    clearMockHomeModeFlags();
+    resetMockStore();
   });
 
   afterEach(() => {
-    clearMockHomeModeFlags();
+    resetMockStore();
   });
 
   it("免除日は questAction=none と isExemptDay=true", async () => {
@@ -322,5 +322,23 @@ describe("mockApi home 免除・長期休み", () => {
         }),
       }),
     ).rejects.toThrow("免除日は回答を登録できません");
+  });
+
+  it("締切超過後に免除へ切り替えると未確認ブロックが解除される", async () => {
+    vi.useFakeTimers();
+    const date = "2026-07-01"; // 水曜・平日通常日
+    vi.setSystemTime(new Date(2026, 6, 1, 21, 30, 0));
+
+    const before = await mockApi<HomeData>("home", undefined, { date });
+    expect(before.unacknowledgedCount).toBeGreaterThan(0);
+    expect(before.canStartTimer).toBe(false);
+
+    setMockHomeModeFlags({ exemptDates: [date] });
+    const after = await mockApi<HomeData>("home", undefined, { date });
+    expect(after.isExemptDay).toBe(true);
+    expect(after.unacknowledgedCount).toBe(0);
+    expect(after.canStartTimer).toBe(true);
+
+    vi.useRealTimers();
   });
 });

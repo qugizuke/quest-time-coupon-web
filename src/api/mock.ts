@@ -113,6 +113,10 @@ export function setMockHomeModeFlags(opts: {
   }
   if (opts.exemptDates !== undefined) {
     store.exemptDatesOverride = new Set(opts.exemptDates);
+    // 免除へ切り替えた日の stale な未登録ペナルティを削除する
+    for (const date of opts.exemptDates) {
+      store.missedRegistrationDates.delete(date);
+    }
   }
 }
 
@@ -123,6 +127,25 @@ export function setMockHomeModeFlags(opts: {
 export function clearMockHomeModeFlags(): void {
   store.vacationModeOverride = undefined;
   store.exemptDatesOverride = undefined;
+}
+
+/**
+ * テスト用にモックストアを初期状態へ戻す
+ * @returns {void}
+ */
+export function resetMockStore(): void {
+  store.balanceMinutes = 60;
+  store.penaltyMinutes = 0;
+  store.answers.clear();
+  store.grades.clear();
+  store.gradedDates.clear();
+  store.acknowledgedDates.clear();
+  store.missedRegistrationDates.clear();
+  store.bedtimeByDate.clear();
+  store.wakeUpByDate.clear();
+  store.submittedAtByDate.clear();
+  store.adjustmentsByDate.clear();
+  clearMockHomeModeFlags();
 }
 
 /** @type {number} 定時登録ボーナス（分） */
@@ -418,9 +441,10 @@ export async function mockApi<T>(
       const isVacationMode = resolveMockVacationMode();
       const pastCutoff = isPastQuestRegistrationCutoff(date, new Date(), bedtimeHour);
 
-      // 免除日は未登録ペナルティ対象外
-      if (
-        !isExemptDay &&
+      // 免除日は未登録ペナルティ対象外（切替前の stale も削除）
+      if (isExemptDay) {
+        store.missedRegistrationDates.delete(date);
+      } else if (
         pastCutoff &&
         !hasAnswers &&
         !store.missedRegistrationDates.has(date)
@@ -453,10 +477,13 @@ export async function mockApi<T>(
         questAction = "none";
       }
 
+      // 免除日は点0・未確認ブロック対象外のため集計から除外する
       const unacknowledgedCount = [
         ...store.gradedDates,
         ...store.missedRegistrationDates,
-      ].filter((d) => !store.acknowledgedDates.has(d)).length;
+      ].filter(
+        (d) => !store.acknowledgedDates.has(d) && !resolveMockExemptDay(d),
+      ).length;
 
       return {
         displayBalance: Math.max(0, store.balanceMinutes),

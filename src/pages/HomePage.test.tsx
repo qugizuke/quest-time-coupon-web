@@ -1,0 +1,126 @@
+/**
+ * @file HomePage 描画テスト
+ * @description ホーム 4 バリアントの導線・就寝 UI・免除メッセージを検証する。
+ * @vitest-environment jsdom
+ */
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { queryKeys } from "@/api/queries";
+import { HomePage } from "@/pages/HomePage";
+import type { HomeData } from "@/types/api";
+
+/**
+ * テスト用 HomeData を組み立てる
+ * @param {Partial<HomeData>} [overrides] - 上書き
+ * @returns {HomeData} HomeData
+ */
+function buildHome(overrides: Partial<HomeData> = {}): HomeData {
+  return {
+    displayBalance: 60,
+    penaltyMinutes: 0,
+    today: "2026-07-30",
+    todayStatus: "unanswered",
+    questAction: "start",
+    unacknowledgedCount: 0,
+    canStartTimer: true,
+    isExemptDay: false,
+    isVacationMode: false,
+    isWeekendEve: false,
+    ...overrides,
+  };
+}
+
+/**
+ * HomePage を描画する
+ * @param {HomeData} home - ホームデータ
+ * @returns {void}
+ */
+function renderHome(home: HomeData): void {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, staleTime: Infinity },
+    },
+  });
+  queryClient.setQueryData(queryKeys.home, home);
+  render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={["/"]}>
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/results" element={<div>results-page</div>} />
+          <Route path="/timer" element={<div>timer-page</div>} />
+          <Route path="/quest" element={<div>quest-page</div>} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+
+describe("HomePage", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    // 休暇の就寝設定は正午までのため午前に固定
+    vi.setSystemTime(new Date(2026, 6, 30, 10, 0, 0));
+    sessionStorage.clear();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    sessionStorage.clear();
+  });
+
+  it("免除日でも採点結果導線を残す", () => {
+    renderHome(
+      buildHome({
+        isExemptDay: true,
+        todayStatus: "completed",
+        questAction: "none",
+      }),
+    );
+
+    expect(screen.getByTestId("home-page").getAttribute("data-home-variant")).toBe(
+      "kid-home-exempt",
+    );
+    expect(screen.getByTestId("exempt-message")).toBeTruthy();
+    expect(screen.getByTestId("nav-results")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "クエスト開始" })).toBeNull();
+  });
+
+  it("exempt-vacation では就寝 UI を出さない", () => {
+    renderHome(
+      buildHome({
+        isExemptDay: true,
+        isVacationMode: true,
+        todayStatus: "completed",
+        questAction: "none",
+        isWeekendEve: true,
+      }),
+    );
+
+    expect(screen.getByTestId("home-page").getAttribute("data-home-variant")).toBe(
+      "kid-home-exempt-vacation",
+    );
+    expect(screen.queryByTestId("bedtime-entry")).toBeNull();
+    expect(screen.queryByTestId("bedtime-display")).toBeNull();
+    expect(screen.queryByTestId("bedtime-locked")).toBeNull();
+    expect(screen.getByText("🏖️ 長期休みモード")).toBeTruthy();
+  });
+
+  it("vacation の未回答では就寝設定入口を出す", () => {
+    renderHome(
+      buildHome({
+        isVacationMode: true,
+        todayStatus: "unanswered",
+        questAction: "start",
+      }),
+    );
+
+    expect(screen.getByTestId("home-page").getAttribute("data-home-variant")).toBe(
+      "kid-home-vacation",
+    );
+    expect(screen.getByTestId("bedtime-entry")).toBeTruthy();
+  });
+});

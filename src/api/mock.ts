@@ -3,7 +3,13 @@
  * @description API（Cloud Functions）未接続時の開発用インメモリ API（v5 対応）。
  *   長期休み／免除はローカルフラグ（本接続は Issue F）。
  */
-import type { ChildAnswer, GradeAdjustment, HomeData, WakeUpTime } from "@/types/api";
+import type {
+  ChildAnswer,
+  GradeAdjustment,
+  HomeData,
+  QuestDefinition,
+  WakeUpTime,
+} from "@/types/api";
 import { todayLocal } from "@/lib/date";
 import {
   isBeforeQuestRegistrationStart,
@@ -18,8 +24,17 @@ import {
   calcBedtimePrepFalseClaimPenalty,
   canApplyBedtimePrepRegistrationBonus,
 } from "@/lib/registrationBonus";
-import daily from "../../quests/daily.json";
+import dailyJson from "../../quests/daily.json";
 import adjustmentDefinitions from "../../adjustments/grade.json";
+
+/**
+ * クエスト定義フィクスチャ（to-be 10問・api-tobe-f-contract.md §4.1 準拠）。
+ * JSON モジュールの型推論は string リテラルを広げるため、契約型へ明示キャストする。
+ */
+const daily: { version: number; quests: QuestDefinition[] } = {
+  version: dailyJson.version,
+  quests: dailyJson.quests as QuestDefinition[],
+};
 
 /** @type {string} モック長期休みフラグ（localStorage） */
 const MOCK_VACATION_KEY = "qtc:mock:vacation";
@@ -529,6 +544,32 @@ function isMockMismatch(childAnswer: ChildAnswer, actualDone: boolean): boolean 
  * @param {string} date - 対象日
  * @param {{ questId: string; actualDone: boolean }[] | undefined} grades - 採点 payload
  */
+
+/**
+ * モック用: 子ども回答から採点モードを決める（契約 §3.6・812 行付近）
+ * @param {string} questId - クエスト ID
+ * @param {ChildAnswer} childAnswer - 子ども回答
+ * @returns {import("@/types/api").GradingMode} 採点モード
+ */
+function mockGradingModeForChildAnswer(
+  questId: string,
+  childAnswer: ChildAnswer,
+): import("@/types/api").GradingMode {
+  if (childAnswer === -1) {
+    if (
+      questId === "homework-done-today" ||
+      questId === "phone-non-emergency-unused"
+    ) {
+      return "skip";
+    }
+    return "auto_worst";
+  }
+  if (childAnswer === 0) {
+    return "auto_fail";
+  }
+  return "parent_choice";
+}
+
 function validateMockGrades(
   date: string,
   grades: { questId: string; actualDone: boolean }[] | undefined,
@@ -1093,7 +1134,7 @@ export async function mockApi<T>(
         questId,
         childAnswer,
         actualDone: store.grades.get(date)?.get(questId) ?? null,
-        gradingMode: "parent_choice" as const,
+        gradingMode: mockGradingModeForChildAnswer(questId, childAnswer),
         autoOutcome: null,
       }));
       const withinBonusWindow = !isPastQuestBonusDeadline(
@@ -1293,6 +1334,7 @@ export async function mockApi<T>(
               actualDone,
               finalPoints: 0,
               mismatch: isMockMismatch(childAnswer, actualDone),
+              gradingMode: mockGradingModeForChildAnswer(questId, childAnswer),
             };
           });
         const acknowledged = store.acknowledgedDates.has(date);
@@ -1399,6 +1441,19 @@ export async function mockApi<T>(
         penaltyOffset,
         displayBalance: Math.max(0, store.balanceMinutes),
         penaltyMinutes: store.penaltyMinutes,
+      } as T;
+    }
+
+    case "dailyQuests": {
+      const date = query?.date;
+      if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        throw new Error("BAD_REQUEST: date が必要です（YYYY-MM-DD）");
+      }
+      return {
+        date,
+        version: daily.version,
+        generationMode: "fixed_seed",
+        quests: daily.quests,
       } as T;
     }
 

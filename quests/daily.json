@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "quests": [
     {
       "id": "bedtime-prep",
@@ -19,8 +19,16 @@
       "title": "昨日は決められた時間に寝ましたか？"
     },
     {
-      "id": "brush-teeth-gargle-am",
+      "id": "wake-on-time",
       "order": 3,
+      "category": "routine",
+      "answerMode": "default",
+      "scoringRole": "standard",
+      "title": "今日は決められた時間に起きましたか？"
+    },
+    {
+      "id": "brush-teeth-gargle-am",
+      "order": 4,
       "category": "routine",
       "answerMode": "default",
       "scoringRole": "standard",
@@ -29,7 +37,7 @@
     },
     {
       "id": "wash-hands-gargle-after-school",
-      "order": 4,
+      "order": 5,
       "category": "routine",
       "answerMode": "default",
       "scoringRole": "standard",
@@ -37,30 +45,39 @@
     },
     {
       "id": "homework-done-today",
-      "order": 5,
+      "order": 6,
       "category": "routine",
       "answerMode": "default",
-      "scoringRole": "conditional",
-      "title": "今日は宿題をやりましたか？",
-      "hint": "やった場合: 宿題はテキパキとできましたか？",
-      "conditional": {
-        "gateAnswerMode": "yesNo",
-        "followUpWhen": 1,
-        "followUpTitle": "宿題はテキパキとできましたか？",
-        "persistGateAnswer": false
-      }
+      "scoringRole": "standard",
+      "title": "今日の宿題（勉強）は？"
     },
     {
-      "id": "save-water-hot-water",
-      "order": 6,
+      "id": "phone-non-emergency-unused",
+      "order": 7,
       "category": "reminder",
       "answerMode": "default",
       "scoringRole": "standard",
-      "title": "水やお湯の無駄遣いをしませんでしたか？"
+      "title": "緊急じゃない用事で、キッズケータイを使いませんでしたか？"
+    },
+    {
+      "id": "save-water-hot-water",
+      "order": 8,
+      "category": "reminder",
+      "answerMode": "default",
+      "scoringRole": "standard",
+      "title": "水やお湯の無駄遣いはしませんでしたか？"
+    },
+    {
+      "id": "no-repeated-warnings",
+      "order": 9,
+      "category": "reminder",
+      "answerMode": "default",
+      "scoringRole": "standard",
+      "title": "同じことで、何度も注意されずに過ごせましたか？"
     },
     {
       "id": "listen-to-mama-before-warning",
-      "order": 7,
+      "order": 10,
       "category": "reminder",
       "answerMode": "default",
       "scoringRole": "standard",

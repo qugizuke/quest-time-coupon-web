@@ -8,6 +8,7 @@
 import type {
   ApiResponse,
   ChildAnswer,
+  DailyQuests,
   GradeAdjustment,
   GradeData,
   GradeDateItem,
@@ -146,6 +147,11 @@ export async function fetchHome(
 ): Promise<HomeData> {
   const data = await request<HomeData>("home", { method: "GET" }, { date });
   return withHomeAliases(data);
+}
+
+/** GET dailyQuests（契約 §3.16。静的 daily.json 廃止・Issue #33） */
+export function fetchDailyQuests(date: string = todayLocal()): Promise<DailyQuests> {
+  return request<DailyQuests>("dailyQuests", { method: "GET" }, { date });
 }
 
 /** GET parentHome */

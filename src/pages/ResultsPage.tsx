@@ -16,7 +16,7 @@ import { StatusBadge, type StatusBadgeTone } from "@/components/ui/StatusBadge";
 import { useDailyQuests } from "@/hooks/useDailyQuests";
 import { formatDateJa, formatDayNumber, formatWeekdayJa, todayLocal } from "@/lib/date";
 import { actualDoneLabel, childAnswerLabel, isUnknownChildAnswer } from "@/lib/labels";
-import { resolveQuestTitle } from "@/lib/questLabels";
+import { isSkipAnswerQuest, resolveQuestTitle } from "@/lib/questLabels";
 import {
   formatWeekLabel,
   getMondayWithOffset,
@@ -125,10 +125,10 @@ export function ResultsPage() {
   const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const today = todayLocal();
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const { data, isLoading, error } = useQuery(resultsQuery);
   const { data: homeData } = useQuery(homeQuery);
-  const { data: daily } = useDailyQuests();
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const { data: daily } = useDailyQuests(selectedDate ?? today);
   const [weekOffset, setWeekOffset] = useState(0);
   const [weekInitialized, setWeekInitialized] = useState(false);
   /** 未確認バナー経由（`?unacked=1`）のとき最古未確認週へ */
@@ -338,7 +338,11 @@ export function ResultsPage() {
             )}
           </Card>
 
-          {selected.details.some((d) => isUnknownChildAnswer(d.childAnswer)) && (
+          {selected.details.some(
+            (d) =>
+              isUnknownChildAnswer(d.childAnswer) &&
+              !isSkipAnswerQuest(d.questId, d.gradingMode),
+          ) && (
             <div className="rounded-default border-2 border-warning bg-warning/20 px-4 py-3 text-base text-ink">
               {UNKNOWN_ANSWER_MESSAGE}
             </div>
@@ -416,10 +420,15 @@ export function ResultsPage() {
                 >
                   <p className="font-medium">{title}</p>
                   <p className="text-sm text-muted">
-                    自分の回答: {childAnswerLabel(d.childAnswer)}
+                    自分の回答: {childAnswerLabel(d.childAnswer, "default", d.questId, d.gradingMode)}
                   </p>
                   {isUnknown ? (
-                    <p className="text-sm text-muted">ママの採点: なし（自動減点）</p>
+                    <p className="text-sm text-muted">
+                      ママの採点:{" "}
+                      {isSkipAnswerQuest(d.questId, d.gradingMode)
+                        ? "なし（点0・ストリーク非接触）"
+                        : "なし（自動減点）"}
+                    </p>
                   ) : (
                     <p className="text-sm text-muted">
                       ママの採点: {actualDoneLabel(d.actualDone)}

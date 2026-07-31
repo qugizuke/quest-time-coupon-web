@@ -1,7 +1,10 @@
 /**
  * @file Vite ビルド設定
  * @description React SPA の開発サーバー・本番ビルドを構成する。
- *   JSON 定義を public へコピーし、dist を出力する。
+ *   `adjustments/grade.json`（任意加減点定義）を public へコピーし、dist を出力する。
+ *   `quests/daily.json` はモック API・テスト専用フィクスチャであり、本番経路は
+ *   `GET dailyQuests`（`useDailyQuests`）に一本化したため public へコピーしない
+ *   （Issue #33・静的 `public/quests/daily.json` 配信は廃止）。
  *   本番ホスティングの正は Firebase App Hosting（base は通常 `/`）。
  *   `GITHUB_PAGES=true` 時のみ旧 GitHub Pages 用の base を付与する。
  * @limitation API 接続にはビルド時環境変数 VITE_API_URL / VITE_API_KEY が必要
@@ -19,10 +22,6 @@ function copyDefinitionsPlugin() {
     name: "copy-definitions",
     buildStart() {
       const definitions = [
-        {
-          src: resolve(__dirname, "quests/daily.json"),
-          dest: resolve(__dirname, "public/quests/daily.json"),
-        },
         {
           src: resolve(__dirname, "adjustments/grade.json"),
           dest: resolve(__dirname, "public/adjustments/grade.json"),

@@ -3,7 +3,9 @@ import { resolveQuestTitle } from "./questLabels";
 import type { DailyQuests } from "@/types/api";
 
 const daily: DailyQuests = {
+  date: "2026-07-30",
   version: 2,
+  generationMode: "fixed_seed",
   quests: [
     {
       id: "homework-done-today",
@@ -56,7 +58,9 @@ describe("resolveQuestTitle", () => {
 
   it("旧 ID は現在定義よりも旧質問文を優先して返す", () => {
     const mixedDaily: DailyQuests = {
+      date: "2026-07-30",
       version: 2,
+      generationMode: "fixed_seed",
       quests: [
         {
           id: "brush-teeth-am",

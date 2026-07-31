@@ -242,6 +242,9 @@ export type QuestScoringRole = "standard" | "registrationGate" | "conditional";
 /** 条件分岐ゲートの回答形式 */
 export type QuestGateAnswerMode = "yesNo";
 
+/** クエストマスタの生成方式（契約 §3.16・当面は常に fixed_seed） */
+export type QuestGenerationMode = "fixed_seed" | "draw";
+
 /** 条件分岐メタデータ */
 export interface QuestConditional {
   /** ゲート問の回答形式 */
@@ -270,8 +273,14 @@ export interface QuestDefinition {
   conditional?: QuestConditional;
 }
 
+/** GET dailyQuests（契約 §3.16・Issue #28） */
 export interface DailyQuests {
+  /** リクエストした date（YYYY-MM-DD）をそのまま返す */
+  date: string;
+  /** meta/questPool.schemaVersion */
   version: number;
+  /** 固定10問か将来の抽選か（当面は常に fixed_seed） */
+  generationMode: QuestGenerationMode;
   quests: QuestDefinition[];
 }
 

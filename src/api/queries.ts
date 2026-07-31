@@ -3,6 +3,7 @@
  * @description 契約 action 向けの queryKey / queryFn（Issue #20）。
  */
 import {
+  fetchDailyQuests,
   fetchGrade,
   fetchGradeDates,
   fetchHome,
@@ -21,6 +22,7 @@ export const queryKeys = {
   grade: (date: string) => ["grade", date] as const,
   longVacation: ["longVacation"] as const,
   questExemptions: ["questExemptions"] as const,
+  dailyQuests: (date: string) => ["dailyQuests", date] as const,
 };
 
 export const homeQuery = {
@@ -61,5 +63,17 @@ export function gradeQuery(date: string) {
   return {
     queryKey: queryKeys.grade(date),
     queryFn: () => fetchGrade(date),
+  };
+}
+
+/**
+ * クエストマスタクエリ（契約 §3.16・固定10問のため staleTime は Infinity）
+ * @param {string} date - YYYY-MM-DD
+ */
+export function dailyQuestsQuery(date: string) {
+  return {
+    queryKey: queryKeys.dailyQuests(date),
+    queryFn: () => fetchDailyQuests(date),
+    staleTime: Infinity,
   };
 }

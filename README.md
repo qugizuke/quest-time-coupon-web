@@ -134,14 +134,14 @@ npm run build && npx vite preview
 ├── adjustments/       # 保護者裁量の加減点定義 → ビルド時に public へコピー
 ├── apphosting.yaml    # Firebase App Hosting 設定（runConfig / ビルド時環境変数）
 ├── public/
-├── quests/            # クエスト定義 → ビルド時に public へコピー
+├── quests/            # クエスト定義フィクスチャ（モック API・テスト専用。本番は GET dailyQuests）
 ├── src/               # React フロント
 └── superstatic.json   # dist 配信設定（SPA フォールバック）
 ```
 
 ## 定義ファイルの同期
 
-- `quests/daily.json` はビルド時に `public/quests/daily.json` へ自動コピーされます。
+- `quests/daily.json` はクエストマスタのモック API・テスト用フィクスチャです（Issue #33）。本番のクエスト定義は Cloud Functions の `GET dailyQuests`（`meta/questPool` 正・[api-tobe-f-contract.md §3.16](https://github.com/qugizuke/quest-time-coupon-docs/blob/main/api-tobe-f-contract.md)）から取得するため、**`public/` へはコピーしません**。フィクスチャの内容は本番シード（同契約 §4.1）と一致させてください。
 - `adjustments/grade.json` はビルド時に `public/adjustments/grade.json` へ自動コピーされます。
 - `adjustments/grade.json` の項目を増減した場合は、Functions リポジトリ側の加減点定義も同じ内容に同期してください。Web だけ更新すると、API の検証で未知の `code` として拒否されます。
 

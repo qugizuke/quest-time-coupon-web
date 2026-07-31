@@ -11,13 +11,18 @@ import { queryKeys } from "@/api/queries";
 import { setQuestDraft } from "@/lib/sessionStorage";
 import { todayLocal } from "@/lib/date";
 import { QuestConfirmPage } from "@/pages/QuestConfirmPage";
-import type { DailyQuests, HomeData, QuestDraft } from "@/types/api";
+import type { DailyQuests, HomeData, QuestDefinition, QuestDraft } from "@/types/api";
 import dailyJson from "../../quests/daily.json";
 
-const daily = dailyJson as DailyQuests;
+const daily: DailyQuests = {
+  date: todayLocal(),
+  version: dailyJson.version,
+  generationMode: "fixed_seed",
+  quests: dailyJson.quests as QuestDefinition[],
+};
 
 /**
- * 確認画面用の完全な下書きを作る
+ * 確認画面用の完全な下書きを作る（to-be 10問・条件分岐なし）
  * @returns {QuestDraft} 下書き
  */
 function buildCompleteDraft(): QuestDraft {
@@ -26,12 +31,15 @@ function buildCompleteDraft(): QuestDraft {
     answers: [
       { questId: "bedtime-prep", childAnswer: 1 },
       { questId: "sleep-on-time-yesterday", childAnswer: 1 },
+      { questId: "wake-on-time", childAnswer: 1 },
       { questId: "brush-teeth-gargle-am", childAnswer: 1 },
       { questId: "wash-hands-gargle-after-school", childAnswer: 1 },
+      { questId: "homework-done-today", childAnswer: 1 },
+      { questId: "phone-non-emergency-unused", childAnswer: -1 },
       { questId: "save-water-hot-water", childAnswer: 1 },
+      { questId: "no-repeated-warnings", childAnswer: 1 },
       { questId: "listen-to-mama-before-warning", childAnswer: 1 },
     ],
-    gateAnswers: { "homework-done-today": 0 },
   };
 }
 
@@ -76,7 +84,7 @@ function renderConfirm(home: HomeData): void {
     },
   });
   queryClient.setQueryData(queryKeys.home, home);
-  queryClient.setQueryData(["dailyQuests"], daily);
+  queryClient.setQueryData(queryKeys.dailyQuests(todayLocal()), daily);
   render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={["/quest/confirm"]}>

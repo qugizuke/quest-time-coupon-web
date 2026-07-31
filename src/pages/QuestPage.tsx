@@ -18,6 +18,7 @@ import {
   isBeforeQuestRegistrationStart,
   isPastQuestRegistrationCutoff,
 } from "@/lib/deadline";
+import { HOMEWORK_QUEST_ID, PHONE_QUEST_ID } from "@/lib/questLabels";
 import { ensureQuestSessionStarted, getBedtimeHourDraft } from "@/lib/sessionStorage";
 
 /**
@@ -63,6 +64,50 @@ const BINARY_CHOICES: ChoiceMeta[] = [
   CHOICES[1],
 ];
 
+/** #6 宿題専用3択（テキパキできた／できなかった／宿題がなかった） */
+const HOMEWORK_CHOICES: ChoiceMeta[] = [
+  {
+    value: 1,
+    label: "👍 テキパキできた",
+    idleClass: "border-success bg-success-soft",
+    selectedClass: "border-success bg-success text-white shadow-[var(--shadow-secondary)]",
+  },
+  {
+    value: 0,
+    label: "👎 テキパキできなかった",
+    idleClass: "border-danger bg-danger-soft",
+    selectedClass: "border-danger bg-danger text-white shadow-[var(--shadow-danger)]",
+  },
+  {
+    value: -1,
+    label: "📚 今日は宿題がなかった",
+    idleClass: "border-primary bg-surface-warm",
+    selectedClass: "border-primary bg-primary text-white shadow-[var(--shadow-primary)]",
+  },
+];
+
+/** #7 キッズケータイ専用3択（できた／できなかった／使う必要がなかった・Issue #29） */
+const PHONE_CHOICES: ChoiceMeta[] = [
+  {
+    value: 1,
+    label: "👍 できた",
+    idleClass: "border-success bg-success-soft",
+    selectedClass: "border-success bg-success text-white shadow-[var(--shadow-secondary)]",
+  },
+  {
+    value: 0,
+    label: "👎 できなかった",
+    idleClass: "border-danger bg-danger-soft",
+    selectedClass: "border-danger bg-danger text-white shadow-[var(--shadow-danger)]",
+  },
+  {
+    value: -1,
+    label: "📱 今日はキッズケータイを使う必要がなかった",
+    idleClass: "border-primary bg-surface-warm",
+    selectedClass: "border-primary bg-primary text-white shadow-[var(--shadow-primary)]",
+  },
+];
+
 /** はい / いいえゲート用の選択肢 */
 const YES_NO_CHOICES: ChoiceMeta[] = [
   {
@@ -92,6 +137,8 @@ function answerChoicesFor(
   if (isFollowUpMode) return CHOICES;
   if (quest.conditional?.gateAnswerMode === "yesNo") return YES_NO_CHOICES;
   if (quest.answerMode === "binary") return BINARY_CHOICES;
+  if (quest.id === HOMEWORK_QUEST_ID) return HOMEWORK_CHOICES;
+  if (quest.id === PHONE_QUEST_ID) return PHONE_CHOICES;
   return CHOICES;
 }
 

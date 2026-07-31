@@ -71,6 +71,24 @@ describe("client リクエスト組み立て", () => {
     expect(init?.headers).toMatchObject({ "X-Api-Key": "test-key" });
   });
 
+  it("dailyQuests は date クエリで GET する（Issue #33）", async () => {
+    vi.stubEnv("VITE_API_URL", API_BASE);
+    vi.stubEnv("VITE_MOCK_API", "false");
+    const fetchMock = stubFetch(
+      jsonResponse({
+        ok: true,
+        data: { date: "2026-07-30", version: 1, generationMode: "fixed_seed", quests: [] },
+      }),
+    );
+
+    const { fetchDailyQuests } = await importClient();
+    const data = await fetchDailyQuests("2026-07-30");
+
+    expect(data.quests).toEqual([]);
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toBe(`${API_BASE}?action=dailyQuests&date=2026-07-30`);
+  });
+
   it("POST は application/json と X-Api-Key を同時に送る", async () => {
     vi.stubEnv("VITE_API_URL", API_BASE);
     vi.stubEnv("VITE_API_KEY", "test-key");

@@ -16,7 +16,7 @@ import { StatusBadge, type StatusBadgeTone } from "@/components/ui/StatusBadge";
 import { useDailyQuests } from "@/hooks/useDailyQuests";
 import { formatDateJa, formatDayNumber, formatWeekdayJa, todayLocal } from "@/lib/date";
 import { actualDoneLabel, childAnswerLabel, isUnknownChildAnswer } from "@/lib/labels";
-import { resolveQuestTitle } from "@/lib/questLabels";
+import { isSkipAnswerQuest, resolveQuestTitle } from "@/lib/questLabels";
 import {
   formatWeekLabel,
   getMondayWithOffset,
@@ -338,7 +338,9 @@ export function ResultsPage() {
             )}
           </Card>
 
-          {selected.details.some((d) => isUnknownChildAnswer(d.childAnswer)) && (
+          {selected.details.some(
+            (d) => isUnknownChildAnswer(d.childAnswer) && !isSkipAnswerQuest(d.questId),
+          ) && (
             <div className="rounded-default border-2 border-warning bg-warning/20 px-4 py-3 text-base text-ink">
               {UNKNOWN_ANSWER_MESSAGE}
             </div>
@@ -416,10 +418,15 @@ export function ResultsPage() {
                 >
                   <p className="font-medium">{title}</p>
                   <p className="text-sm text-muted">
-                    自分の回答: {childAnswerLabel(d.childAnswer)}
+                    自分の回答: {childAnswerLabel(d.childAnswer, "default", d.questId)}
                   </p>
                   {isUnknown ? (
-                    <p className="text-sm text-muted">ママの採点: なし（自動減点）</p>
+                    <p className="text-sm text-muted">
+                      ママの採点:{" "}
+                      {isSkipAnswerQuest(d.questId)
+                        ? "なし（点0・ストリーク非接触）"
+                        : "なし（自動減点）"}
+                    </p>
                   ) : (
                     <p className="text-sm text-muted">
                       ママの採点: {actualDoneLabel(d.actualDone)}

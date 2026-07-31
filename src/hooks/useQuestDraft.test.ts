@@ -9,7 +9,9 @@ import { useQuestDraft } from "./useQuestDraft";
 import type { DailyQuests } from "@/types/api";
 
 const daily: DailyQuests = {
+  date: "2026-06-07",
   version: 2,
+  generationMode: "fixed_seed",
   quests: [
     {
       id: "homework-done-today",

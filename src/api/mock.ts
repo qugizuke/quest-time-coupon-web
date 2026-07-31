@@ -3,7 +3,13 @@
  * @description API（Cloud Functions）未接続時の開発用インメモリ API（v5 対応）。
  *   長期休み／免除はローカルフラグ（本接続は Issue F）。
  */
-import type { ChildAnswer, GradeAdjustment, HomeData, WakeUpTime } from "@/types/api";
+import type {
+  ChildAnswer,
+  GradeAdjustment,
+  HomeData,
+  QuestDefinition,
+  WakeUpTime,
+} from "@/types/api";
 import { todayLocal } from "@/lib/date";
 import {
   isBeforeQuestRegistrationStart,
@@ -18,8 +24,17 @@ import {
   calcBedtimePrepFalseClaimPenalty,
   canApplyBedtimePrepRegistrationBonus,
 } from "@/lib/registrationBonus";
-import daily from "../../quests/daily.json";
+import dailyJson from "../../quests/daily.json";
 import adjustmentDefinitions from "../../adjustments/grade.json";
+
+/**
+ * クエスト定義フィクスチャ（to-be 10問・api-tobe-f-contract.md §4.1 準拠）。
+ * JSON モジュールの型推論は string リテラルを広げるため、契約型へ明示キャストする。
+ */
+const daily: { version: number; quests: QuestDefinition[] } = {
+  version: dailyJson.version,
+  quests: dailyJson.quests as QuestDefinition[],
+};
 
 /** @type {string} モック長期休みフラグ（localStorage） */
 const MOCK_VACATION_KEY = "qtc:mock:vacation";
@@ -1399,6 +1414,19 @@ export async function mockApi<T>(
         penaltyOffset,
         displayBalance: Math.max(0, store.balanceMinutes),
         penaltyMinutes: store.penaltyMinutes,
+      } as T;
+    }
+
+    case "dailyQuests": {
+      const date = query?.date;
+      if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        throw new Error("BAD_REQUEST: date が必要です（YYYY-MM-DD）");
+      }
+      return {
+        date,
+        version: daily.version,
+        generationMode: "fixed_seed",
+        quests: daily.quests,
       } as T;
     }
 

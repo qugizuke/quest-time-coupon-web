@@ -20,7 +20,7 @@ import {
   resolveActualDoneForSubmit,
 } from "@/lib/gradeUi";
 import { childAnswerLabel, isUnknownChildAnswer } from "@/lib/labels";
-import { resolveQuestTitle } from "@/lib/questLabels";
+import { isSkipAnswerQuest, resolveQuestTitle } from "@/lib/questLabels";
 import type { AdjustmentDefinition, DailyQuests, GradeAdjustment } from "@/types/api";
 
 const BONUS_MINUTE_OPTIONS = [10, 20, 30, 40, 50, 60];
@@ -387,12 +387,14 @@ export function GradeDatePage() {
                 </p>
               )}
               <p className="mb-3 mt-2 text-sm text-muted">
-                子どもの回答: {childAnswerLabel(item.childAnswer)}
+                子どもの回答: {childAnswerLabel(item.childAnswer, "default", item.questId)}
               </p>
               {isUnknown || isNegative ? (
                 <p className="text-sm text-warning">
                   {isUnknown
-                    ? "採点不要（表示のみ・自動で減点扱い）"
+                    ? isSkipAnswerQuest(item.questId)
+                      ? "採点不要（表示のみ・点0・ストリーク非接触）"
+                      : "採点不要（表示のみ・自動で減点扱い）"
                     : "表示のみ（否定回答・自動未達）"}
                 </p>
               ) : (

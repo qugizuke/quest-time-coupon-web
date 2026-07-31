@@ -9,16 +9,38 @@ import {
   clearParentLocalSettings,
   MOCK_EXEMPT_FLAG_KEY,
 } from "@/lib/parentLocalSettings";
-import type { ChildAnswer, HomeData } from "@/types/api";
+import type { ChildAnswer, DailyQuests, HomeData } from "@/types/api";
 
+/** to-be 10問（api-tobe-f-contract.md §4.1）に一致するサンプル回答（全問肯定） */
 const sampleAnswers: { questId: string; childAnswer: ChildAnswer }[] = [
   { questId: "bedtime-prep", childAnswer: 1 },
   { questId: "sleep-on-time-yesterday", childAnswer: 1 },
+  { questId: "wake-on-time", childAnswer: 1 },
   { questId: "brush-teeth-gargle-am", childAnswer: 1 },
   { questId: "wash-hands-gargle-after-school", childAnswer: 1 },
+  { questId: "homework-done-today", childAnswer: 1 },
+  { questId: "phone-non-emergency-unused", childAnswer: 1 },
   { questId: "save-water-hot-water", childAnswer: 1 },
+  { questId: "no-repeated-warnings", childAnswer: 1 },
   { questId: "listen-to-mama-before-warning", childAnswer: 1 },
 ];
+
+describe("mockApi dailyQuests クエストマスタ（Issue #33）", () => {
+  it("date クエリで10問のクエスト定義を返す", async () => {
+    const data = await mockApi<DailyQuests>("dailyQuests", undefined, {
+      date: "2026-07-30",
+    });
+
+    expect(data.date).toBe("2026-07-30");
+    expect(data.generationMode).toBe("fixed_seed");
+    expect(data.quests).toHaveLength(10);
+    expect(data.quests.map((q) => q.id)).toEqual(sampleAnswers.map((a) => a.questId));
+  });
+
+  it("date が無ければ BAD_REQUEST", async () => {
+    await expect(mockApi("dailyQuests")).rejects.toThrow("BAD_REQUEST");
+  });
+});
 
 describe("mockApi answers 受付タイミング", () => {
   beforeEach(() => {
@@ -156,33 +178,6 @@ describe("mockApi answers 受付タイミング", () => {
     expect(home.bedtimeHour).toBe(21);
   });
 
-  it("回答済みの条件付きクエストは retry で削除できる", async () => {
-    const date = "2026-06-22";
-    vi.setSystemTime(new Date(2026, 5, 22, 20, 30, 0));
-
-    await mockApi("answers", {
-      method: "POST",
-      body: JSON.stringify({
-        date,
-        answers: [
-          ...sampleAnswers,
-          { questId: "homework-done-today", childAnswer: 1 as const },
-        ],
-        bedtimeHour: 21,
-      }),
-    });
-
-    const result = await mockApi<{ submittedAt: string; overwritten: boolean }>("answers", {
-      method: "POST",
-      body: JSON.stringify({
-        date,
-        answers: sampleAnswers,
-        bedtimeHour: 21,
-      }),
-    });
-
-    expect(result.overwritten).toBe(true);
-  });
 });
 
 describe("mockApi registrationSetting 競合ガード", () => {
@@ -374,9 +369,13 @@ describe("mockApi grade 否定・わからない混在", () => {
     const mixedAnswers: { questId: string; childAnswer: ChildAnswer }[] = [
       { questId: "bedtime-prep", childAnswer: 1 },
       { questId: "sleep-on-time-yesterday", childAnswer: 0 },
+      { questId: "wake-on-time", childAnswer: 1 },
       { questId: "brush-teeth-gargle-am", childAnswer: -1 },
       { questId: "wash-hands-gargle-after-school", childAnswer: 1 },
+      { questId: "homework-done-today", childAnswer: 1 },
+      { questId: "phone-non-emergency-unused", childAnswer: 1 },
       { questId: "save-water-hot-water", childAnswer: 1 },
+      { questId: "no-repeated-warnings", childAnswer: 1 },
       { questId: "listen-to-mama-before-warning", childAnswer: 1 },
     ];
 
@@ -391,8 +390,12 @@ describe("mockApi grade 否定・わからない混在", () => {
         date,
         grades: [
           { questId: "bedtime-prep", actualDone: true },
+          { questId: "wake-on-time", actualDone: true },
           { questId: "wash-hands-gargle-after-school", actualDone: true },
+          { questId: "homework-done-today", actualDone: true },
+          { questId: "phone-non-emergency-unused", actualDone: true },
           { questId: "save-water-hot-water", actualDone: false },
+          { questId: "no-repeated-warnings", actualDone: true },
           { questId: "listen-to-mama-before-warning", actualDone: true },
         ],
       }),
@@ -433,9 +436,13 @@ describe("mockApi grade 否定・わからない混在", () => {
           grades: [
             { questId: "bedtime-prep", actualDone: true },
             { questId: "sleep-on-time-yesterday", actualDone: false },
+            { questId: "wake-on-time", actualDone: true },
             { questId: "brush-teeth-gargle-am", actualDone: true },
             { questId: "wash-hands-gargle-after-school", actualDone: true },
+            { questId: "homework-done-today", actualDone: true },
+            { questId: "phone-non-emergency-unused", actualDone: true },
             { questId: "save-water-hot-water", actualDone: true },
+            { questId: "no-repeated-warnings", actualDone: true },
             { questId: "listen-to-mama-before-warning", actualDone: true },
           ],
         }),

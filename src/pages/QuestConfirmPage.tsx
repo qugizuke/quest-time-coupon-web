@@ -225,7 +225,7 @@ export function QuestConfirmPage() {
               >
                 <span className="min-w-0">{item.title}</span>
                 <span className="shrink-0 font-medium text-ink">
-                  {childAnswerLabel(item.childAnswer)}
+                  {childAnswerLabel(item.childAnswer, "default", item.questId)}
                 </span>
               </li>
             ))}

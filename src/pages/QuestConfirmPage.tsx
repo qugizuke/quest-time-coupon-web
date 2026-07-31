@@ -24,6 +24,7 @@ import {
   WAKE_UP_OPTIONS,
 } from "@/lib/homeMode";
 import { childAnswerLabel } from "@/lib/labels";
+import { HOMEWORK_QUEST_ID, PHONE_QUEST_ID } from "@/lib/questLabels";
 import {
   getQuestDraft,
   clearQuestDraft,
@@ -33,6 +34,7 @@ import type {
   BedtimeHour,
   ChildAnswer,
   DailyQuests,
+  GradingMode,
   QuestDefinition,
   QuestDraft,
   WakeUpTime,
@@ -106,6 +108,26 @@ function buildConfirmationItems(
 function wakeUpLabel(time: WakeUpTime): string {
   const [h, m] = time.split(":");
   return `${Number(h)}:${m}`;
+}
+
+/**
+ * 確認画面（live 回答）用の gradingMode。
+ * 専用3択で -1 を選んだ場合は skip として表示する（履歴の旧データ保護とは別文脈）。
+ * @param {string} questId - クエスト ID
+ * @param {ChildAnswer} childAnswer - 子ども回答
+ * @returns {GradingMode | undefined} skip なら "skip"、それ以外は未指定
+ */
+function liveGradingModeForLabel(
+  questId: string,
+  childAnswer: ChildAnswer,
+): GradingMode | undefined {
+  if (
+    childAnswer === -1 &&
+    (questId === HOMEWORK_QUEST_ID || questId === PHONE_QUEST_ID)
+  ) {
+    return "skip";
+  }
+  return undefined;
 }
 
 /**
@@ -225,7 +247,12 @@ export function QuestConfirmPage() {
               >
                 <span className="min-w-0">{item.title}</span>
                 <span className="shrink-0 font-medium text-ink">
-                  {childAnswerLabel(item.childAnswer, "default", item.questId)}
+                  {childAnswerLabel(
+                    item.childAnswer,
+                    "default",
+                    item.questId,
+                    liveGradingModeForLabel(item.questId, item.childAnswer),
+                  )}
                 </span>
               </li>
             ))}

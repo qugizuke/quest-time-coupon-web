@@ -30,8 +30,9 @@ npm run dev
 ```
 
 - 開発 URL: <http://localhost:5173>
-- ローカル: `.env` に `VITE_API_URL` / `VITE_API_KEY` / `VITE_MOCK_API` を設定
-- **本番（App Hosting）**: ビルド時環境変数は `apphosting.yaml` / Firebase Console で設定する（`.env` は使われない）
+- ローカル: `.env`（**gitignore 済み・絶対に commit しない**）に `VITE_API_URL` / `VITE_API_KEY` / `VITE_MOCK_API` を設定
+- **本番（App Hosting）**: `apphosting.yaml` + Cloud Secret Manager（`.env` は使われない）
+- **GitHub Actions secret は不要**（旧 Pages 用。本番経路ではない）
 
 ## API 接続（Cloud Functions）
 
@@ -40,7 +41,7 @@ npm run dev
 | 環境変数 | 役割 |
 | --- | --- |
 | `VITE_API_URL` | `api` 関数のベース URL（末尾スラッシュなし）。例: `https://asia-northeast1-quest-time-coupon-95106.cloudfunctions.net/api` |
-| `VITE_API_KEY` | 共有キー。Functions 側 Secret Manager の `API_SECRET` と同値 |
+| `VITE_API_KEY` | 共有キー。正本は Secret Manager（App Hosting の `VITE_API_KEY` / Functions の `API_SECRET` と同値） |
 | `VITE_MOCK_API` | `"true"` のときのみモック。**未設定・その他の値はすべてモックなし** |
 
 | 呼び出し | URL |
@@ -51,6 +52,7 @@ npm run dev
 - 認証は **ヘッダー `X-Api-Key`**（クエリ `?key=` は Cloud Logging に残るため使わない）
 - POST は `Content-Type: application/json`（Functions は CORS プリフライトに対応）
 - `VITE_*` はビルド時にバンドルへ埋め込まれ、**ブラウザから参照可能**。真に秘匿すべき値は置かない
+- ローカル本接続時は Secret Manager の値を `.env` の `VITE_API_KEY` に入れる（平文を PR / commit / チャットに出さない）
 
 ## デプロイ
 
@@ -84,9 +86,17 @@ PORT=8080 npm start   # http://localhost:8080
 > **Classic Hosting（`firebase hosting`）は使わない。** `firebase.json` / `.firebaserc` の
 > hosting 設定は追加しないこと（App Hosting のビルドパイプラインと二重管理になる）。
 
-#### `VITE_API_KEY`（未設定・要対応）
+#### `VITE_API_KEY`（正本: Secret Manager）
 
-`apphosting.yaml` には平文で書かない。Secret Manager に登録してから `apphosting.yaml` のコメントを外す:
+本番の正本は **Cloud Secret Manager**（project `quest-time-coupon-95106`）。`apphosting.yaml` は平文を書かず `secret: VITE_API_KEY` で参照する（設定済み）。
+
+| 場所 | 扱い |
+| --- | --- |
+| 本番（App Hosting） | Secret Manager → `apphosting.yaml`（ビルド時埋め込み） |
+| ローカル | `.env` の `VITE_API_KEY`（gitignore。Secret Manager と同値） |
+| GitHub Actions secret | **不要**（旧 Pages 用。設定しない・残っていれば削除してよい） |
+
+初回登録・再設定が必要なときだけ:
 
 ```bash
 npx -y firebase-tools@latest apphosting:secrets:set VITE_API_KEY \
@@ -95,11 +105,11 @@ npx -y firebase-tools@latest apphosting:secrets:grantaccess VITE_API_KEY \
   --backend quest-time-coupon-web --project quest-time-coupon-95106
 ```
 
-未設定でも配信は成功するが、API 呼び出しは `UNAUTHORIZED`（401）になる。
+Secret 未設定のままビルドすると配信はできても API は `UNAUTHORIZED`（401）になる。
 
 ### 旧経路: GitHub Pages（廃止）
 
-GitHub Pages（`.github/workflows/pages.yml`）は **廃止済み**（ファイル削除）。本番は Firebase App Hosting のみ。
+GitHub Pages（`.github/workflows/pages.yml`）は **廃止済み**（ファイル削除）。本番は Firebase App Hosting のみ。旧 Pages 用の GitHub secret（`VITE_API_KEY` 等）は不要。
 
 旧 Pages URL（参考・非運用）: <https://qugizuke.github.io/quest-time-coupon-web/>
 

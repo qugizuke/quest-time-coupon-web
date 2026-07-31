@@ -94,13 +94,14 @@ describe("isSkipAnswerQuest", () => {
     expect(isSkipAnswerQuest("homework", "auto_worst")).toBe(false);
   });
 
-  it("gradingMode 未指定時は questId だけで skip にしない", () => {
+  it("gradingMode 未指定時: phone は questId フォールバックで skip、homework は skip にしない", () => {
+    expect(isSkipAnswerQuest(PHONE_QUEST_ID)).toBe(true);
     expect(isSkipAnswerQuest(HOMEWORK_QUEST_ID)).toBe(false);
   });
 });
 
 describe("childAnswerLabel gradingMode", () => {
-  it("skip 以外の -1 は分からない", () => {
+  it("skip 以外の -1 は分からない（homework auto_worst）", () => {
     expect(
       childAnswerLabel(-1, "default", HOMEWORK_QUEST_ID, "auto_worst"),
     ).toBe("分からない");
@@ -110,5 +111,29 @@ describe("childAnswerLabel gradingMode", () => {
     expect(
       childAnswerLabel(-1, "default", HOMEWORK_QUEST_ID, "skip"),
     ).toBe("今日は宿題がなかった");
+  });
+
+  it("gradingMode 未指定の phone -1 は専用スキップ文言", () => {
+    expect(
+      childAnswerLabel(-1, "default", PHONE_QUEST_ID),
+    ).toBe("今日はキッズケータイを使う必要がなかった");
+  });
+
+  it("gradingMode 未指定の homework -1 は分からない（旧保護）", () => {
+    expect(
+      childAnswerLabel(-1, "default", HOMEWORK_QUEST_ID),
+    ).toBe("分からない");
+  });
+
+  it("skip 以外（auto_worst）の phone -1 は分からない", () => {
+    expect(
+      childAnswerLabel(-1, "default", PHONE_QUEST_ID, "auto_worst"),
+    ).toBe("分からない");
+  });
+
+  it("phone skip -1 は専用スキップ文言", () => {
+    expect(
+      childAnswerLabel(-1, "default", PHONE_QUEST_ID, "skip"),
+    ).toBe("今日はキッズケータイを使う必要がなかった");
   });
 });

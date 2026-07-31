@@ -14,7 +14,12 @@ import { LoadingScreen } from "@/components/layout/LoadingScreen";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { buildReopenUntilOptions } from "@/lib/registrationReopen";
+import {
+  DEFAULT_REOPEN_DURATION_MINUTES,
+  buildEndsAtFromDuration,
+  buildReopenDurationOptions,
+  parseReopenDurationMinutes,
+} from "@/lib/registrationReopen";
 import type { TodayRegistrationStatus } from "@/types/api";
 
 /** 登録状況ラベル */
@@ -61,7 +66,9 @@ export function ParentHomePage() {
     isLoading,
     error,
   } = useQuery(parentHomeQuery);
-  const [reopenUntil, setReopenUntil] = useState("");
+  const [reopenDuration, setReopenDuration] = useState(
+    String(DEFAULT_REOPEN_DURATION_MINUTES),
+  );
   const [reopenOpen, setReopenOpen] = useState(false);
 
   const ungradedCount = parentHome?.ungradedCount ?? 0;
@@ -74,10 +81,7 @@ export function ParentHomePage() {
 
   const canReopen = parentHome?.registrationReopen.available === true;
 
-  const reopenOptions = useMemo(() => {
-    if (!targetDate) return [];
-    return buildReopenUntilOptions({ dateYmd: targetDate });
-  }, [targetDate, reopenOpen]);
+  const reopenOptions = useMemo(() => buildReopenDurationOptions(), []);
 
   const vacationPeriod =
     parentHome?.longVacation.startDate && parentHome?.longVacation.endDate
@@ -91,10 +95,24 @@ export function ParentHomePage() {
     parentHome?.isLongVacation === true;
 
   const reopenMutation = useMutation({
-    mutationFn: (endsAt: string) =>
-      postRegistrationReopen({ date: targetDate, endsAt }),
+    mutationFn: (durationValue: string) => {
+      const minutes = parseReopenDurationMinutes(durationValue);
+      if (minutes === null) {
+        throw new Error(
+          `ParentHomePage.reopenMutation: 不正なタイマー値です durationValue=${durationValue}`,
+        );
+      }
+      if (!targetDate) {
+        throw new Error(
+          "ParentHomePage.reopenMutation: 対象日が未設定です targetDate が空です",
+        );
+      }
+      const endsAt = buildEndsAtFromDuration(minutes);
+      return postRegistrationReopen({ date: targetDate, endsAt });
+    },
     onSuccess: () => {
       setReopenOpen(false);
+      setReopenDuration(String(DEFAULT_REOPEN_DURATION_MINUTES));
       void queryClient.invalidateQueries({ queryKey: queryKeys.parentHome });
       void queryClient.invalidateQueries({ queryKey: queryKeys.home });
       void queryClient.invalidateQueries({ queryKey: queryKeys.gradeDates });
@@ -189,17 +207,14 @@ export function ParentHomePage() {
             <Card data-testid="registration-reopen-card">
               <h2 className="mb-2 font-bold text-ink">登録受付を再開</h2>
               <p className="mb-3 text-sm text-muted">
-                当日1回のみ。終了時刻を選んで子どもが登録できるようにします。
+                当日1回のみ。いまからの時間を選んで子どもが登録できるようにします。
               </p>
               {!reopenOpen ? (
                 <Button
                   fullWidth
                   onClick={() => {
-                    const options = buildReopenUntilOptions({
-                      dateYmd: targetDate,
-                    });
                     setReopenOpen(true);
-                    setReopenUntil(options[0]?.value ?? "");
+                    setReopenDuration(String(DEFAULT_REOPEN_DURATION_MINUTES));
                   }}
                 >
                   登録受付を再開
@@ -207,22 +222,18 @@ export function ParentHomePage() {
               ) : (
                 <div className="flex flex-col gap-3">
                   <label className="flex flex-col gap-1 text-sm">
-                    <span>終了時刻</span>
+                    <span>再開する時間</span>
                     <select
                       className="rounded-default border-[3px] border-border bg-surface px-3 py-2 text-ink"
-                      value={reopenUntil}
-                      onChange={(e) => setReopenUntil(e.target.value)}
-                      data-testid="reopen-ends-at-select"
+                      value={reopenDuration}
+                      onChange={(e) => setReopenDuration(e.target.value)}
+                      data-testid="reopen-duration-select"
                     >
-                      {reopenOptions.length === 0 ? (
-                        <option value="">候補がありません</option>
-                      ) : (
-                        reopenOptions.map((opt) => (
-                          <option key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </option>
-                        ))
-                      )}
+                      {reopenOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
                     </select>
                   </label>
                   {reopenMutation.error && (
@@ -235,8 +246,11 @@ export function ParentHomePage() {
                   <div className="flex gap-2">
                     <Button
                       className="flex-1"
-                      disabled={!reopenUntil || reopenMutation.isPending}
-                      onClick={() => reopenMutation.mutate(reopenUntil)}
+                      disabled={
+                        parseReopenDurationMinutes(reopenDuration) === null ||
+                        reopenMutation.isPending
+                      }
+                      onClick={() => reopenMutation.mutate(reopenDuration)}
                     >
                       再開する
                     </Button>

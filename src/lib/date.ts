@@ -18,6 +18,8 @@ export interface JstClockParts {
   hour: number;
   /** @type {number} 分（0–59） */
   minute: number;
+  /** @type {number} 秒（0–59） */
+  second: number;
 }
 
 /**
@@ -50,6 +52,7 @@ export function getJstClockParts(date: Date = new Date()): JstClockParts {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
+    second: "2-digit",
     hour12: false,
   });
   const parts = formatter.formatToParts(date);
@@ -62,6 +65,7 @@ export function getJstClockParts(date: Date = new Date()): JstClockParts {
     dateYmd: `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
     hour: read("hour") % 24,
     minute: read("minute"),
+    second: read("second"),
   };
 }
 

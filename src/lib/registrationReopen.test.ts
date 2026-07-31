@@ -1,11 +1,14 @@
 /**
  * @file registrationReopen ユーティリティテスト
- * @description endsAt が契約の `+09:00` 形式であること・30分刻みを検証する。
+ * @description タイマー候補と endsAt（+09:00）組み立てを検証する。
  */
 import { describe, expect, it } from "vitest";
 import {
-  buildReopenUntilOptions,
+  DEFAULT_REOPEN_DURATION_MINUTES,
+  buildEndsAtFromDuration,
+  buildReopenDurationOptions,
   formatEndsAtJst,
+  parseReopenDurationMinutes,
 } from "@/lib/registrationReopen";
 
 describe("formatEndsAtJst", () => {
@@ -13,58 +16,60 @@ describe("formatEndsAtJst", () => {
     expect(formatEndsAtJst("2026-07-30", 18, 30)).toBe(
       "2026-07-30T18:30:00+09:00",
     );
+    expect(formatEndsAtJst("2026-07-30", 18, 30, 45)).toBe(
+      "2026-07-30T18:30:45+09:00",
+    );
   });
 });
 
-describe("buildReopenUntilOptions", () => {
-  it("value はすべて +09:00 固定で Z を使わない", () => {
-    const options = buildReopenUntilOptions({
-      now: new Date(2026, 6, 30, 20, 5, 0),
-      dateYmd: "2026-07-30",
-    });
-    expect(options.length).toBeGreaterThan(0);
-    for (const opt of options) {
-      expect(opt.value).toMatch(
-        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00\+09:00$/,
-      );
-      expect(opt.value).not.toContain("Z");
-      expect(opt.value.startsWith("2026-07-30T")).toBe(true);
-    }
-    expect(options[0]?.value).toBe("2026-07-30T20:30:00+09:00");
-    expect(options.at(-1)?.value).toBe("2026-07-30T23:30:00+09:00");
+describe("buildReopenDurationOptions", () => {
+  it("30分刻み・最大2時間の4候補を返す", () => {
+    expect(buildReopenDurationOptions()).toEqual([
+      { value: "30", label: "30分", minutes: 30 },
+      { value: "60", label: "1時間", minutes: 60 },
+      { value: "90", label: "1時間30分", minutes: 90 },
+      { value: "120", label: "2時間", minutes: 120 },
+    ]);
   });
 
-  it("23:30 以降は候補なし", () => {
-    const options = buildReopenUntilOptions({
-      now: new Date(2026, 6, 30, 23, 30, 0),
-      dateYmd: "2026-07-30",
-    });
-    expect(options).toEqual([]);
+  it("初期選択は1時間", () => {
+    expect(DEFAULT_REOPEN_DURATION_MINUTES).toBe(60);
+  });
+});
+
+describe("parseReopenDurationMinutes", () => {
+  it("有効な分数だけ通す", () => {
+    expect(parseReopenDurationMinutes("30")).toBe(30);
+    expect(parseReopenDurationMinutes("60")).toBe(60);
+    expect(parseReopenDurationMinutes("90")).toBe(90);
+    expect(parseReopenDurationMinutes("120")).toBe(120);
+    expect(parseReopenDurationMinutes("45")).toBeNull();
+    expect(parseReopenDurationMinutes("")).toBeNull();
+  });
+});
+
+describe("buildEndsAtFromDuration", () => {
+  it("いまから1時間後の endsAt を +09:00 で返す", () => {
+    const endsAt = buildEndsAtFromDuration(
+      60,
+      new Date("2026-07-30T22:00:00+09:00"),
+    );
+    expect(endsAt).toBe("2026-07-30T23:00:00+09:00");
   });
 
-  it("dateYmd が JST 当日なら UTC 環境でも候補を返す", () => {
-    const options = buildReopenUntilOptions({
-      now: new Date("2026-07-31T15:00:00Z"),
-      dateYmd: "2026-08-01",
-    });
-    expect(options.length).toBeGreaterThan(0);
-    expect(options[0]?.label).toBe("00:30");
-    expect(options[0]?.value).toBe("2026-08-01T00:30:00+09:00");
+  it("日付またぎを許容する", () => {
+    const endsAt = buildEndsAtFromDuration(
+      90,
+      new Date("2026-07-30T23:00:00+09:00"),
+    );
+    expect(endsAt).toBe("2026-07-31T00:30:00+09:00");
   });
 
-  it("dateYmd が JST 当日と一致しないと候補なし", () => {
-    const options = buildReopenUntilOptions({
-      now: new Date("2026-07-31T15:00:00Z"),
-      dateYmd: "2026-07-31",
-    });
-    expect(options).toEqual([]);
-  });
-
-  it("ブラウザローカル日付と JST 当日がずれても parentHome.date 基準で候補を返す", () => {
-    const options = buildReopenUntilOptions({
-      now: new Date("2026-07-31T22:00:00+09:00"),
-      dateYmd: "2026-07-31",
-    });
-    expect(options.map((opt) => opt.label)).toEqual(["22:30", "23:00", "23:30"]);
+  it("2時間後も正しい", () => {
+    const endsAt = buildEndsAtFromDuration(
+      120,
+      new Date("2026-07-30T20:15:30+09:00"),
+    );
+    expect(endsAt).toBe("2026-07-30T22:15:30+09:00");
   });
 });

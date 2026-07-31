@@ -5,7 +5,7 @@
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { queryKeys } from "@/api/queries";
 import { ParentHomePage } from "@/pages/ParentHomePage";
@@ -108,36 +108,31 @@ describe("ParentHomePage parentHome", () => {
     expect(screen.getByText("締切超過")).toBeTruthy();
   });
 
-  it("再開フォーム展開時に終了時刻の選択肢を表示する", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-07-30T22:00:00+09:00"));
-    try {
-      renderParentPages({
-        path: "/parent",
-        parentHome: buildParentHome({
-          date: "2026-07-30",
-          todayRegistrationStatus: "closed_unregistered",
-          registrationReopen: {
-            available: true,
-            used: false,
-            endsAt: null,
-            setAt: null,
-            isOpen: false,
-          },
-        }),
-      });
+  it("再開フォーム展開時にタイマー候補を表示し初期値は1時間", () => {
+    renderParentPages({
+      path: "/parent",
+      parentHome: buildParentHome({
+        date: "2026-07-30",
+        todayRegistrationStatus: "closed_unregistered",
+        registrationReopen: {
+          available: true,
+          used: false,
+          endsAt: null,
+          setAt: null,
+          isOpen: false,
+        },
+      }),
+    });
 
-      fireEvent.click(screen.getByRole("button", { name: "登録受付を再開" }));
+    fireEvent.click(screen.getByRole("button", { name: "登録受付を再開" }));
 
-      const select = screen.getByTestId(
-        "reopen-ends-at-select",
-      ) as HTMLSelectElement;
-      const labels = [...select.options].map((option) => option.textContent);
-      expect(labels).toEqual(["22:30", "23:00", "23:30"]);
-      expect(select.value).toBe("2026-07-30T22:30:00+09:00");
-    } finally {
-      vi.useRealTimers();
-    }
+    const select = screen.getByTestId(
+      "reopen-duration-select",
+    ) as HTMLSelectElement;
+    const labels = [...select.options].map((option) => option.textContent);
+    expect(labels).toEqual(["30分", "1時間", "1時間30分", "2時間"]);
+    expect(select.value).toBe("60");
+    expect(screen.getByText("再開する時間")).toBeTruthy();
   });
 
   it("used 済みなら再開 CTA を出さない", () => {

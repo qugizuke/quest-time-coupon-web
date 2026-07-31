@@ -149,7 +149,7 @@ export function GradeDatePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: gradeData, isLoading } = useQuery(gradeQuery(date));
-  const { data: daily } = useDailyQuests();
+  const { data: daily } = useDailyQuests(date);
   const {
     data: adjustmentDefinitions,
     isLoading: isAdjustmentDefinitionsLoading,

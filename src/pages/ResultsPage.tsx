@@ -125,10 +125,10 @@ export function ResultsPage() {
   const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const today = todayLocal();
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const { data, isLoading, error } = useQuery(resultsQuery);
   const { data: homeData } = useQuery(homeQuery);
-  const { data: daily } = useDailyQuests();
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const { data: daily } = useDailyQuests(selectedDate ?? today);
   const [weekOffset, setWeekOffset] = useState(0);
   const [weekInitialized, setWeekInitialized] = useState(false);
   /** 未確認バナー経由（`?unacked=1`）のとき最古未確認週へ */

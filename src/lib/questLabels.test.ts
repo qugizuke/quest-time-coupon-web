@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { resolveQuestTitle } from "./questLabels";
+import {
+  HOMEWORK_QUEST_ID,
+  PHONE_QUEST_ID,
+  isSkipAnswerQuest,
+  resolveQuestTitle,
+} from "./questLabels";
+import { childAnswerLabel } from "./labels";
 import type { DailyQuests } from "@/types/api";
 
 const daily: DailyQuests = {
@@ -73,5 +79,36 @@ describe("resolveQuestTitle", () => {
     expect(resolveQuestTitle(mixedDaily, "brush-teeth-am")).toBe(
       "朝の歯みがきをした",
     );
+  });
+});
+
+
+describe("isSkipAnswerQuest", () => {
+  it("gradingMode=skip のときのみスキップ扱い", () => {
+    expect(isSkipAnswerQuest(HOMEWORK_QUEST_ID, "skip")).toBe(true);
+    expect(isSkipAnswerQuest(PHONE_QUEST_ID, "skip")).toBe(true);
+  });
+
+  it("旧履歴の homework -1（auto_worst）はスキップ扱いにしない", () => {
+    expect(isSkipAnswerQuest(HOMEWORK_QUEST_ID, "auto_worst")).toBe(false);
+    expect(isSkipAnswerQuest("homework", "auto_worst")).toBe(false);
+  });
+
+  it("gradingMode 未指定時は questId だけで skip にしない", () => {
+    expect(isSkipAnswerQuest(HOMEWORK_QUEST_ID)).toBe(false);
+  });
+});
+
+describe("childAnswerLabel gradingMode", () => {
+  it("skip 以外の -1 は分からない", () => {
+    expect(
+      childAnswerLabel(-1, "default", HOMEWORK_QUEST_ID, "auto_worst"),
+    ).toBe("分からない");
+  });
+
+  it("skip の -1 は宿題なし文言", () => {
+    expect(
+      childAnswerLabel(-1, "default", HOMEWORK_QUEST_ID, "skip"),
+    ).toBe("今日は宿題がなかった");
   });
 });

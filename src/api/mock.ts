@@ -544,6 +544,32 @@ function isMockMismatch(childAnswer: ChildAnswer, actualDone: boolean): boolean 
  * @param {string} date - 対象日
  * @param {{ questId: string; actualDone: boolean }[] | undefined} grades - 採点 payload
  */
+
+/**
+ * モック用: 子ども回答から採点モードを決める（契約 §3.6・812 行付近）
+ * @param {string} questId - クエスト ID
+ * @param {ChildAnswer} childAnswer - 子ども回答
+ * @returns {import("@/types/api").GradingMode} 採点モード
+ */
+function mockGradingModeForChildAnswer(
+  questId: string,
+  childAnswer: ChildAnswer,
+): import("@/types/api").GradingMode {
+  if (childAnswer === -1) {
+    if (
+      questId === "homework-done-today" ||
+      questId === "phone-non-emergency-unused"
+    ) {
+      return "skip";
+    }
+    return "auto_worst";
+  }
+  if (childAnswer === 0) {
+    return "auto_fail";
+  }
+  return "parent_choice";
+}
+
 function validateMockGrades(
   date: string,
   grades: { questId: string; actualDone: boolean }[] | undefined,
@@ -1108,7 +1134,7 @@ export async function mockApi<T>(
         questId,
         childAnswer,
         actualDone: store.grades.get(date)?.get(questId) ?? null,
-        gradingMode: "parent_choice" as const,
+        gradingMode: mockGradingModeForChildAnswer(questId, childAnswer),
         autoOutcome: null,
       }));
       const withinBonusWindow = !isPastQuestBonusDeadline(
@@ -1308,6 +1334,7 @@ export async function mockApi<T>(
               actualDone,
               finalPoints: 0,
               mismatch: isMockMismatch(childAnswer, actualDone),
+              gradingMode: mockGradingModeForChildAnswer(questId, childAnswer),
             };
           });
         const acknowledged = store.acknowledgedDates.has(date);

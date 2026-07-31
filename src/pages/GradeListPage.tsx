@@ -1,51 +1,42 @@
 /**
  * @file GradeListPage
- * @description 保護者向け採点日一覧。
+ * @description 保護者採点日一覧（月曜始まり週ナビ）。status / isExempt は gradeDates API を正とする。
  */
 import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { gradeDatesQuery } from "@/api/queries";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { ParentPageFrame } from "@/components/layout/ParentPageFrame";
 import { LoadingScreen } from "@/components/layout/LoadingScreen";
 import { Button } from "@/components/ui/Button";
-import { formatDateJa } from "@/lib/date";
+import { StatusBadge, type StatusBadgeTone } from "@/components/ui/StatusBadge";
+import { formatDateJa, todayLocal } from "@/lib/date";
+import {
+  formatWeekLabel,
+  getMondayWithOffset,
+  getWeekDates,
+} from "@/lib/week";
 
-const STATUS_LABEL = {
+/** 一覧ステータス */
+type GradeListStatus = "ungraded" | "graded" | "unanswered" | "exempt";
+
+const STATUS_LABEL: Record<GradeListStatus, string> = {
   ungraded: "未採点",
   graded: "採点済",
   unanswered: "未回答",
-} as const;
+  exempt: "免除",
+};
 
 /**
- * 採点日一覧の右側ラベルを返す
- * @param {object} item - 採点日1件
- * @returns {{ text: string; className: string }} 表示文言と色
+ * ステータスの色を返す
+ * @param {GradeListStatus} status - ステータス
+ * @returns {StatusBadgeTone} トーン
  */
-function gradeDateRightLabel(item: {
-  status: keyof typeof STATUS_LABEL;
-  ungradedCount: number;
-  totalPoints: number | null;
-}): { text: string; className: string } {
-  if (item.status === "graded") {
-    const points = item.totalPoints ?? 0;
-    return {
-      text: `${points >= 0 ? "+" : ""}${points}分`,
-      className: points >= 0 ? "text-success" : "text-danger",
-    };
-  }
-  if (item.status === "ungraded") {
-    return {
-      text:
-        item.ungradedCount > 0
-          ? `${STATUS_LABEL.ungraded}（${item.ungradedCount}）`
-          : `${STATUS_LABEL.ungraded}（要確定）`,
-      className: "font-medium text-primary",
-    };
-  }
-  return {
-    text: STATUS_LABEL[item.status],
-    className: "text-sm font-medium text-muted",
-  };
+function statusTone(status: GradeListStatus): StatusBadgeTone {
+  if (status === "ungraded") return "warning";
+  if (status === "graded") return "success";
+  if (status === "exempt") return "info";
+  return "muted";
 }
 
 /**
@@ -54,7 +45,37 @@ function gradeDateRightLabel(item: {
  */
 export function GradeListPage() {
   const navigate = useNavigate();
+  const today = todayLocal();
+  const [weekOffset, setWeekOffset] = useState(0);
   const { data, isLoading, error } = useQuery(gradeDatesQuery);
+
+  const monday = useMemo(
+    () => getMondayWithOffset(today, weekOffset),
+    [today, weekOffset],
+  );
+  const weekDates = useMemo(() => getWeekDates(monday), [monday]);
+
+  const byDate = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        status: GradeListStatus;
+        ungradedCount: number;
+        totalPoints: number | null;
+      }
+    >();
+    for (const item of data?.dates ?? []) {
+      // gradeDates API を正とする（localStorage の免除は参照しない）
+      const status: GradeListStatus =
+        item.isExempt || item.status === "exempt" ? "exempt" : item.status;
+      map.set(item.date, {
+        status,
+        ungradedCount: item.ungradedCount,
+        totalPoints: item.totalPoints,
+      });
+    }
+    return map;
+  }, [data]);
 
   if (isLoading) {
     return <LoadingScreen />;
@@ -62,49 +83,81 @@ export function GradeListPage() {
 
   if (error) {
     return (
-      <AppLayout>
-        <p className="text-danger">{error instanceof Error ? error.message : "エラー"}</p>
-      </AppLayout>
+      <ParentPageFrame>
+        <p className="text-danger">
+          {error instanceof Error ? error.message : "エラー"}
+        </p>
+      </ParentPageFrame>
     );
   }
 
-  const dates = data?.dates ?? [];
-
   return (
-    <AppLayout>
-      <h1 className="mb-4 text-app-lg font-bold">採点日一覧</h1>
-      {dates.length === 0 ? (
-        <p className="text-muted">
-          まだ回答データがありません。子どもがクエストに回答すると、ここに採点対象の日付が表示されます。
+    <ParentPageFrame>
+      <h1 className="mb-4 text-app-lg font-bold text-ink">採点日一覧</h1>
+
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <Button
+          variant="secondary"
+          className="px-3 text-base"
+          onClick={() => setWeekOffset((v) => v - 1)}
+        >
+          ← 前週
+        </Button>
+        <p className="text-center text-sm font-medium text-ink">
+          {formatWeekLabel(monday)}
         </p>
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {dates.map((d) => {
-            const clickable = d.status === "ungraded";
-            const right = gradeDateRightLabel(d);
-            return (
-              <li key={d.date}>
-                <button
-                  type="button"
-                  disabled={!clickable}
-                  onClick={() => clickable && navigate(`/grade/${d.date}`)}
-                  className={`flex w-full items-center justify-between rounded-default px-4 py-3 text-left shadow-sm ${
-                    clickable
-                      ? "bg-white hover:bg-primary/5"
-                      : "cursor-default bg-gray-100 text-muted"
-                  }`}
-                >
-                  <span>{formatDateJa(d.date)}</span>
-                  <span className={`text-sm ${right.className}`}>{right.text}</span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      <Button className="mt-6" variant="secondary" fullWidth onClick={() => navigate("/")}>
-        ホームへ
+        <Button
+          variant="secondary"
+          className="px-3 text-base"
+          onClick={() => setWeekOffset((v) => v + 1)}
+        >
+          翌週 →
+        </Button>
+      </div>
+
+      <ul className="flex flex-col gap-2">
+        {weekDates.map((date) => {
+          const api = byDate.get(date);
+          const status: GradeListStatus = api?.status ?? "unanswered";
+          const clickable = status === "ungraded" || status === "graded";
+          const points = api?.totalPoints;
+          const rightLabel =
+            status === "graded" && points != null
+              ? `${points >= 0 ? "+" : ""}${points}分`
+              : status === "ungraded" && (api?.ungradedCount ?? 0) > 0
+                ? `${STATUS_LABEL.ungraded}`
+                : STATUS_LABEL[status];
+
+          return (
+            <li key={date}>
+              <button
+                type="button"
+                disabled={!clickable}
+                onClick={() => {
+                  if (clickable) navigate(`/parent/grades/${date}`);
+                }}
+                className={`flex w-full items-center justify-between rounded-default border-[3px] border-border px-4 py-3 text-left shadow-[var(--shadow-card)] ${
+                  clickable
+                    ? "bg-surface hover:bg-surface-soft"
+                    : "cursor-default bg-muted-soft text-muted"
+                }`}
+              >
+                <span className="font-medium text-ink">{formatDateJa(date)}</span>
+                <StatusBadge tone={statusTone(status)}>{rightLabel}</StatusBadge>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+
+      <Button
+        className="mt-6"
+        variant="secondary"
+        fullWidth
+        onClick={() => navigate("/parent")}
+      >
+        保護者ホームへ
       </Button>
-    </AppLayout>
+    </ParentPageFrame>
   );
 }

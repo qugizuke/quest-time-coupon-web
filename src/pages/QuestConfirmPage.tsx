@@ -1,25 +1,42 @@
 /**
  * @file QuestConfirmPage
- * @description 回答一覧の最終確認と登録。
+ * @description 回答一覧の最終確認と登録。条件付きで翌日起床時刻を設定する（Issue #16）。
+ *   Figma kid-quest-confirm の横向き2カラム（左回答／右 CTA）に寄せる（Issue #19）。
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { postAnswers } from "@/api/client";
 import { homeQuery, queryKeys } from "@/api/queries";
-import { AppLayout } from "@/components/layout/AppLayout";
-import { LoadingScreen } from "@/components/layout/LoadingScreen";
+import { ChildPageFrame } from "@/components/layout/ChildPageFrame";
 import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 import { useDailyQuests } from "@/hooks/useDailyQuests";
 import { todayLocal } from "@/lib/date";
 import {
   isBeforeQuestRegistrationStart,
   isPastQuestRegistrationCutoff,
+  isWeekendEve,
 } from "@/lib/deadline";
+import {
+  DEFAULT_WAKE_UP,
+  shouldShowWakeUpSetting,
+  WAKE_UP_OPTIONS,
+} from "@/lib/homeMode";
 import { childAnswerLabel } from "@/lib/labels";
-import { getQuestDraft, clearQuestDraft, getBedtimeHourDraft } from "@/lib/sessionStorage";
-import { isWeekendEve } from "@/lib/deadline";
-import type { BedtimeHour, ChildAnswer, DailyQuests, QuestDefinition, QuestDraft } from "@/types/api";
+import {
+  getQuestDraft,
+  clearQuestDraft,
+  getBedtimeHourDraft,
+} from "@/lib/sessionStorage";
+import type {
+  BedtimeHour,
+  ChildAnswer,
+  DailyQuests,
+  QuestDefinition,
+  QuestDraft,
+  WakeUpTime,
+} from "@/types/api";
 
 /**
  * API に送信する回答を下書きから構築する
@@ -82,6 +99,16 @@ function buildConfirmationItems(
 }
 
 /**
+ * 起床ラベルを表示用に変換する
+ * @param {WakeUpTime} time - 起床時刻
+ * @returns {string} 例: 8:00
+ */
+function wakeUpLabel(time: WakeUpTime): string {
+  const [h, m] = time.split(":");
+  return `${Number(h)}:${m}`;
+}
+
+/**
  * 最終確認画面
  * @returns {JSX.Element} ページ
  */
@@ -92,6 +119,7 @@ export function QuestConfirmPage() {
   const { data: daily } = useDailyQuests();
   const { data: homeData, isLoading: isHomeLoading } = useQuery(homeQuery);
   const draft = getQuestDraft(date);
+  const [wakeUpTime, setWakeUpTime] = useState<WakeUpTime>(DEFAULT_WAKE_UP);
   let confirmationItems:
     | { questId: string; title: string; childAnswer: ChildAnswer }[]
     | null = null;
@@ -108,9 +136,15 @@ export function QuestConfirmPage() {
     }
   }
 
+  const showWakeUp =
+    !!homeData &&
+    !homeData.isExemptDay &&
+    shouldShowWakeUpSetting(date, homeData.isVacationMode);
+  const vacationMode = homeData?.isVacationMode === true;
+
   useEffect(() => {
     if (!homeData) return;
-    if (homeData.questAction === "none") {
+    if (homeData.isExemptDay || homeData.questAction === "none") {
       navigate("/", { replace: true });
       return;
     }
@@ -131,10 +165,17 @@ export function QuestConfirmPage() {
         throw new Error("QuestConfirmPage: 下書きまたは定義がありません");
       }
       const answers = buildSubmittableAnswers(daily, draft);
-      const bedtimeHour: BedtimeHour | undefined = isWeekendEve(date)
+      const canSendBedtime =
+        isWeekendEve(date) || !!homeData?.isVacationMode;
+      const bedtimeHour: BedtimeHour | undefined = canSendBedtime
         ? (getBedtimeHourDraft(date) ?? homeData?.bedtimeHour)
         : undefined;
-      return postAnswers({ date, answers, bedtimeHour });
+      return postAnswers({
+        date,
+        answers,
+        bedtimeHour,
+        wakePromise: showWakeUp ? { wakeTime: wakeUpTime } : undefined,
+      });
     },
     onSuccess: () => {
       clearQuestDraft(date);
@@ -144,53 +185,105 @@ export function QuestConfirmPage() {
   });
 
   if (isHomeLoading) {
-    return <LoadingScreen />;
+    return (
+      <ChildPageFrame vacationMode={vacationMode}>
+        <div className="flex flex-1 items-center justify-center">
+          <p className="text-muted">読み込み中…</p>
+        </div>
+      </ChildPageFrame>
+    );
   }
 
   if (!draft || !daily || !confirmationItems || draftError) {
     return (
-      <AppLayout>
+      <ChildPageFrame vacationMode={vacationMode}>
         <p className="text-danger">
           {draftError ?? "下書きが見つかりません。"}
         </p>
         <Button className="mt-4" onClick={() => navigate("/quest")}>
           クエストに戻る
         </Button>
-      </AppLayout>
+      </ChildPageFrame>
     );
   }
 
   return (
-    <AppLayout>
-      <h1 className="mb-4 text-app-lg font-bold">
-        最後の確認
-      </h1>
-      <ul className="mb-6 flex flex-col gap-2">
-        {confirmationItems.map((item) => (
-          <li
-            key={item.questId}
-            className="flex justify-between rounded-default bg-white px-4 py-3 shadow-sm"
-          >
-            <span>{item.title}</span>
-            <span className="font-medium">
-              {childAnswerLabel(item.childAnswer)}
-            </span>
-          </li>
-        ))}
-      </ul>
-      {mutation.error && (
-        <p className="mb-4 text-danger">
-          {mutation.error instanceof Error ? mutation.error.message : "登録失敗"}
-        </p>
-      )}
-      <div className="flex flex-col gap-3">
-        <Button fullWidth onClick={() => mutation.mutate()} disabled={mutation.isPending}>
-          登録する
-        </Button>
-        <Button fullWidth variant="secondary" onClick={() => navigate("/quest")}>
-          修正する
-        </Button>
+    <ChildPageFrame vacationMode={vacationMode}>
+      <h1 className="mb-4 text-app-lg font-bold">最後の確認</h1>
+
+      {/*
+        Figma kid-quest-confirm: 左に回答一覧、右に起床＋登録／修正 CTA。
+        縦・狭幅のみ1列。登録 CTA は緑（success）。
+      */}
+      <div className="grid gap-4 md:grid-cols-[minmax(0,1.5fr)_minmax(240px,0.9fr)] md:items-start">
+        <Card className="border-4 p-4">
+          <ul className="flex flex-col gap-2">
+            {confirmationItems.map((item) => (
+              <li
+                key={item.questId}
+                className="flex justify-between gap-3 rounded-default border border-border-soft bg-surface-soft px-4 py-3"
+              >
+                <span className="min-w-0">{item.title}</span>
+                <span className="shrink-0 font-medium text-ink">
+                  {childAnswerLabel(item.childAnswer)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+
+        <div className="flex flex-col gap-4">
+          {showWakeUp && (
+            <Card data-testid="wake-up-section">
+              <h2 className="mb-3 text-base font-bold">明日の起きる時間</h2>
+              <div className="flex flex-wrap gap-2">
+                {WAKE_UP_OPTIONS.map((option) => {
+                  const selected = wakeUpTime === option;
+                  return (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => setWakeUpTime(option)}
+                      className={[
+                        "min-h-touch rounded-default px-4 text-base",
+                        selected
+                          ? "border-[3px] border-info bg-info-soft text-info"
+                          : "border-2 border-border bg-surface text-ink",
+                      ].join(" ")}
+                    >
+                      {wakeUpLabel(option)}
+                    </button>
+                  );
+                })}
+              </div>
+            </Card>
+          )}
+
+          {mutation.error && (
+            <p className="text-danger">
+              {mutation.error instanceof Error ? mutation.error.message : "登録失敗"}
+            </p>
+          )}
+          <div className="flex flex-col gap-3">
+            <Button
+              fullWidth
+              variant="success"
+              onClick={() => mutation.mutate()}
+              disabled={mutation.isPending}
+            >
+              登録する
+            </Button>
+            <Button
+              fullWidth
+              variant="secondary"
+              onClick={() => navigate("/quest")}
+            >
+              修正する
+            </Button>
+          </div>
+        </div>
       </div>
-    </AppLayout>
+    </ChildPageFrame>
   );
 }
+

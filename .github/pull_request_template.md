@@ -14,4 +14,4 @@
 ## Deploy note
 
 - 本番反映は `develop` 検証後に `main` へマージ → **Firebase App Hosting 自動デプロイ**
-- GitHub Pages（`pages.yml`）は旧経路。App Hosting と二重に注意
+- GitHub Pages は廃止済み（使わない）

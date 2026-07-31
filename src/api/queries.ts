@@ -1,19 +1,26 @@
 /**
  * @file TanStack Query キーとフェッチャー
+ * @description 契約 action 向けの queryKey / queryFn（Issue #20）。
  */
 import {
   fetchGrade,
   fetchGradeDates,
   fetchHome,
+  fetchLongVacation,
+  fetchParentHome,
+  fetchQuestExemptions,
   fetchResults,
 } from "@/api/client";
 
 /** Query キー定数 */
 export const queryKeys = {
   home: ["home"] as const,
+  parentHome: ["parentHome"] as const,
   results: ["results"] as const,
   gradeDates: ["gradeDates"] as const,
   grade: (date: string) => ["grade", date] as const,
+  longVacation: ["longVacation"] as const,
+  questExemptions: ["questExemptions"] as const,
 };
 
 export const homeQuery = {
@@ -21,14 +28,29 @@ export const homeQuery = {
   queryFn: () => fetchHome(),
 };
 
+export const parentHomeQuery = {
+  queryKey: queryKeys.parentHome,
+  queryFn: () => fetchParentHome(),
+};
+
 export const resultsQuery = {
   queryKey: queryKeys.results,
-  queryFn: fetchResults,
+  queryFn: () => fetchResults(),
 };
 
 export const gradeDatesQuery = {
   queryKey: queryKeys.gradeDates,
-  queryFn: fetchGradeDates,
+  queryFn: () => fetchGradeDates(),
+};
+
+export const longVacationQuery = {
+  queryKey: queryKeys.longVacation,
+  queryFn: fetchLongVacation,
+};
+
+export const questExemptionsQuery = {
+  queryKey: queryKeys.questExemptions,
+  queryFn: fetchQuestExemptions,
 };
 
 /**

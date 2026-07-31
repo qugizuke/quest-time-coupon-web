@@ -222,6 +222,8 @@ export interface ResultItem {
     actualDone: boolean;
     finalPoints: number;
     mismatch: boolean;
+    /** 採点モード（履歴で -1 のスキップ/分からない区別・契約 §3.6） */
+    gradingMode?: GradingMode;
     streakMultiplier?: number;
     failureStreakAfter?: number;
     category?: QuestCategory;

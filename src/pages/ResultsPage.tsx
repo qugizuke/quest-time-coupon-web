@@ -339,7 +339,9 @@ export function ResultsPage() {
           </Card>
 
           {selected.details.some(
-            (d) => isUnknownChildAnswer(d.childAnswer) && !isSkipAnswerQuest(d.questId),
+            (d) =>
+              isUnknownChildAnswer(d.childAnswer) &&
+              !isSkipAnswerQuest(d.questId, d.gradingMode),
           ) && (
             <div className="rounded-default border-2 border-warning bg-warning/20 px-4 py-3 text-base text-ink">
               {UNKNOWN_ANSWER_MESSAGE}
@@ -418,12 +420,12 @@ export function ResultsPage() {
                 >
                   <p className="font-medium">{title}</p>
                   <p className="text-sm text-muted">
-                    自分の回答: {childAnswerLabel(d.childAnswer, "default", d.questId)}
+                    自分の回答: {childAnswerLabel(d.childAnswer, "default", d.questId, d.gradingMode)}
                   </p>
                   {isUnknown ? (
                     <p className="text-sm text-muted">
                       ママの採点:{" "}
-                      {isSkipAnswerQuest(d.questId)
+                      {isSkipAnswerQuest(d.questId, d.gradingMode)
                         ? "なし（点0・ストリーク非接触）"
                         : "なし（自動減点）"}
                     </p>

@@ -387,12 +387,12 @@ export function GradeDatePage() {
                 </p>
               )}
               <p className="mb-3 mt-2 text-sm text-muted">
-                子どもの回答: {childAnswerLabel(item.childAnswer, "default", item.questId)}
+                子どもの回答: {childAnswerLabel(item.childAnswer, "default", item.questId, item.gradingMode)}
               </p>
               {isUnknown || isNegative ? (
                 <p className="text-sm text-warning">
                   {isUnknown
-                    ? isSkipAnswerQuest(item.questId)
+                    ? isSkipAnswerQuest(item.questId, item.gradingMode)
                       ? "採点不要（表示のみ・点0・ストリーク非接触）"
                       : "採点不要（表示のみ・自動で減点扱い）"
                     : "表示のみ（否定回答・自動未達）"}

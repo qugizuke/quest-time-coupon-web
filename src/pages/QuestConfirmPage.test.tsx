@@ -152,4 +152,19 @@ describe("QuestConfirmPage", () => {
     expect(screen.getByText("最後の確認")).toBeTruthy();
     expect(screen.queryByTestId("wake-up-section")).toBeNull();
   });
+
+  it("宿題 skip（-1）は確認画面で専用スキップ文言を表示する", () => {
+    const draft = buildCompleteDraft();
+    const homeworkAnswer = draft.answers.find(
+      (a) => a.questId === "homework-done-today",
+    );
+    if (homeworkAnswer) homeworkAnswer.childAnswer = -1;
+    sessionStorage.clear();
+    setQuestDraft(todayLocal(), draft);
+
+    renderConfirm(buildHome({ isVacationMode: false }));
+
+    expect(screen.getByText("今日は宿題がなかった")).toBeTruthy();
+    expect(screen.queryByText("分からない")).toBeNull();
+  });
 });

@@ -41,4 +41,30 @@ describe("buildReopenUntilOptions", () => {
     });
     expect(options).toEqual([]);
   });
+
+  it("dateYmd が JST 当日なら UTC 環境でも候補を返す", () => {
+    const options = buildReopenUntilOptions({
+      now: new Date("2026-07-31T15:00:00Z"),
+      dateYmd: "2026-08-01",
+    });
+    expect(options.length).toBeGreaterThan(0);
+    expect(options[0]?.label).toBe("00:30");
+    expect(options[0]?.value).toBe("2026-08-01T00:30:00+09:00");
+  });
+
+  it("dateYmd が JST 当日と一致しないと候補なし", () => {
+    const options = buildReopenUntilOptions({
+      now: new Date("2026-07-31T15:00:00Z"),
+      dateYmd: "2026-07-31",
+    });
+    expect(options).toEqual([]);
+  });
+
+  it("ブラウザローカル日付と JST 当日がずれても parentHome.date 基準で候補を返す", () => {
+    const options = buildReopenUntilOptions({
+      now: new Date("2026-07-31T22:00:00+09:00"),
+      dateYmd: "2026-07-31",
+    });
+    expect(options.map((opt) => opt.label)).toEqual(["22:30", "23:00", "23:30"]);
+  });
 });

@@ -14,7 +14,6 @@ import { LoadingScreen } from "@/components/layout/LoadingScreen";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { todayLocal } from "@/lib/date";
 import { buildReopenUntilOptions } from "@/lib/registrationReopen";
 import type { TodayRegistrationStatus } from "@/types/api";
 
@@ -57,7 +56,6 @@ function toRegistrationLabel(
 export function ParentHomePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const today = todayLocal();
   const {
     data: parentHome,
     isLoading,
@@ -67,6 +65,7 @@ export function ParentHomePage() {
   const [reopenOpen, setReopenOpen] = useState(false);
 
   const ungradedCount = parentHome?.ungradedCount ?? 0;
+  const targetDate = parentHome?.date ?? "";
 
   const registrationStatus: RegistrationStatusLabel = useMemo(() => {
     if (!parentHome) return "未登録";
@@ -75,10 +74,10 @@ export function ParentHomePage() {
 
   const canReopen = parentHome?.registrationReopen.available === true;
 
-  const reopenOptions = useMemo(
-    () => buildReopenUntilOptions({ dateYmd: today }),
-    [today],
-  );
+  const reopenOptions = useMemo(() => {
+    if (!targetDate) return [];
+    return buildReopenUntilOptions({ dateYmd: targetDate });
+  }, [targetDate, reopenOpen]);
 
   const vacationPeriod =
     parentHome?.longVacation.startDate && parentHome?.longVacation.endDate
@@ -93,7 +92,7 @@ export function ParentHomePage() {
 
   const reopenMutation = useMutation({
     mutationFn: (endsAt: string) =>
-      postRegistrationReopen({ date: today, endsAt }),
+      postRegistrationReopen({ date: targetDate, endsAt }),
     onSuccess: () => {
       setReopenOpen(false);
       void queryClient.invalidateQueries({ queryKey: queryKeys.parentHome });
@@ -196,8 +195,11 @@ export function ParentHomePage() {
                 <Button
                   fullWidth
                   onClick={() => {
+                    const options = buildReopenUntilOptions({
+                      dateYmd: targetDate,
+                    });
                     setReopenOpen(true);
-                    setReopenUntil(reopenOptions[0]?.value ?? "");
+                    setReopenUntil(options[0]?.value ?? "");
                   }}
                 >
                   登録受付を再開
@@ -207,7 +209,7 @@ export function ParentHomePage() {
                   <label className="flex flex-col gap-1 text-sm">
                     <span>終了時刻</span>
                     <select
-                      className="rounded-default border-[3px] border-border bg-surface px-3 py-2"
+                      className="rounded-default border-[3px] border-border bg-surface px-3 py-2 text-ink"
                       value={reopenUntil}
                       onChange={(e) => setReopenUntil(e.target.value)}
                       data-testid="reopen-ends-at-select"

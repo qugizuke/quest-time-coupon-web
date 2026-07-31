@@ -2,7 +2,9 @@
  * @file 登録再開 endsAt 組み立て
  * @description 契約 §2.3/§3.8 の Web 書込形式 `YYYY-MM-DDTHH:mm:ss+09:00` で
  *   当日・30分刻み・23:30 以下の候補を生成する。
+ *   時刻判定はブラウザローカルではなく JST（Asia/Tokyo）を正とする。
  */
+import { getJstClockParts } from "@/lib/date";
 
 /**
  * JST オフセット付き ISO 文字列を組み立てる
@@ -22,22 +24,42 @@ export function formatEndsAtJst(
 }
 
 /**
- * Date からローカル日付 YYYY-MM-DD を返す
- * @param {Date} date - 日時
- * @returns {string} YYYY-MM-DD
+ * JST 時刻の次の 30 分スロット（現在より後）を返す
+ * @param {import("@/lib/date").JstClockParts} now - JST の現在時刻
+ * @returns {{ hour: number; minute: number }} 次スロット
  */
-function toLocalYmd(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+function nextJstSlotAfter(now: {
+  hour: number;
+  minute: number;
+}): { hour: number; minute: number } {
+  let hour = now.hour;
+  let minute = now.minute;
+  const nextSlot =
+    minute === 0 || minute === 30 ? minute : minute < 30 ? 30 : 60;
+
+  if (nextSlot === 60) {
+    hour += 1;
+    minute = 0;
+  } else {
+    minute = nextSlot;
+  }
+
+  if (hour < now.hour || (hour === now.hour && minute <= now.minute)) {
+    minute += 30;
+    if (minute >= 60) {
+      hour += 1;
+      minute -= 60;
+    }
+  }
+
+  return { hour, minute };
 }
 
 /**
  * 再開終了候補（現在以降・30分刻み・〜23:30）を返す
  * @param {object} [opts] - オプション
- * @param {Date} [opts.now] - 現在時刻（ローカル＝JST 想定）
- * @param {string} [opts.dateYmd] - 対象日 YYYY-MM-DD（省略時は now のローカル日付）
+ * @param {Date} [opts.now] - 現在時刻（絶対時刻。JST へ変換して判定）
+ * @param {string} [opts.dateYmd] - 対象日 YYYY-MM-DD（省略時は JST 当日）
  * @returns {Array<{ value: string; label: string }>} 候補（value は +09:00）
  */
 export function buildReopenUntilOptions(opts?: {
@@ -45,40 +67,29 @@ export function buildReopenUntilOptions(opts?: {
   dateYmd?: string;
 }): Array<{ value: string; label: string }> {
   const now = opts?.now ?? new Date();
-  const dateYmd = opts?.dateYmd ?? toLocalYmd(now);
+  const jstNow = getJstClockParts(now);
+  const dateYmd = opts?.dateYmd ?? jstNow.dateYmd;
   const options: Array<{ value: string; label: string }> = [];
 
-  const cursor = new Date(now);
-  cursor.setSeconds(0, 0);
-  const minute = cursor.getMinutes();
-  const nextSlot =
-    minute === 0 || minute === 30 ? minute : minute < 30 ? 30 : 60;
-  if (nextSlot === 60) {
-    cursor.setHours(cursor.getHours() + 1, 0, 0, 0);
-  } else {
-    cursor.setMinutes(nextSlot, 0, 0);
-  }
-  if (cursor.getTime() <= now.getTime()) {
-    cursor.setMinutes(cursor.getMinutes() + 30);
+  // 契約: 当日のみ。JST 上で対象日と現在日が一致しない場合は候補なし。
+  if (dateYmd !== jstNow.dateYmd) {
+    return options;
   }
 
-  const end = new Date(now);
-  end.setHours(23, 30, 0, 0);
+  let { hour, minute } = nextJstSlotAfter(jstNow);
 
-  while (cursor.getTime() <= end.getTime()) {
-    // 日付がずれた場合は当日候補のみ（契約: 当日）
-    if (toLocalYmd(cursor) !== dateYmd) {
-      break;
-    }
-    const hour = cursor.getHours();
-    const min = cursor.getMinutes();
+  while (hour < 23 || (hour === 23 && minute <= 30)) {
     const hh = String(hour).padStart(2, "0");
-    const mm = String(min).padStart(2, "0");
+    const mm = String(minute).padStart(2, "0");
     options.push({
-      value: formatEndsAtJst(dateYmd, hour, min),
+      value: formatEndsAtJst(dateYmd, hour, minute),
       label: `${hh}:${mm}`,
     });
-    cursor.setMinutes(cursor.getMinutes() + 30);
+    minute += 30;
+    if (minute >= 60) {
+      hour += 1;
+      minute -= 60;
+    }
   }
 
   return options;

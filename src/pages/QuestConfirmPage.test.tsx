@@ -101,8 +101,8 @@ function renderConfirm(home: HomeData): void {
 describe("QuestConfirmPage", () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    // 金曜 22:30 = 休日前夜・登録受付時間内（既定就寝23時 → 22:00〜23:00）
-    vi.setSystemTime(new Date(2026, 6, 31, 22, 30, 0));
+    // 金曜 20:30 = 休日前夜・登録受付時間内（既定就寝21時 → 20:00〜21:00）
+    vi.setSystemTime(new Date(2026, 6, 31, 20, 30, 0));
     sessionStorage.clear();
     setQuestDraft(todayLocal(), buildCompleteDraft());
   });

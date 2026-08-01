@@ -69,7 +69,7 @@ function renderHome(home: HomeData): void {
 describe("HomePage", () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    // 休暇の就寝設定は正午までのため午前に固定
+    // 就寝設定は18時までのため午前に固定
     vi.setSystemTime(new Date(2026, 6, 30, 10, 0, 0));
     sessionStorage.clear();
   });

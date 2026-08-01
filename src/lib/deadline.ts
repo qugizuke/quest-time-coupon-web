@@ -18,8 +18,14 @@ export const QUEST_REGISTRATION_CUTOFF_HOUR = 21;
 /** @type {number} 登録受付締切の分 */
 export const QUEST_REGISTRATION_CUTOFF_MINUTE = 0;
 
-/** @type {number} 休日前夜の未選択デフォルト就寝時刻（時） */
-export const WEEKEND_EVE_DEFAULT_BEDTIME_HOUR = 23;
+/** @type {number} 未選択時のデフォルト就寝時刻（時）。休日前日・長期休みとも 21 */
+export const DEFAULT_BEDTIME_HOUR = 21;
+
+/**
+ * @deprecated DEFAULT_BEDTIME_HOUR を使う（休日前夜も 21 時に統一）
+ * @type {number}
+ */
+export const WEEKEND_EVE_DEFAULT_BEDTIME_HOUR = DEFAULT_BEDTIME_HOUR;
 
 /** @type {number} ボーナス締切カウントダウン表示開始の時（平日デフォルト） */
 export const QUEST_COUNTDOWN_START_HOUR = 20;
@@ -53,13 +59,13 @@ export function isWeekendEve(date: string): boolean {
  * @returns {BedtimeHour} 締切計算に使う就寝時刻
  */
 export function resolveQuestDeadlineBedtimeHour(
-  date: string,
+  _date: string,
   bedtimeHour?: number,
 ): BedtimeHour {
   if (bedtimeHour !== undefined) {
     return normalizeBedtimeHour(bedtimeHour);
   }
-  return isWeekendEve(date) ? WEEKEND_EVE_DEFAULT_BEDTIME_HOUR : 21;
+  return DEFAULT_BEDTIME_HOUR;
 }
 
 /**

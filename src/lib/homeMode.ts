@@ -41,6 +41,9 @@ export const WAKE_UP_OPTIONS: WakeUpTime[] = [
 /** 起床の既定値 */
 export const DEFAULT_WAKE_UP: WakeUpTime = "08:00";
 
+/** 子どもが就寝時刻を設定できる終端時刻（時）。この時刻以降は不可 */
+export const CHILD_BEDTIME_SETTING_CUTOFF_HOUR = 18;
+
 /**
  * ホーム 4 バリアントを返す
  * @param {boolean} isExemptDay - クエスト免除日か
@@ -58,17 +61,39 @@ export function resolveHomeVariant(
 }
 
 /**
- * 長期休みモード中に就寝設定できる正午締切を返す
+ * 子どもが就寝設定できる当日締切（18:00）を返す
  * @param {string} date - YYYY-MM-DD
- * @returns {Date} 当日 12:00
+ * @returns {Date} 当日 18:00
  */
-export function getVacationBedtimeCutoff(date: string): Date {
+export function getChildBedtimeSettingCutoff(date: string): Date {
   const [y, m, d] = date.split("-").map(Number);
-  return new Date(y, m - 1, d, 12, 0, 0, 0);
+  return new Date(y, m - 1, d, CHILD_BEDTIME_SETTING_CUTOFF_HOUR, 0, 0, 0);
 }
 
 /**
- * 長期休みモード中・就寝設定可能か（当日 12:00 前）
+ * @deprecated getChildBedtimeSettingCutoff を使う（正午制限は廃止・18時に統一）
+ * @param {string} date - YYYY-MM-DD
+ * @returns {Date} 子ども就寝設定締切
+ */
+export function getVacationBedtimeCutoff(date: string): Date {
+  return getChildBedtimeSettingCutoff(date);
+}
+
+/**
+ * 子どもが就寝設定可能か（当日 18:00 未満）
+ * @param {string} date - YYYY-MM-DD
+ * @param {Date} [now] - 判定時刻
+ * @returns {boolean} 設定可能なら true
+ */
+export function isBeforeChildBedtimeSettingCutoff(
+  date: string,
+  now: Date = new Date(),
+): boolean {
+  return now.getTime() < getChildBedtimeSettingCutoff(date).getTime();
+}
+
+/**
+ * @deprecated isBeforeChildBedtimeSettingCutoff を使う
  * @param {string} date - YYYY-MM-DD
  * @param {Date} [now] - 判定時刻
  * @returns {boolean} 設定可能なら true
@@ -77,7 +102,7 @@ export function isBeforeVacationBedtimeCutoff(
   date: string,
   now: Date = new Date(),
 ): boolean {
-  return now.getTime() < getVacationBedtimeCutoff(date).getTime();
+  return isBeforeChildBedtimeSettingCutoff(date, now);
 }
 
 /**
@@ -151,7 +176,7 @@ export function evaluateParentBedtimeChange(opts: {
       message: "回答提出後は就寝時刻を変更できません",
     };
   }
-  // 契約 §3.7: parent は正午期限の対象外（回答/result 無し・対象日・就寝1時間前まで）
+  // parent は子どもの 18:00 期限の対象外（回答/result 無し・対象日・就寝1時間前まで）
   const deadline = getParentBedtimeChangeDeadline(opts.date, opts.bedtimeHour);
   if (now.getTime() >= deadline.getTime()) {
     return {
@@ -215,25 +240,25 @@ export function resolveBedtimeUiMode(opts: {
     return "hidden";
   }
 
+  const beforeCutoff = isBeforeChildBedtimeSettingCutoff(date, now);
+  const unanswered = todayStatus === "unanswered";
+
   if (bedtimeHour !== undefined) {
+    if (beforeCutoff && unanswered) {
+      return "settable";
+    }
     return "display";
   }
 
-  if (isVacationMode) {
-    if (!isBeforeVacationBedtimeCutoff(date, now)) {
-      return "locked21";
-    }
-    if (todayStatus === "unanswered") {
-      return "settable";
-    }
+  if (!beforeCutoff) {
     return "locked21";
   }
 
-  // 休日前日: 未回答かつ登録前まで設定可（締切判定は呼び出し側でも行う）
-  if (todayStatus === "unanswered") {
+  if (unanswered) {
     return "settable";
   }
-  return "hidden";
+
+  return "locked21";
 }
 
 /**
@@ -254,8 +279,6 @@ export function canChildSaveBedtime(opts: {
   now?: Date;
 }): boolean {
   if (opts.isExemptDay) return false;
-  if (opts.isVacationMode) {
-    return isBeforeVacationBedtimeCutoff(opts.date, opts.now);
-  }
-  return opts.isWeekendEveDay;
+  if (!opts.isVacationMode && !opts.isWeekendEveDay) return false;
+  return isBeforeChildBedtimeSettingCutoff(opts.date, opts.now);
 }

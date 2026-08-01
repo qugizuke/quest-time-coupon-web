@@ -1,0 +1,52 @@
+# 旧 GitHub Pages URL から Firebase App Hosting への転送専用デプロイ
+#
+# 概要:
+#   redirect/ 配下の静的 HTML のみを GitHub Pages へ配信する。
+#   本番アプリのビルド・配信は Firebase App Hosting（main マージ）が正。
+#
+# 主な仕様:
+#   - トリガー: main への push（redirect/ または本 workflow 変更時）と手動実行
+#   - 成果物: redirect/index.html, redirect/404.html
+#
+# 制限事項:
+#   - GitHub リポジトリ設定で Pages の Source を「GitHub Actions」にすること
+#   - サーバー側 301 は不可（クライアント側転送のみ）
+
+name: Deploy redirect to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "redirect/**"
+      - ".github/workflows/redirect-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-redirect
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: redirect
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

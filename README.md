@@ -107,11 +107,18 @@ npx -y firebase-tools@latest apphosting:secrets:grantaccess VITE_API_KEY \
 
 Secret 未設定のままビルドすると配信はできても API は `UNAUTHORIZED`（401）になる。
 
-### 旧経路: GitHub Pages（廃止）
+### 旧経路: GitHub Pages（リダイレクト専用）
 
-GitHub Pages（`.github/workflows/pages.yml`）は **廃止済み**（ファイル削除）。本番は Firebase App Hosting のみ。旧 Pages 用の GitHub secret（`VITE_API_KEY` 等）は不要。
+本番アプリの配信は Firebase App Hosting のみ。旧 GitHub Pages URL へアクセスした利用者を本番へ誘導するため、**転送用 HTML のみ** GitHub Pages に残す（`.github/workflows/redirect-pages.yml`）。
 
-旧 Pages URL（参考・非運用）: <https://qugizuke.github.io/quest-time-coupon-web/>
+| 項目 | 内容 |
+| --- | --- |
+| 旧 URL | <https://qugizuke.github.io/quest-time-coupon-web/> |
+| 転送先 | <https://quest-time-coupon-web--quest-time-coupon-95106.asia-east1.hosted.app/> |
+| デプロイ | `main` マージ後に workflow が `redirect/` を配信 |
+| 初回設定 | GitHub リポジトリ Settings → Pages → Source を **GitHub Actions** にする |
+
+旧 Pages 用の GitHub secret（`VITE_API_KEY` 等）は不要。サーバー側 301 は GitHub Pages では設定できないため、クライアント側（JavaScript / meta refresh）で転送する。
 
 本番相当のローカル確認（ルート base）:
 
@@ -130,7 +137,8 @@ npm run build && npx vite preview
 ## ディレクトリ
 
 ```text
-├── .github/workflows/
+├── .github/workflows/   # redirect-pages.yml（旧 Pages → Firebase 転送）
+├── redirect/            # GitHub Pages 転送専用 HTML（index.html / 404.html）
 ├── adjustments/       # 保護者裁量の加減点定義 → ビルド時に public へコピー
 ├── apphosting.yaml    # Firebase App Hosting 設定（runConfig / ビルド時環境変数）
 ├── public/

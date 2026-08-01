@@ -35,7 +35,7 @@ describe("resolveBedtimeUiMode", () => {
     ).toBe("hidden");
   });
 
-  it("長期休み・正午前提で未設定なら settable", () => {
+  it("長期休み・18時前・未設定なら settable", () => {
     expect(
       resolveBedtimeUiMode({
         isExemptDay: false,
@@ -49,7 +49,7 @@ describe("resolveBedtimeUiMode", () => {
     ).toBe("settable");
   });
 
-  it("長期休み・正午超過で未設定なら locked21", () => {
+  it("長期休み・18時以降・未設定なら locked21", () => {
     expect(
       resolveBedtimeUiMode({
         isExemptDay: false,
@@ -58,9 +58,37 @@ describe("resolveBedtimeUiMode", () => {
         bedtimeHour: undefined,
         todayStatus: "unanswered",
         date: "2026-07-30",
-        now: new Date(2026, 6, 30, 12, 0, 0),
+        now: new Date(2026, 6, 30, 18, 0, 0),
       }),
     ).toBe("locked21");
+  });
+
+  it("休日前日・18時前・設定済みなら settable（再変更可）", () => {
+    expect(
+      resolveBedtimeUiMode({
+        isExemptDay: false,
+        isVacationMode: false,
+        isWeekendEveDay: true,
+        bedtimeHour: 22,
+        todayStatus: "unanswered",
+        date: "2026-07-03",
+        now: new Date(2026, 6, 3, 17, 0, 0),
+      }),
+    ).toBe("settable");
+  });
+
+  it("休日前日・18時以降・設定済みなら display", () => {
+    expect(
+      resolveBedtimeUiMode({
+        isExemptDay: false,
+        isVacationMode: false,
+        isWeekendEveDay: true,
+        bedtimeHour: 22,
+        todayStatus: "unanswered",
+        date: "2026-07-03",
+        now: new Date(2026, 6, 3, 18, 0, 0),
+      }),
+    ).toBe("display");
   });
 
   it("平日通常は就寝 UI なし", () => {
@@ -72,7 +100,7 @@ describe("resolveBedtimeUiMode", () => {
         bedtimeHour: undefined,
         todayStatus: "unanswered",
         date: "2026-07-28",
-        now: new Date(2026, 6, 28, 20, 0, 0),
+        now: new Date(2026, 6, 28, 10, 0, 0),
       }),
     ).toBe("hidden");
   });
@@ -107,16 +135,28 @@ describe("canChildSaveBedtime", () => {
     ).toBe(false);
   });
 
-  it("長期休み・正午後は保存不可", () => {
+  it("長期休み・18時以降は保存不可", () => {
     expect(
       canChildSaveBedtime({
         isExemptDay: false,
         isVacationMode: true,
         isWeekendEveDay: false,
         date: "2026-07-30",
-        now: new Date(2026, 6, 30, 13, 0, 0),
+        now: new Date(2026, 6, 30, 18, 0, 0),
       }),
     ).toBe(false);
+  });
+
+  it("休日前日・18時前は保存可", () => {
+    expect(
+      canChildSaveBedtime({
+        isExemptDay: false,
+        isVacationMode: false,
+        isWeekendEveDay: true,
+        date: "2026-07-03",
+        now: new Date(2026, 6, 3, 17, 59, 0),
+      }),
+    ).toBe(true);
   });
 });
 
@@ -133,7 +173,7 @@ describe("evaluateParentBedtimeChange", () => {
     now: new Date(2026, 6, 3, 18, 0, 0),
   };
 
-  it("休日前日・期限内なら変更可", () => {
+  it("休日前日・18時以降でも就寝1時間前までなら変更可", () => {
     expect(evaluateParentBedtimeChange(base).allowed).toBe(true);
   });
 
@@ -164,21 +204,13 @@ describe("evaluateParentBedtimeChange", () => {
     ).toBe("past_parent_deadline");
   });
 
-  it("長期休みは正午前でも parent 変更可（正午は child 期限のみ）", () => {
+  it("長期休みは子どもの18時以降でも parent 変更可", () => {
     expect(
       evaluateParentBedtimeChange({
         ...base,
         isWeekendEveDay: false,
         isVacationMode: true,
-        now: new Date(2026, 6, 3, 10, 0, 0),
-      }).allowed,
-    ).toBe(true);
-    expect(
-      evaluateParentBedtimeChange({
-        ...base,
-        isWeekendEveDay: false,
-        isVacationMode: true,
-        now: new Date(2026, 6, 3, 13, 0, 0),
+        now: new Date(2026, 6, 3, 19, 0, 0),
       }).allowed,
     ).toBe(true);
   });

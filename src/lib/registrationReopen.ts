@@ -1,85 +1,122 @@
 /**
  * @file 登録再開 endsAt 組み立て
  * @description 契約 §2.3/§3.8 の Web 書込形式 `YYYY-MM-DDTHH:mm:ss+09:00` で
- *   当日・30分刻み・23:30 以下の候補を生成する。
+ *   「いまから N 分」のタイマー候補から endsAt を組み立てる。
+ *   時刻判定はブラウザローカルではなく JST（Asia/Tokyo）を正とする。
+ * @limitation 日付またぎ（翌日の endsAt）を許容する。
  */
+import { getJstClockParts } from "@/lib/date";
+
+/** 再開タイマー候補（分） */
+export type ReopenDurationMinutes = 30 | 60 | 90 | 120;
+
+/**
+ * 再開タイマー候補定義
+ * @property {ReopenDurationMinutes} minutes - いまからの分数
+ * @property {string} label - セレクト表示ラベル
+ */
+export interface ReopenDurationOption {
+  /** @type {ReopenDurationMinutes} いまからの分数 */
+  minutes: ReopenDurationMinutes;
+  /** @type {string} セレクト表示ラベル */
+  label: string;
+}
+
+/**
+ * UI 用のタイマー候補（30分刻み・最大2時間）
+ * @type {ReopenDurationOption[]}
+ */
+export const REOPEN_DURATION_OPTIONS: ReopenDurationOption[] = [
+  { minutes: 30, label: "30分" },
+  { minutes: 60, label: "1時間" },
+  { minutes: 90, label: "1時間30分" },
+  { minutes: 120, label: "2時間" },
+];
+
+/** @type {ReopenDurationMinutes} 初期選択（仕様: 1時間） */
+export const DEFAULT_REOPEN_DURATION_MINUTES: ReopenDurationMinutes = 60;
 
 /**
  * JST オフセット付き ISO 文字列を組み立てる
  * @param {string} dateYmd - 対象日 YYYY-MM-DD
  * @param {number} hour - 時（0–23）
- * @param {number} minute - 分（0 または 30）
+ * @param {number} minute - 分（0–59）
+ * @param {number} [second=0] - 秒（0–59）
  * @returns {string} `YYYY-MM-DDTHH:mm:ss+09:00`
  */
 export function formatEndsAtJst(
   dateYmd: string,
   hour: number,
   minute: number,
+  second: number = 0,
 ): string {
   const hh = String(hour).padStart(2, "0");
   const mm = String(minute).padStart(2, "0");
-  return `${dateYmd}T${hh}:${mm}:00+09:00`;
+  const ss = String(second).padStart(2, "0");
+  return `${dateYmd}T${hh}:${mm}:${ss}+09:00`;
 }
 
 /**
- * Date からローカル日付 YYYY-MM-DD を返す
- * @param {Date} date - 日時
- * @returns {string} YYYY-MM-DD
+ * Date を JST の endsAt 文字列へ変換する
+ * @param {Date} date - 絶対時刻
+ * @returns {string} `YYYY-MM-DDTHH:mm:ss+09:00`
  */
-function toLocalYmd(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+export function toEndsAtJst(date: Date): string {
+  const parts = getJstClockParts(date);
+  return formatEndsAtJst(
+    parts.dateYmd,
+    parts.hour,
+    parts.minute,
+    parts.second,
+  );
 }
 
 /**
- * 再開終了候補（現在以降・30分刻み・〜23:30）を返す
- * @param {object} [opts] - オプション
- * @param {Date} [opts.now] - 現在時刻（ローカル＝JST 想定）
- * @param {string} [opts.dateYmd] - 対象日 YYYY-MM-DD（省略時は now のローカル日付）
- * @returns {Array<{ value: string; label: string }>} 候補（value は +09:00）
+ * いまから指定分数後の endsAt を返す
+ * @param {ReopenDurationMinutes} minutes - いまからの分数
+ * @param {Date} [now] - 現在時刻（絶対時刻）
+ * @returns {string} `YYYY-MM-DDTHH:mm:ss+09:00`（日付またぎ可）
  */
-export function buildReopenUntilOptions(opts?: {
-  now?: Date;
-  dateYmd?: string;
-}): Array<{ value: string; label: string }> {
-  const now = opts?.now ?? new Date();
-  const dateYmd = opts?.dateYmd ?? toLocalYmd(now);
-  const options: Array<{ value: string; label: string }> = [];
-
-  const cursor = new Date(now);
-  cursor.setSeconds(0, 0);
-  const minute = cursor.getMinutes();
-  const nextSlot =
-    minute === 0 || minute === 30 ? minute : minute < 30 ? 30 : 60;
-  if (nextSlot === 60) {
-    cursor.setHours(cursor.getHours() + 1, 0, 0, 0);
-  } else {
-    cursor.setMinutes(nextSlot, 0, 0);
+export function buildEndsAtFromDuration(
+  minutes: ReopenDurationMinutes,
+  now: Date = new Date(),
+): string {
+  if (![30, 60, 90, 120].includes(minutes)) {
+    throw new Error(
+      `buildEndsAtFromDuration: 不正な分数です minutes=${String(minutes)}`,
+    );
   }
-  if (cursor.getTime() <= now.getTime()) {
-    cursor.setMinutes(cursor.getMinutes() + 30);
+  return toEndsAtJst(new Date(now.getTime() + minutes * 60 * 1000));
+}
+
+/**
+ * 再開タイマー候補を返す（セレクト用）
+ * @description value は分数文字列（例: "60"）。送信時に endsAt へ変換する。
+ * @returns {Array<{ value: string; label: string; minutes: ReopenDurationMinutes }>} 候補
+ */
+export function buildReopenDurationOptions(): Array<{
+  value: string;
+  label: string;
+  minutes: ReopenDurationMinutes;
+}> {
+  return REOPEN_DURATION_OPTIONS.map((option) => ({
+    value: String(option.minutes),
+    label: option.label,
+    minutes: option.minutes,
+  }));
+}
+
+/**
+ * セレクト value（分数文字列）を型付き分数へ正規化する
+ * @param {string} value - セレクト value
+ * @returns {ReopenDurationMinutes | null} 有効なら分数、不正なら null
+ */
+export function parseReopenDurationMinutes(
+  value: string,
+): ReopenDurationMinutes | null {
+  const minutes = Number(value);
+  if (minutes === 30 || minutes === 60 || minutes === 90 || minutes === 120) {
+    return minutes;
   }
-
-  const end = new Date(now);
-  end.setHours(23, 30, 0, 0);
-
-  while (cursor.getTime() <= end.getTime()) {
-    // 日付がずれた場合は当日候補のみ（契約: 当日）
-    if (toLocalYmd(cursor) !== dateYmd) {
-      break;
-    }
-    const hour = cursor.getHours();
-    const min = cursor.getMinutes();
-    const hh = String(hour).padStart(2, "0");
-    const mm = String(min).padStart(2, "0");
-    options.push({
-      value: formatEndsAtJst(dateYmd, hour, min),
-      label: `${hh}:${mm}`,
-    });
-    cursor.setMinutes(cursor.getMinutes() + 30);
-  }
-
-  return options;
+  return null;
 }

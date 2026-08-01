@@ -446,7 +446,7 @@ export function ParentSettingsPage() {
           {bedtimeChange.allowed ? (
             <>
               <p className="mb-3 text-sm text-muted">
-                候補は 21 / 22 / 23 のみです（仕様勝ち・22:30 なし）。回答提出前かつ就寝1時間前まで変更できます。
+                候補は 21 / 22 / 23 のみです（仕様勝ち・22:30 なし）。初期は21時。子どもは18時まで、保護者は回答提出前かつ就寝1時間前まで変更できます。
               </p>
               <div className="mb-3 flex gap-2">
                 {BEDTIME_OPTIONS.map((hour) => {

@@ -204,7 +204,7 @@ describe("ParentSettingsPage API 接続", () => {
     ).toBeTruthy();
   });
 
-  it("canEditBedtimeAsParent=true なら正午前でも就寝保存 UI を出す", () => {
+  it("canEditBedtimeAsParent=true なら就寝保存 UI を出す", () => {
     renderParentPages({
       path: "/parent/settings",
       parentHome: buildParentHome({

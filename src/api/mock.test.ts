@@ -65,8 +65,8 @@ describe("mockApi answers 受付タイミング", () => {
     ).rejects.toThrow("登録受付締切を過ぎているため回答を保存できません");
   });
 
-  it("休日前夜の未選択は21時台でも未登録ペナルティにならない", async () => {
-    vi.setSystemTime(new Date(2026, 6, 24, 21, 30, 0));
+  it("休日前夜の未選択は20時台なら未登録ペナルティにならない（既定就寝21時）", async () => {
+    vi.setSystemTime(new Date(2026, 6, 24, 20, 30, 0));
 
     const home = await mockApi<{ todayStatus: string; questAction: string }>("home");
 
@@ -74,9 +74,18 @@ describe("mockApi answers 受付タイミング", () => {
     expect(home.questAction).toBe("start");
   });
 
-  it("休日前夜の未選択は22時台なら新規登録できる", async () => {
+  it("休日前夜の未選択は21時超で未登録扱いになる", async () => {
+    vi.setSystemTime(new Date(2026, 6, 24, 21, 0, 1));
+
+    const home = await mockApi<{ todayStatus: string; questAction: string }>("home");
+
+    expect(home.todayStatus).toBe("pending_ack");
+    expect(home.questAction).toBe("none");
+  });
+
+  it("休日前夜の未選択は20時台なら新規登録できる（既定就寝21時）", async () => {
     const date = "2026-07-03";
-    vi.setSystemTime(new Date(2026, 6, 3, 22, 30, 0));
+    vi.setSystemTime(new Date(2026, 6, 3, 20, 30, 0));
 
     const result = await mockApi<{ submittedAt: string; overwritten: boolean }>("answers", {
       method: "POST",
@@ -86,9 +95,9 @@ describe("mockApi answers 受付タイミング", () => {
     expect(result.overwritten).toBe(false);
   });
 
-  it("休日前夜の未選択は23時超で新規登録を拒否する", async () => {
+  it("休日前夜の未選択は21時超で新規登録を拒否する", async () => {
     const date = "2026-07-10";
-    vi.setSystemTime(new Date(2026, 6, 10, 23, 0, 1));
+    vi.setSystemTime(new Date(2026, 6, 10, 21, 0, 1));
 
     await expect(
       mockApi("answers", {
@@ -193,62 +202,67 @@ describe("mockApi registrationSetting 競合ガード", () => {
 
   it("回答後は就寝時刻を変更できない", async () => {
     const date = "2026-06-06";
-    vi.setSystemTime(new Date(2026, 5, 6, 20, 30, 0));
+    // 土曜＝休日前日。就寝設定は18時前、登録受付は20:00〜21:00（既定21時）
+    vi.setSystemTime(new Date(2026, 5, 6, 17, 0, 0));
 
+    await mockApi("registrationSetting", {
+      method: "POST",
+      body: JSON.stringify({ date, bedtimeHour: 21, actor: "child" }),
+    });
+
+    vi.setSystemTime(new Date(2026, 5, 6, 20, 30, 0));
     await mockApi("answers", {
       method: "POST",
       body: JSON.stringify({ date, answers: sampleAnswers, bedtimeHour: 21 }),
     });
 
+    vi.setSystemTime(new Date(2026, 5, 6, 17, 0, 0));
     await expect(
       mockApi("registrationSetting", {
         method: "POST",
-        body: JSON.stringify({ date, bedtimeHour: 23, actor: "child"}),
+        body: JSON.stringify({ date, bedtimeHour: 23, actor: "child" }),
       }),
     ).rejects.toThrow("回答後は就寝時刻を変更できません");
   });
 
-  it("現在の締切を過ぎた後に遅い bedtime へ延長できない", async () => {
+  it("18時以降は子どもが bedtime を変更できない", async () => {
     const date = "2026-06-13";
-    vi.setSystemTime(new Date(2026, 5, 13, 20, 30, 0));
+    vi.setSystemTime(new Date(2026, 5, 13, 17, 0, 0));
 
     await mockApi("registrationSetting", {
       method: "POST",
-      body: JSON.stringify({ date, bedtimeHour: 21, actor: "child"}),
+      body: JSON.stringify({ date, bedtimeHour: 21, actor: "child" }),
     });
 
-    vi.setSystemTime(new Date(2026, 5, 13, 21, 30, 0));
+    vi.setSystemTime(new Date(2026, 5, 13, 18, 0, 0));
 
     await expect(
       mockApi("registrationSetting", {
         method: "POST",
-        body: JSON.stringify({ date, bedtimeHour: 23, actor: "child"}),
+        body: JSON.stringify({ date, bedtimeHour: 23, actor: "child" }),
       }),
-    ).rejects.toThrow("登録受付締切を過ぎているため設定できません");
+    ).rejects.toThrow("18時を過ぎているため子どもは bedtimeHour を設定できません");
   });
 
-  it("変更先の締切を過ぎた早い bedtime へ変更できない", async () => {
+  it("18時前なら就寝時刻を変更できる", async () => {
     const date = "2026-06-13";
-    vi.setSystemTime(new Date(2026, 5, 13, 20, 30, 0));
+    vi.setSystemTime(new Date(2026, 5, 13, 17, 0, 0));
 
     await mockApi("registrationSetting", {
       method: "POST",
-      body: JSON.stringify({ date, bedtimeHour: 23, actor: "child"}),
+      body: JSON.stringify({ date, bedtimeHour: 23, actor: "child" }),
     });
 
-    vi.setSystemTime(new Date(2026, 5, 13, 21, 30, 0));
-
-    await expect(
-      mockApi("registrationSetting", {
-        method: "POST",
-        body: JSON.stringify({ date, bedtimeHour: 21, actor: "child"}),
-      }),
-    ).rejects.toThrow("変更先の登録受付締切を過ぎているため設定できません");
+    const changed = await mockApi<{ bedtimeHour: number }>("registrationSetting", {
+      method: "POST",
+      body: JSON.stringify({ date, bedtimeHour: 21, actor: "child" }),
+    });
+    expect(changed.bedtimeHour).toBe(21);
   });
 
-  it("休日前夜で未選択なら21時台でも就寝時刻を設定できる", async () => {
+  it("休日前夜・18時前なら就寝時刻を設定できる", async () => {
     const date = "2026-07-17";
-    vi.setSystemTime(new Date(2026, 6, 17, 21, 30, 0));
+    vi.setSystemTime(new Date(2026, 6, 17, 17, 30, 0));
 
     const result = await mockApi<{ date: string; bedtimeHour: number }>("registrationSetting", {
       method: "POST",
@@ -260,7 +274,7 @@ describe("mockApi registrationSetting 競合ガード", () => {
 
   it("平日は21時指定でも registrationSetting を受け付けない", async () => {
     const date = "2026-07-01";
-    vi.setSystemTime(new Date(2026, 6, 1, 20, 30, 0));
+    vi.setSystemTime(new Date(2026, 6, 1, 17, 0, 0));
 
     await expect(
       mockApi("registrationSetting", {
@@ -268,7 +282,7 @@ describe("mockApi registrationSetting 競合ガード", () => {
         body: JSON.stringify({ date, bedtimeHour: 21, actor: "child"}),
       }),
     ).rejects.toThrow(
-      "休日前日または長期休み（正午まで）のみ bedtimeHour を設定できます",
+      "休日前日または長期休み（18時まで）のみ bedtimeHour を設定できます",
     );
   });
 });
@@ -299,10 +313,10 @@ describe("mockApi home 免除・長期休み", () => {
     expect(home.isExemptDay).toBe(false);
   });
 
-  it("長期休み中は平日でも就寝設定を受け付ける（正午まで）", async () => {
+  it("長期休み中は平日でも就寝設定を受け付ける（18時まで）", async () => {
     vi.useFakeTimers();
     const date = "2026-08-11"; // 火曜・他テストと日付衝突しない
-    vi.setSystemTime(new Date(2026, 7, 11, 10, 0, 0));
+    vi.setSystemTime(new Date(2026, 7, 11, 17, 0, 0));
     setMockHomeModeFlags({ vacationMode: true });
 
     const result = await mockApi<{ bedtimeHour: number }>("registrationSetting", {
@@ -466,9 +480,9 @@ describe("mockApi registrationSetting actor=parent 制約", () => {
     resetMockStore();
   });
 
-  it("長期休み・正午以降なら就寝を変更できる", async () => {
+  it("長期休み・子どもの18時以降でも保護者は就寝を変更できる", async () => {
     const date = "2026-08-11";
-    vi.setSystemTime(new Date(2026, 7, 11, 13, 0, 0));
+    vi.setSystemTime(new Date(2026, 7, 11, 19, 0, 0));
     setMockHomeModeFlags({ vacationMode: true });
 
     const saved = await mockApi<{ bedtimeHour: number }>("registrationSetting", {

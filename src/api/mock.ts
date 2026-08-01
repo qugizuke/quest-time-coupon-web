@@ -18,7 +18,10 @@ import {
   isWeekendEve,
   resolveQuestDeadlineBedtimeHour,
 } from "@/lib/deadline";
-import { canChildSaveBedtime } from "@/lib/homeMode";
+import {
+  canChildSaveBedtime,
+  getChildBedtimeSettingCutoff,
+} from "@/lib/homeMode";
 import {
   BEDTIME_PREP_QUEST_ID,
   calcBedtimePrepFalseClaimPenalty,
@@ -786,6 +789,12 @@ export async function mockApi<T>(
             isOpen: reopen.used && new Date(reopen.endsAt).getTime() > now,
           }
         : null;
+      const weekendEve = isWeekendEve(date);
+      const childCanEditBedtime =
+        !isExemptToday && (weekendEve || isLongVacation) && !hasAnswers && !isGraded;
+      const bedtimeEditableUntil = childCanEditBedtime
+        ? getChildBedtimeSettingCutoff(date).toISOString()
+        : null;
 
       return {
         displayBalance,
@@ -797,12 +806,12 @@ export async function mockApi<T>(
         timerBlockCount,
         canStartTimer: displayBalance > 0 && timerBlockCount === 0,
         bedtimeHour,
-        isWeekendEve: isWeekendEve(date),
+        isWeekendEve: weekendEve,
         isLongVacation,
         isExemptToday,
         registrationReopen,
         wakePromiseYesterday: null,
-        bedtimeEditableUntil: null,
+        bedtimeEditableUntil,
         questDeadlineAt: null,
         bonusDeadlineAt: null,
         isExemptDay: isExemptToday,
@@ -900,18 +909,24 @@ export async function mockApi<T>(
       if (isExemptDay) {
         throw new Error("FORBIDDEN_STATE: 免除日は bedtimeHour を設定できません");
       }
-      if (
-        actor === "child" &&
-        !canChildSaveBedtime({
-          isExemptDay,
-          isVacationMode,
-          isWeekendEveDay,
-          date,
-        })
-      ) {
-        throw new Error(
-          "FORBIDDEN_STATE: 休日前日または長期休み（正午まで）のみ bedtimeHour を設定できます",
-        );
+      if (actor === "child") {
+        if (!isWeekendEveDay && !isVacationMode) {
+          throw new Error(
+            "FORBIDDEN_STATE: 休日前日または長期休み（18時まで）のみ bedtimeHour を設定できます",
+          );
+        }
+        if (
+          !canChildSaveBedtime({
+            isExemptDay,
+            isVacationMode,
+            isWeekendEveDay,
+            date,
+          })
+        ) {
+          throw new Error(
+            "FORBIDDEN_STATE: 18時を過ぎているため子どもは bedtimeHour を設定できません",
+          );
+        }
       }
       if (actor === "parent" && !isWeekendEveDay && !isVacationMode) {
         throw new Error("FORBIDDEN_STATE: 対象日でないため設定できません");
@@ -930,19 +945,6 @@ export async function mockApi<T>(
       }
       if (store.answers.has(date) || store.submittedAtByDate.has(date)) {
         throw new Error("ALREADY_ANSWERED: 回答後は就寝時刻を変更できません");
-      }
-      if (!isVacationMode && actor === "child") {
-        const currentHour = store.bedtimeByDate.get(date);
-        if (isPastQuestRegistrationCutoff(date, new Date(), currentHour)) {
-          throw new Error(
-            "FORBIDDEN_STATE: 登録受付締切を過ぎているため設定できません",
-          );
-        }
-        if (isPastQuestRegistrationCutoff(date, new Date(), bedtimeHour)) {
-          throw new Error(
-            "FORBIDDEN_STATE: 変更先の登録受付締切を過ぎているため設定できません",
-          );
-        }
       }
       store.bedtimeByDate.set(date, bedtimeHour);
       const setAt = new Date().toISOString();

@@ -28,7 +28,7 @@ feature/*  ──PR──►  develop  ──検証──►  main  ──自動
 - 配信は `npm start`（superstatic が `dist/` を SPA フォールバック付きで配信）。
   `start` が壊れるとロールアウトが成立しないため、`superstatic` は **dependencies** に置く
 - **Classic Hosting は不採用**。`firebase.json` / `.firebaserc` の hosting 設定を追加しない
-- **旧 GitHub Pages**: 廃止（`pages.yml` 削除済み）。詳細は [README.md](./README.md) の「デプロイ」節
+- **旧 GitHub Pages**: 本番アプリは配信しない。`redirect/` の転送 HTML のみ `redirect-pages.yml` で配信。詳細は [README.md](./README.md) の「デプロイ」節
 
 ## API 接続
 

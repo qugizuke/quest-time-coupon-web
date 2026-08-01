@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<!--
+  旧 GitHub Pages（/quest-time-coupon-web/）から Firebase App Hosting への転送ページ。
+  サーバー側 301 は GitHub Pages では設定できないため、JavaScript と meta refresh で転送する。
+  深い URL は 404.html でも同じ処理を行う（GitHub Pages の SPA 向け挙動）。
+-->
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>移転中…</title>
+    <!-- JavaScript 無効時のフォールバック（ルートのみ） -->
+    <meta
+      http-equiv="refresh"
+      content="0;url=https://quest-time-coupon-web--quest-time-coupon-95106.asia-east1.hosted.app/"
+    />
+    <script>
+      /**
+       * 旧 GitHub Pages のパス接頭辞を除き、Firebase App Hosting へ転送する。
+       * @returns {void}
+       */
+      (function redirectToFirebaseAppHosting() {
+        /** @type {string} Firebase App Hosting の本番 Origin（末尾スラッシュなし） */
+        var NEW_ORIGIN =
+          "https://quest-time-coupon-web--quest-time-coupon-95106.asia-east1.hosted.app";
+        /** @type {string} 旧 GitHub Pages プロジェクトの URL 接頭辞 */
+        var OLD_PREFIX = "/quest-time-coupon-web";
+
+        /** @type {string} 転送先パス（旧接頭辞除去後。空ならルート） */
+        var restPath = window.location.pathname.replace(
+          new RegExp("^" + OLD_PREFIX),
+          "",
+        );
+        if (restPath === "") {
+          restPath = "/";
+        }
+
+        /** @type {string} クエリ・ハッシュを維持した完全 URL */
+        var destination =
+          NEW_ORIGIN +
+          restPath +
+          window.location.search +
+          window.location.hash;
+
+        window.location.replace(destination);
+      })();
+    </script>
+  </head>
+  <body>
+    <p>
+      新しいサイトへ移動しています…
+      <a href="https://quest-time-coupon-web--quest-time-coupon-95106.asia-east1.hosted.app/"
+        >こちらをクリック</a
+      >
+    </p>
+  </body>
+</html>

@@ -96,6 +96,23 @@ export function parseDateString(value: string): Date | null {
 }
 
 /**
+ * ISO 日時を JST の「○時○分」表示に変換する
+ * @param {string | null | undefined} iso - ISO 8601 日時（UTC / オフセット付き）
+ * @returns {string} 例: `20時30分`。欠落・不正時は `—`
+ */
+export function formatJstClockJa(iso: string | null | undefined): string {
+  if (iso === null || iso === undefined || iso === "") {
+    return "—";
+  }
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) {
+    return "—";
+  }
+  const { hour, minute } = getJstClockParts(parsed);
+  return `${hour}時${String(minute).padStart(2, "0")}分`;
+}
+
+/**
  * 画面表示用の日付（例: 2026年6月6日(土)）
  * @param {string} value - API / Sheet 由来の日付文字列
  * @returns {string} 表示用ラベル

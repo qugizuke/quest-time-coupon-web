@@ -6,9 +6,11 @@ import { describe, expect, it } from "vitest";
 import {
   canChildSaveBedtime,
   evaluateParentBedtimeChange,
+  isLongVacationFinalDayBeforeWeekday,
   resolveBedtimeUiMode,
   resolveHomeVariant,
   shouldShowWakeUpSetting,
+  WAKE_UP_OPTIONS,
 } from "./homeMode";
 
 describe("resolveHomeVariant", () => {
@@ -106,9 +108,56 @@ describe("resolveBedtimeUiMode", () => {
   });
 });
 
+describe("isLongVacationFinalDayBeforeWeekday", () => {
+  it("最終日かつ翌日が平日なら true", () => {
+    // 2026-08-31 は月曜・期間最終日、翌日 9/1 は火曜平日
+    expect(
+      isLongVacationFinalDayBeforeWeekday("2026-08-31", {
+        startDate: "2026-07-25",
+        endDate: "2026-08-31",
+      }),
+    ).toBe(true);
+  });
+
+  it("最終日でも翌日が土曜なら false", () => {
+    // 2026-07-31 は金曜、翌日 8/1 は土曜
+    expect(
+      isLongVacationFinalDayBeforeWeekday("2026-07-31", {
+        startDate: "2026-07-25",
+        endDate: "2026-07-31",
+      }),
+    ).toBe(false);
+  });
+
+  it("期間中日は false", () => {
+    expect(
+      isLongVacationFinalDayBeforeWeekday("2026-08-15", {
+        startDate: "2026-07-25",
+        endDate: "2026-08-31",
+      }),
+    ).toBe(false);
+  });
+});
+
 describe("shouldShowWakeUpSetting", () => {
-  it("長期休みなら毎晩 true", () => {
-    expect(shouldShowWakeUpSetting("2026-07-28", true)).toBe(true);
+  const summer = { startDate: "2026-07-25", endDate: "2026-08-31" };
+
+  it("長期休みの中日は true", () => {
+    expect(shouldShowWakeUpSetting("2026-08-15", true, summer)).toBe(true);
+  });
+
+  it("長期休み最終日（翌日平日）は false", () => {
+    expect(shouldShowWakeUpSetting("2026-08-31", true, summer)).toBe(false);
+  });
+
+  it("長期休み最終日でも翌日が休日なら true（休日前夜としても true）", () => {
+    // 2026-07-31 金曜終了 → 翌日土曜。isWeekendEve でも true
+    expect(
+      shouldShowWakeUpSetting("2026-07-31", true, {
+        startDate: "2026-07-25",
+        endDate: "2026-07-31",
+      }),
+    ).toBe(true);
   });
 
   it("休日前夜（金曜）は true", () => {
@@ -119,6 +168,17 @@ describe("shouldShowWakeUpSetting", () => {
   it("通常の平日は false", () => {
     // 2026-07-28 は火曜
     expect(shouldShowWakeUpSetting("2026-07-28", false)).toBe(false);
+  });
+
+  it("WAKE_UP_OPTIONS に 07:15 を含めない", () => {
+    expect(WAKE_UP_OPTIONS).not.toContain("07:15");
+    expect(WAKE_UP_OPTIONS).toEqual([
+      "07:00",
+      "07:30",
+      "08:00",
+      "08:30",
+      "09:00",
+    ]);
   });
 });
 

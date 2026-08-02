@@ -75,9 +75,18 @@ function buildHome(overrides: Partial<HomeData> = {}): HomeData {
 /**
  * QuestConfirmPage を描画する
  * @param {HomeData} home - ホームデータ
+ * @param {{ startDate: string; endDate: string; updatedAt?: string; active?: boolean } | null} [longVacation] - 長期休み期間
  * @returns {void}
  */
-function renderConfirm(home: HomeData): void {
+function renderConfirm(
+  home: HomeData,
+  longVacation: {
+    startDate: string;
+    endDate: string;
+    updatedAt?: string;
+    active?: boolean;
+  } | null = null,
+): void {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false, staleTime: Infinity },
@@ -85,6 +94,17 @@ function renderConfirm(home: HomeData): void {
   });
   queryClient.setQueryData(queryKeys.home, home);
   queryClient.setQueryData(queryKeys.dailyQuests(todayLocal()), daily);
+  queryClient.setQueryData(
+    queryKeys.longVacation,
+    longVacation
+      ? {
+          startDate: longVacation.startDate,
+          endDate: longVacation.endDate,
+          updatedAt: longVacation.updatedAt ?? "2026-07-01T00:00:00+09:00",
+          active: longVacation.active ?? true,
+        }
+      : { startDate: "", endDate: "", updatedAt: "", active: false },
+  );
   render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={["/quest/confirm"]}>
@@ -124,18 +144,38 @@ describe("QuestConfirmPage", () => {
     expect(screen.getByText("明日の起きる時間")).toBeTruthy();
   });
 
-  it("長期休み中は平日でも起床 UI を表示する", () => {
-    vi.setSystemTime(new Date(2026, 6, 28, 20, 30, 0)); // 火曜・受付時間内
+  it("長期休みの中日は平日でも起床 UI を表示する", () => {
+    vi.setSystemTime(new Date(2026, 7, 11, 20, 30, 0)); // 2026-08-11 火曜・受付時間内
     sessionStorage.clear();
     setQuestDraft(todayLocal(), buildCompleteDraft());
 
     renderConfirm(
       buildHome({
         isVacationMode: true,
+        isLongVacation: true,
       }),
+      { startDate: "2026-07-25", endDate: "2026-08-31" },
     );
 
     expect(screen.getByTestId("wake-up-section")).toBeTruthy();
+  });
+
+  it("長期休み最終日（翌日平日）は起床 UI を出さない", () => {
+    // 2026-08-31 月曜・最終日、翌日 9/1 火曜平日
+    vi.setSystemTime(new Date(2026, 7, 31, 20, 30, 0));
+    sessionStorage.clear();
+    setQuestDraft(todayLocal(), buildCompleteDraft());
+
+    renderConfirm(
+      buildHome({
+        isVacationMode: true,
+        isLongVacation: true,
+      }),
+      { startDate: "2026-07-25", endDate: "2026-08-31" },
+    );
+
+    expect(screen.getByText("最後の確認")).toBeTruthy();
+    expect(screen.queryByTestId("wake-up-section")).toBeNull();
   });
 
   it("通常の平日は起床 UI を出さない", () => {

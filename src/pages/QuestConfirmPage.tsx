@@ -1,13 +1,14 @@
 /**
  * @file QuestConfirmPage
  * @description 回答一覧の最終確認と登録。条件付きで翌日起床時刻を設定する（Issue #16）。
+ *   長期休み最終日（翌日平日）は起床 UI 非表示・wakePromise 未送信（Functions が 07:15 を書く）。
  *   Figma kid-quest-confirm の横向き2カラム（左回答／右 CTA）に寄せる（Issue #19）。
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { postAnswers } from "@/api/client";
-import { homeQuery, queryKeys } from "@/api/queries";
+import { homeQuery, longVacationQuery, queryKeys } from "@/api/queries";
 import { ChildPageFrame } from "@/components/layout/ChildPageFrame";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -37,7 +38,7 @@ import type {
   GradingMode,
   QuestDefinition,
   QuestDraft,
-  WakeUpTime,
+  SelectableWakeTime,
 } from "@/types/api";
 
 /**
@@ -102,10 +103,10 @@ function buildConfirmationItems(
 
 /**
  * 起床ラベルを表示用に変換する
- * @param {WakeUpTime} time - 起床時刻
+ * @param {SelectableWakeTime} time - 起床時刻（UI 選択値）
  * @returns {string} 例: 8:00
  */
-function wakeUpLabel(time: WakeUpTime): string {
+function wakeUpLabel(time: SelectableWakeTime): string {
   const [h, m] = time.split(":");
   return `${Number(h)}:${m}`;
 }
@@ -140,8 +141,13 @@ export function QuestConfirmPage() {
   const date = todayLocal();
   const { data: daily } = useDailyQuests();
   const { data: homeData, isLoading: isHomeLoading } = useQuery(homeQuery);
+  const {
+    data: longVacation,
+    isLoading: isLongVacationLoading,
+  } = useQuery(longVacationQuery);
   const draft = getQuestDraft(date);
-  const [wakeUpTime, setWakeUpTime] = useState<WakeUpTime>(DEFAULT_WAKE_UP);
+  const [wakeUpTime, setWakeUpTime] =
+    useState<SelectableWakeTime>(DEFAULT_WAKE_UP);
   let confirmationItems:
     | { questId: string; title: string; childAnswer: ChildAnswer }[]
     | null = null;
@@ -158,10 +164,18 @@ export function QuestConfirmPage() {
     }
   }
 
+  const vacationPeriod =
+    longVacation?.startDate && longVacation?.endDate
+      ? { startDate: longVacation.startDate, endDate: longVacation.endDate }
+      : null;
   const showWakeUp =
     !!homeData &&
     !homeData.isExemptDay &&
-    shouldShowWakeUpSetting(date, homeData.isVacationMode);
+    shouldShowWakeUpSetting(
+      date,
+      homeData.isVacationMode,
+      vacationPeriod,
+    );
   const vacationMode = homeData?.isVacationMode === true;
 
   useEffect(() => {
@@ -192,6 +206,7 @@ export function QuestConfirmPage() {
       const bedtimeHour: BedtimeHour | undefined = canSendBedtime
         ? (getBedtimeHourDraft(date) ?? homeData?.bedtimeHour)
         : undefined;
+      // 長期休み最終日（翌日平日）は showWakeUp=false のため wakePromise を送らない
       return postAnswers({
         date,
         answers,
@@ -206,7 +221,8 @@ export function QuestConfirmPage() {
     },
   });
 
-  if (isHomeLoading) {
+  // 長期休み中は最終日判定のため期間の読込を待つ（誤って wakePromise を送らない）
+  if (isHomeLoading || (vacationMode && isLongVacationLoading)) {
     return (
       <ChildPageFrame vacationMode={vacationMode}>
         <div className="flex flex-1 items-center justify-center">

@@ -1,13 +1,20 @@
 /**
  * @file 子どもホームのモード出し分け
  * @description 通常／免除／長期休み／免除×長期休みの判定と、就寝・起床 UI の表示条件。
- * @limitation 本接続（Issue F）前は HomeData のモックフラグを正とする。
+ *   長期休み最終日（翌日が平日）は起床 UI を出さず、wakePromise も送らない
+ *   （Functions が 07:15 を自動書き込みする）。
+ * @limitation 最終日判定には長期休みの期間（start/end）が必要。期間不明時は従来どおり表示側に倒す。
  */
 import {
   isWeekendEve,
   resolveQuestDeadlineBedtimeHour,
 } from "@/lib/deadline";
-import type { BedtimeHour, TodayStatus, WakeUpTime } from "@/types/api";
+import { addDays, isRestDay } from "@/lib/japaneseHolidays";
+import type {
+  BedtimeHour,
+  SelectableWakeTime,
+  TodayStatus,
+} from "@/types/api";
 
 /** ホーム UI バリアント（Figma kid-home*） */
 export type HomeVariant =
@@ -29,8 +36,16 @@ export type ParentBedtimeBlockReason =
   | "before_child_deadline"
   | "past_parent_deadline";
 
-/** 起床候補（7:00〜9:00・30分刻み） */
-export const WAKE_UP_OPTIONS: WakeUpTime[] = [
+/** 長期休み期間（両端含む YYYY-MM-DD） */
+export interface LongVacationPeriod {
+  /** @type {string} 開始日 */
+  startDate: string;
+  /** @type {string} 終了日 */
+  endDate: string;
+}
+
+/** 起床候補（7:00〜9:00・30分刻み。保存専用 07:15 は含めない） */
+export const WAKE_UP_OPTIONS: SelectableWakeTime[] = [
   "07:00",
   "07:30",
   "08:00",
@@ -38,8 +53,11 @@ export const WAKE_UP_OPTIONS: WakeUpTime[] = [
   "09:00",
 ];
 
-/** 起床の既定値 */
-export const DEFAULT_WAKE_UP: WakeUpTime = "08:00";
+/** 起床の既定値（UI 省略時） */
+export const DEFAULT_WAKE_UP: SelectableWakeTime = "08:00";
+
+/** Functions が長期休み最終日（翌日平日）に自動書き込みする起床時刻 */
+export const AUTO_WAKE_TIME_VACATION_LAST_DAY = "07:15" as const;
 
 /** 子どもが就寝時刻を設定できる終端時刻（時）。この時刻以降は不可 */
 export const CHILD_BEDTIME_SETTING_CUTOFF_HOUR = 18;
@@ -189,16 +207,59 @@ export function evaluateParentBedtimeChange(opts: {
 }
 
 /**
- * confirm に起床 UI を出すか（金土夜＝休日前夜、または長期休み毎晩）
+ * 日付が長期休み期間（両端含む）に含まれるか
  * @param {string} date - YYYY-MM-DD
- * @param {boolean} isVacationMode - 長期休みモード中か
+ * @param {LongVacationPeriod | null | undefined} period - 期間
+ * @returns {boolean} 含まれるなら true
+ */
+export function isDateInLongVacation(
+  date: string,
+  period: LongVacationPeriod | null | undefined,
+): boolean {
+  if (!period?.startDate || !period?.endDate) return false;
+  return date >= period.startDate && date <= period.endDate;
+}
+
+/**
+ * 長期休み最終日かつ翌日が平日か（Functions の wakePromise 自動 07:15 条件と同値）
+ * @description
+ *   - 当日は長期休みに含まれる
+ *   - 翌日は長期休みに含まれない
+ *   - 翌日が平日（土日祝以外）
+ * @param {string} date - YYYY-MM-DD
+ * @param {LongVacationPeriod | null | undefined} period - 長期休み期間
+ * @returns {boolean} 条件を満たすなら true
+ */
+export function isLongVacationFinalDayBeforeWeekday(
+  date: string,
+  period: LongVacationPeriod | null | undefined,
+): boolean {
+  if (!isDateInLongVacation(date, period)) return false;
+  const tomorrow = addDays(date, 1);
+  if (isDateInLongVacation(tomorrow, period)) return false;
+  return !isRestDay(tomorrow);
+}
+
+/**
+ * confirm に起床 UI を出すか
+ * @description 休日前夜、または長期休み中（最終日かつ翌日平日を除く）。
+ *   最終日（翌日平日）は UI 非表示・wakePromise 未送信（Functions が 07:15 を書く）。
+ * @param {string} date - YYYY-MM-DD
+ * @param {boolean} isVacationMode - 長期休みモード中か（home.isLongVacation）
+ * @param {LongVacationPeriod | null | undefined} [vacationPeriod] - 長期休み期間（最終日判定用）
  * @returns {boolean} 表示するなら true
  */
 export function shouldShowWakeUpSetting(
   date: string,
   isVacationMode: boolean,
+  vacationPeriod?: LongVacationPeriod | null,
 ): boolean {
-  return isVacationMode || isWeekendEve(date);
+  if (isWeekendEve(date)) return true;
+  if (!isVacationMode) return false;
+  if (isLongVacationFinalDayBeforeWeekday(date, vacationPeriod)) {
+    return false;
+  }
+  return true;
 }
 
 /**

@@ -1,6 +1,7 @@
 /**
  * @file QuestConfirmPage
  * @description 回答一覧の最終確認と登録。条件付きで翌日起床時刻を設定する（Issue #16）。
+ *   長期休み最終日（翌日平日）は起床 UI 非表示・wakePromise 未送信（Functions が 07:15 を書く）。
  *   Figma kid-quest-confirm の横向き2カラム（左回答／右 CTA）に寄せる（Issue #19）。
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";

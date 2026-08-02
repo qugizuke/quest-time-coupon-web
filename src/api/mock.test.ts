@@ -4,7 +4,13 @@
  * @vitest-environment jsdom
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clearMockHomeModeFlags, mockApi, resetMockStore, setMockHomeModeFlags } from "./mock";
+import {
+  clearMockHomeModeFlags,
+  getMockWakeUp,
+  mockApi,
+  resetMockStore,
+  setMockHomeModeFlags,
+} from "./mock";
 import {
   clearParentLocalSettings,
   MOCK_EXEMPT_FLAG_KEY,
@@ -541,6 +547,77 @@ describe("mockApi registrationSetting actor=parent 制約", () => {
         body: JSON.stringify({ date, bedtimeHour: 21, actor: "parent" }),
       }),
     ).rejects.toThrow("FORBIDDEN_STATE");
+  });
+});
+
+describe("mockApi answers 長期休み最終日の wakePromise", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    clearMockHomeModeFlags();
+    resetMockStore();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    clearMockHomeModeFlags();
+    resetMockStore();
+  });
+
+  it("最終日（翌日平日）は wakePromise を拒否し、未送信なら 07:15 を自動設定する", async () => {
+    const date = "2026-08-31"; // 月曜最終日、翌日火曜平日
+    vi.setSystemTime(new Date(2026, 7, 31, 20, 30, 0));
+    await mockApi("longVacation", {
+      method: "POST",
+      body: JSON.stringify({
+        startDate: "2026-07-25",
+        endDate: "2026-08-31",
+      }),
+    });
+
+    await expect(
+      mockApi("answers", {
+        method: "POST",
+        body: JSON.stringify({
+          date,
+          answers: sampleAnswers,
+          bedtimeHour: 21,
+          wakePromise: { wakeTime: "08:00" },
+        }),
+      }),
+    ).rejects.toThrow(/wakePromise/);
+
+    await mockApi("answers", {
+      method: "POST",
+      body: JSON.stringify({
+        date,
+        answers: sampleAnswers,
+        bedtimeHour: 21,
+      }),
+    });
+    expect(getMockWakeUp(date)).toBe("07:15");
+  });
+
+  it("長期休みの中日は wakePromise を受け付ける", async () => {
+    const date = "2026-08-11"; // 火曜・中日
+    vi.setSystemTime(new Date(2026, 7, 11, 20, 30, 0));
+    await mockApi("longVacation", {
+      method: "POST",
+      body: JSON.stringify({
+        startDate: "2026-07-25",
+        endDate: "2026-08-31",
+      }),
+    });
+
+    await mockApi("answers", {
+      method: "POST",
+      body: JSON.stringify({
+        date,
+        answers: sampleAnswers,
+        bedtimeHour: 21,
+        wakePromise: { wakeTime: "08:30" },
+      }),
+    });
+    expect(getMockWakeUp(date)).toBe("08:30");
   });
 });
 

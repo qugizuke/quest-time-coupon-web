@@ -19,8 +19,10 @@ import {
   resolveQuestDeadlineBedtimeHour,
 } from "@/lib/deadline";
 import {
+  AUTO_WAKE_TIME_VACATION_LAST_DAY,
   canChildSaveBedtime,
   getChildBedtimeSettingCutoff,
+  isLongVacationFinalDayBeforeWeekday,
 } from "@/lib/homeMode";
 import {
   BEDTIME_PREP_QUEST_ID,
@@ -336,6 +338,15 @@ export function setMockHomeModeFlags(opts: {
 export function clearMockHomeModeFlags(): void {
   store.vacationModeOverride = undefined;
   store.exemptDatesOverride = undefined;
+}
+
+/**
+ * テスト用: 回答登録後に保存された起床約束を返す
+ * @param {string} date - YYYY-MM-DD
+ * @returns {WakeUpTime | undefined} 保存値
+ */
+export function getMockWakeUp(date: string): WakeUpTime | undefined {
+  return store.wakeUpByDate.get(date);
 }
 
 /**
@@ -1047,8 +1058,28 @@ export async function mockApi<T>(
         date,
         savedHour ?? resolveQuestDeadlineBedtimeHour(date, bedtimeHour),
       );
+      const vacationPeriod =
+        store.longVacation.startDate && store.longVacation.endDate
+          ? {
+              startDate: store.longVacation.startDate,
+              endDate: store.longVacation.endDate,
+            }
+          : null;
+      const isVacationFinalDayBeforeWeekday = isLongVacationFinalDayBeforeWeekday(
+        date,
+        vacationPeriod,
+      );
       const wake = wakePromise?.wakeTime ?? wakeUpTime;
-      if (wake) {
+      if (isVacationFinalDayBeforeWeekday) {
+        // Functions と同じ: 最終日（翌日平日）は wakePromise 拒否・07:15 自動設定
+        if (wake !== undefined) {
+          throw new Error(
+            `BAD_REQUEST: 長期休み最終日（翌日平日）は wakePromise を送れません ` +
+              `(date=${date}, wakeTime=${String(wake)})`,
+          );
+        }
+        store.wakeUpByDate.set(date, AUTO_WAKE_TIME_VACATION_LAST_DAY);
+      } else if (wake) {
         store.wakeUpByDate.set(date, wake);
       }
       return {

@@ -1,7 +1,8 @@
 /**
  * @file GradeDatePage
- * @description 保護者採点詳細（◯✗・採点拒否ダイアログ・任意加減点）。
+ * @description 保護者採点詳細（⭕️❌・採点拒否ダイアログ・任意加減点）。
  *   レイアウト: 日付→登録時刻→拒否上部→設問→加減点→確定下部。
+ *   登録時刻は GET grade.submittedAt（ISO）を JST 表示する。欠落時は —。
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
@@ -13,7 +14,7 @@ import { LoadingScreen } from "@/components/layout/LoadingScreen";
 import { Button } from "@/components/ui/Button";
 import { useGradeAdjustmentDefinitions } from "@/hooks/useGradeAdjustmentDefinitions";
 import { useDailyQuests } from "@/hooks/useDailyQuests";
-import { formatDateJa } from "@/lib/date";
+import { formatDateJa, formatJstClockJa } from "@/lib/date";
 import {
   isNegativeChildAnswer,
   isParentGradableAnswer,
@@ -34,18 +35,6 @@ interface AdjustmentRow {
   id: string;
   code: string;
   minutes: number;
-}
-
-/**
- * 登録時刻を「○時○分」形式で返す
- * @param {string | null} submittedAt - ISO 日時
- * @returns {string} 表示文言
- */
-function formatSubmittedClock(submittedAt: string | null): string {
-  if (!submittedAt) return "—";
-  const d = new Date(submittedAt);
-  if (Number.isNaN(d.getTime())) return "—";
-  return `${d.getHours()}時${String(d.getMinutes()).padStart(2, "0")}分`;
 }
 
 /**
@@ -323,7 +312,7 @@ export function GradeDatePage() {
     );
   }
 
-  const clock = formatSubmittedClock(gradeData.submittedAt);
+  const clock = formatJstClockJa(gradeData.submittedAt);
 
   return (
     <ParentPageFrame>
@@ -376,8 +365,8 @@ export function GradeDatePage() {
                   </p>
                   <p className="mt-1 text-sm text-muted">
                     {gradeData.withinBonusDeadline
-                      ? "◯なら定時登録ボーナス +15分の対象です。✗の場合、虚偽として -30分になります。"
-                      : "ボーナスタイム外の登録のため、定時ボーナスは付きません。✗の場合、虚偽として -30分になります。"}
+                      ? "⭕️なら定時登録ボーナス +15分の対象です。❌の場合、虚偽として -30分になります。"
+                      : "ボーナスタイム外の登録のため、定時ボーナスは付きません。❌の場合、虚偽として -30分になります。"}
                   </p>
                 </>
               )}
@@ -403,21 +392,23 @@ export function GradeDatePage() {
                     className="flex-1"
                     variant={selected === true ? "primary" : "secondary"}
                     disabled={readOnly}
+                    aria-label="できた（⭕️）"
                     onClick={() =>
                       setGrades((g) => ({ ...g, [item.questId]: true }))
                     }
                   >
-                    ◯
+                    ⭕️
                   </Button>
                   <Button
                     className="flex-1"
                     variant={selected === false ? "primary" : "secondary"}
                     disabled={readOnly}
+                    aria-label="できていない（❌）"
                     onClick={() =>
                       setGrades((g) => ({ ...g, [item.questId]: false }))
                     }
                   >
-                    ✗
+                    ❌
                   </Button>
                 </div>
               )}

@@ -10,13 +10,26 @@ export type ChildAnswer = 1 | 0 | -1;
 /** 就寝時刻（時） */
 export type BedtimeHour = 21 | 22 | 23;
 
-/** 起床約束の時刻（契約 §2.3・5値のみ） */
-export type WakeTime = "07:00" | "07:30" | "08:00" | "08:30" | "09:00";
+/**
+ * 起床約束の時刻。
+ * UI 選択は 07:00 / 07:30 / 08:00 / 08:30 / 09:00 の5値。
+ * `"07:15"` は長期休み最終日（翌日平日）など Functions が自動書き込みする保存専用値。
+ */
+export type WakeTime =
+  | "07:00"
+  | "07:15"
+  | "07:30"
+  | "08:00"
+  | "08:30"
+  | "09:00";
 
 /**
  * @deprecated WakeTime の別名（既存 UI 互換）
  */
 export type WakeUpTime = WakeTime;
+
+/** UI で子どもが選べる起床時刻（07:15 は含まない） */
+export type SelectableWakeTime = Exclude<WakeTime, "07:15">;
 
 /** API 共通レスポンス */
 export interface ApiResponse<T> {

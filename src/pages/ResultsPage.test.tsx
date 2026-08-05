@@ -4,12 +4,35 @@
  * @vitest-environment jsdom
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import type { ReactNode } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { queryKeys } from "@/api/queries";
 import { ResultsPage } from "@/pages/ResultsPage";
+import { TimerPage } from "@/pages/TimerPage";
 import type { HomeData, ResultItem } from "@/types/api";
+
+const apiMocks = vi.hoisted(() => ({
+  fetchDailyQuests: vi.fn(),
+  fetchGrade: vi.fn(),
+  fetchGradeDates: vi.fn(),
+  fetchHome: vi.fn(),
+  fetchLongVacation: vi.fn(),
+  fetchParentHome: vi.fn(),
+  fetchQuestExemptions: vi.fn(),
+  fetchResults: vi.fn(),
+  postResultsAck: vi.fn(),
+}));
+
+vi.mock("@/api/client", () => apiMocks);
 
 vi.mock("@/lib/date", async () => {
   const actual = await vi.importActual<typeof import("@/lib/date")>("@/lib/date");
@@ -17,6 +40,20 @@ vi.mock("@/lib/date", async () => {
     ...actual,
     todayLocal: () => "2026-07-30",
   };
+});
+
+beforeEach(() => {
+  apiMocks.fetchDailyQuests.mockResolvedValue({
+    date: "2026-07-30",
+    version: "test",
+    generationMode: "fixed_seed",
+    quests: [],
+  });
+});
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
 });
 
 /**
@@ -71,12 +108,17 @@ function buildResult(overrides: Partial<ResultItem>): ResultItem {
  * @param {object} [opts] - オプション
  * @param {Partial<HomeData>} [opts.homeOverrides] - ホーム上書き
  * @param {string} [opts.initialPath] - 初期パス（クエリ含む）
- * @returns {void}
+ * @param {ReactNode} [opts.homeElement] - ack 後の遷移先要素
+ * @returns {QueryClient} テスト用 QueryClient
  */
 function renderResults(
   items: ResultItem[],
-  opts: { homeOverrides?: Partial<HomeData>; initialPath?: string } = {},
-): void {
+  opts: {
+    homeOverrides?: Partial<HomeData>;
+    initialPath?: string;
+    homeElement?: ReactNode;
+  } = {},
+): QueryClient {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
@@ -90,18 +132,15 @@ function renderResults(
       <MemoryRouter initialEntries={[opts.initialPath ?? "/results"]}>
         <Routes>
           <Route path="/results" element={<ResultsPage />} />
-          <Route path="/" element={<div>home</div>} />
+          <Route path="/" element={opts.homeElement ?? <div>home</div>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
   );
+  return queryClient;
 }
 
 describe("ResultsPage reasonCode", () => {
-  afterEach(() => {
-    cleanup();
-  });
-
   it("unregistered は未登録理由文を表示する", () => {
     renderResults([
       buildResult({
@@ -134,10 +173,6 @@ describe("ResultsPage reasonCode", () => {
 });
 
 describe("ResultsPage week UI (#17)", () => {
-  afterEach(() => {
-    cleanup();
-  });
-
   it("月曜始まりの週ナビと7日行を表示する", () => {
     renderResults([]);
     expect(screen.getByTestId("results-week-list")).toBeTruthy();
@@ -268,5 +303,116 @@ describe("ResultsPage week UI (#17)", () => {
     expect(screen.getByTestId("results-week-label").textContent).toContain("7月20日の週");
     const day = screen.getByTestId("results-day-2026-07-21");
     expect(within(day).getByText(/免除/)).toBeTruthy();
+  });
+
+  it("home再取得に失敗しても結果確認後の残高をタイマーへ引き継ぐ", async () => {
+    const pending = buildResult({
+      date: "2026-07-30",
+      reasonCode: "normal",
+      totalPoints: 45,
+      acknowledged: false,
+      requiresAck: true,
+      blocksTimer: true,
+    });
+    apiMocks.postResultsAck.mockResolvedValue({
+      appliedDelta: 45,
+      penaltyOffset: 0,
+      displayBalance: 45,
+      penaltyMinutes: 0,
+    });
+    apiMocks.fetchHome.mockRejectedValue(new Error("home refetch failed"));
+    apiMocks.fetchResults.mockRejectedValue(new Error("results refetch failed"));
+
+    renderResults([pending], { homeElement: <TimerPage /> });
+    fireEvent.click(screen.getByTestId("results-day-2026-07-30"));
+    fireEvent.click(screen.getByTestId("results-ack-button"));
+
+    await waitFor(() => {
+      expect(screen.getByText("45:00")).toBeTruthy();
+    });
+    expect(apiMocks.postResultsAck).toHaveBeenCalledWith("2026-07-30");
+    expect(
+      screen.getByRole("button", { name: /スタート/ }).hasAttribute("disabled"),
+    ).toBe(false);
+  });
+
+  it("未確認が複数ある場合は確認済み分だけ件数を減らす", async () => {
+    const first = buildResult({
+      date: "2026-07-29",
+      reasonCode: "normal",
+      totalPoints: 20,
+      acknowledged: false,
+      requiresAck: true,
+      blocksTimer: true,
+    });
+    const second = buildResult({
+      date: "2026-07-30",
+      reasonCode: "grade_rejected",
+      totalPoints: -60,
+      acknowledged: false,
+      requiresAck: true,
+      blocksTimer: true,
+    });
+    apiMocks.postResultsAck.mockResolvedValue({
+      appliedDelta: 20,
+      penaltyOffset: 0,
+      displayBalance: 20,
+      penaltyMinutes: 0,
+    });
+    apiMocks.fetchHome.mockRejectedValue(new Error("home refetch failed"));
+    apiMocks.fetchResults.mockRejectedValue(new Error("results refetch failed"));
+
+    const queryClient = renderResults([first, second], {
+      homeOverrides: {
+        unacknowledgedCount: 2,
+        timerBlockCount: 2,
+      },
+    });
+    fireEvent.click(screen.getByTestId("results-day-2026-07-29"));
+    fireEvent.click(screen.getByTestId("results-ack-button"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("results-week-list")).toBeTruthy();
+    });
+    const home = queryClient.getQueryData<HomeData>(queryKeys.home);
+    expect(home?.displayBalance).toBe(20);
+    expect(home?.unacknowledgedCount).toBe(1);
+    expect(home?.timerBlockCount).toBe(1);
+    expect(home?.canStartTimer).toBe(false);
+    expect(screen.getByTestId("results-day-2026-07-30").dataset.unacked).toBe(
+      "true",
+    );
+  });
+
+  it("ack失敗後に別日を開いても前日のエラーを表示しない", async () => {
+    const first = buildResult({
+      date: "2026-07-29",
+      reasonCode: "normal",
+      totalPoints: 20,
+      acknowledged: false,
+      requiresAck: true,
+      blocksTimer: true,
+    });
+    const second = buildResult({
+      date: "2026-07-30",
+      reasonCode: "normal",
+      totalPoints: 10,
+      acknowledged: false,
+      requiresAck: true,
+      blocksTimer: true,
+    });
+    apiMocks.postResultsAck.mockRejectedValue(new Error("ack failed"));
+
+    renderResults([first, second]);
+    fireEvent.click(screen.getByTestId("results-day-2026-07-29"));
+    fireEvent.click(screen.getByTestId("results-ack-button"));
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "ack failed",
+    );
+
+    fireEvent.click(screen.getByTestId("results-back-to-week"));
+    fireEvent.click(screen.getByTestId("results-day-2026-07-30"));
+
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });

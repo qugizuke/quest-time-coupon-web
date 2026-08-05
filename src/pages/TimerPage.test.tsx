@@ -84,9 +84,17 @@ describe("TimerPage", () => {
       }),
     );
 
-    expect(screen.getByText("採点結果を先に確認してね")).toBeTruthy();
-    const start = screen.getByRole("button", { name: "スタート" });
+    expect(screen.getByText("未確認の採点結果があります。")).toBeTruthy();
+    const start = screen.getByRole("button", { name: /スタート/ });
     expect(start.hasAttribute("disabled")).toBe(true);
+
+    const layout = screen.getByTestId("timer-layout");
+    const timer = screen.getByTestId("timer-main");
+    const alert = screen.getByTestId("timer-unacked-alert");
+    expect(layout.className).toContain("flex-col");
+    expect(layout.className).not.toContain("grid");
+    expect(layout.firstElementChild).toBe(timer);
+    expect(timer.nextElementSibling).toBe(alert);
   });
 
   it("残高0のときスタートは disabled", () => {
@@ -99,7 +107,7 @@ describe("TimerPage", () => {
     );
 
     expect(screen.getByText("残高がないので スタートできません")).toBeTruthy();
-    const start = screen.getByRole("button", { name: "スタート" });
+    const start = screen.getByRole("button", { name: /スタート/ });
     expect(start.hasAttribute("disabled")).toBe(true);
   });
 
@@ -112,7 +120,7 @@ describe("TimerPage", () => {
       }),
     );
 
-    const start = screen.getByRole("button", { name: "スタート" });
+    const start = screen.getByRole("button", { name: /スタート/ });
     expect(start.hasAttribute("disabled")).toBe(false);
   });
 });

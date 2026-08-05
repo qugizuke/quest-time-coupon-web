@@ -23,7 +23,12 @@ import {
   getWeekDates,
   getWeekOffsetBetween,
 } from "@/lib/week";
-import type { ReasonCode, ResultItem } from "@/types/api";
+import type { HomeData, ReasonCode, ResultItem } from "@/types/api";
+
+/** React Query に保存する採点結果一覧 */
+interface ResultsCacheData {
+  items: ResultItem[];
+}
 
 /** 「分からない」回答がある日の促しメッセージ */
 const UNKNOWN_ANSWER_MESSAGE =
@@ -185,20 +190,67 @@ export function ResultsPage() {
 
   const ackMutation = useMutation({
     mutationFn: (date: string) => postResultsAck(date),
-    onSuccess: (_data, date) => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.home });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.results });
-
-      const current = queryClient.getQueryData<{
-        items: Array<{ date: string; acknowledged: boolean; requiresAck: boolean; reasonCode: ReasonCode }>;
-      }>(queryKeys.results);
-      const hasOtherUnacked = (current?.items ?? []).some(
-        (item) =>
-          item.date !== date &&
-          item.requiresAck &&
-          !item.acknowledged &&
-          item.reasonCode !== "exempt",
+    onSuccess: async (ack, date) => {
+      const currentResults =
+        queryClient.getQueryData<ResultsCacheData>(queryKeys.results);
+      const acknowledgedItem = currentResults?.items.find(
+        (item) => item.date === date,
       );
+
+      // resultsAck の成功レスポンスを先に反映し、画面遷移中も古い残高を表示しない。
+      queryClient.setQueryData<HomeData>(queryKeys.home, (currentHome) => {
+        if (!currentHome) return currentHome;
+
+        const nextUnacknowledgedCount = Math.max(
+          0,
+          currentHome.unacknowledgedCount -
+            (acknowledgedItem && needsAck(acknowledgedItem) ? 1 : 0),
+        );
+        const nextTimerBlockCount = Math.max(
+          0,
+          currentHome.timerBlockCount -
+            (acknowledgedItem?.blocksTimer ? 1 : 0),
+        );
+
+        return {
+          ...currentHome,
+          displayBalance: ack.displayBalance,
+          penaltyMinutes: ack.penaltyMinutes,
+          unacknowledgedCount: nextUnacknowledgedCount,
+          timerBlockCount: nextTimerBlockCount,
+          canStartTimer:
+            ack.displayBalance > 0 && nextTimerBlockCount === 0,
+          todayStatus:
+            currentHome.today === date &&
+            currentHome.todayStatus === "pending_ack"
+              ? "completed"
+              : currentHome.todayStatus,
+        };
+      });
+      queryClient.setQueryData<ResultsCacheData>(
+        queryKeys.results,
+        (current) =>
+          current
+            ? {
+                ...current,
+                items: current.items.map((item) =>
+                  item.date === date
+                    ? { ...item, acknowledged: true }
+                    : item,
+                ),
+              }
+            : current,
+      );
+
+      // 件数や当日状態は home/results を正として再同期してから遷移する。
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.home }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.results }),
+      ]);
+
+      const refreshed =
+        queryClient.getQueryData<ResultsCacheData>(queryKeys.results);
+      const hasOtherUnacked = (refreshed?.items ?? []).some(needsAck);
 
       if (hasOtherUnacked) {
         setSelectedDate(null);
@@ -218,7 +270,8 @@ export function ResultsPage() {
     );
   }
 
-  if (error) {
+  // 再取得失敗時も保持済みデータがあれば画面を継続し、ack 成功後の表示を失わない。
+  if (error && !data) {
     return (
       <ChildPageFrame>
         <p className="text-danger">{error instanceof Error ? error.message : "エラー"}</p>
@@ -269,7 +322,10 @@ export function ResultsPage() {
                     type="button"
                     disabled={!clickable}
                     onClick={() => {
-                      if (clickable) setSelectedDate(date);
+                      if (clickable) {
+                        ackMutation.reset();
+                        setSelectedDate(date);
+                      }
                     }}
                     data-testid={`results-day-${date}`}
                     data-reason-code={item?.reasonCode ?? ""}
@@ -450,10 +506,20 @@ export function ResultsPage() {
               確認した
             </Button>
           )}
+          {ackMutation.error && (
+            <p className="text-danger" role="alert">
+              {ackMutation.error instanceof Error
+                ? ackMutation.error.message
+                : "採点結果を確認できませんでした"}
+            </p>
+          )}
           <Button
             variant="secondary"
             fullWidth
-            onClick={() => setSelectedDate(null)}
+            onClick={() => {
+              ackMutation.reset();
+              setSelectedDate(null);
+            }}
             data-testid="results-back-to-week"
           >
             一覧に戻る

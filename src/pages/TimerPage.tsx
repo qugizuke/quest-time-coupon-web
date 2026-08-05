@@ -2,7 +2,7 @@
  * @file TimerPage
  * @description クーポン時間のカウントダウンと使用記録。
  *   未確認採点結果があるときは Start 不可（screen-design §6.6）。
- *   見た目は Figma kid-timer（横向き2カラム・紫アクセント）に寄せる（Issue #19）。
+ *   Figma v6 kid-timer に合わせ、タイマーと未確認警告を縦に配置する。
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -57,32 +57,29 @@ export function TimerPage() {
         <h1 className="text-app-lg font-bold text-ink">残り時間をはかろう</h1>
       </div>
 
-      {/*
-        Figma kid-timer: 横向きは左にタイマー＋操作、右に未確認アラート。
-        狭幅のみ縦積みに戻す。
-      */}
       <div
-        className={[
-          "flex flex-col gap-4",
-          "md:grid md:grid-cols-[minmax(0,1.6fr)_minmax(220px,0.9fr)] md:items-start md:gap-6",
-        ].join(" ")}
+        className="mx-auto flex w-full max-w-[944px] flex-col items-stretch gap-6"
+        data-testid="timer-layout"
       >
-        <div className="flex flex-col gap-4">
+        <div
+          className="flex w-full flex-col items-stretch gap-5"
+          data-testid="timer-main"
+        >
           <Card
             className={[
-              "flex min-h-[36vh] flex-col items-center justify-center gap-3 border-4 text-center md:min-h-[42vh]",
+              "flex min-h-[36vh] w-full flex-col items-center justify-center gap-4 border-4 text-center md:min-h-[42vh] md:p-10",
               display.isPenalty
                 ? "border-danger bg-danger-soft"
-                : "border-timer-ink/30 bg-nav-timer/40",
+                : "border-border bg-surface",
             ].join(" ")}
           >
             <p className="text-lg text-muted">
-              {display.isPenalty ? "超過時間" : "残り時間"}
+              {display.isPenalty ? "超過時間" : "のこりのゲーム時間"}
             </p>
             <p
               className={[
                 "font-display text-app-timer leading-none",
-                display.isPenalty ? "text-danger" : "text-timer-ink",
+                display.isPenalty ? "text-danger" : "text-ink",
               ].join(" ")}
             >
               {display.isPenalty ? "+" : ""}
@@ -92,7 +89,7 @@ export function TimerPage() {
           </Card>
 
           {!blockedByUnacked && !canStart && !isRunning && displayBalance <= 0 && (
-            <p className="text-center text-muted md:text-left">
+            <p className="text-center text-muted">
               残高がないので スタートできません
             </p>
           )}
@@ -104,16 +101,16 @@ export function TimerPage() {
               onClick={start}
               disabled={!allowStart || isRunning}
             >
-              スタート
+              ▶ スタート
             </Button>
             <Button
               className="flex-1"
               fullWidth
-              variant="danger"
+              variant="secondary"
               onClick={() => stopMutation.mutate()}
               disabled={!isRunning || stopMutation.isPending}
             >
-              ストップ
+              ⏸ ストップ
             </Button>
           </div>
           {stopMutation.error && (
@@ -126,15 +123,21 @@ export function TimerPage() {
         </div>
 
         {blockedByUnacked && !isRunning && (
-          <div className="flex flex-col gap-4 text-center md:pt-2">
-            <p className="rounded-default border-[3px] border-info bg-info-soft px-4 py-3 text-info">
-              採点結果を先に確認してね
+          <div
+            className="flex w-full flex-col items-stretch gap-4 rounded-default border-[3px] border-danger bg-danger-soft p-6 text-left shadow-[0_10px_12px_0_rgb(255_90_95_/_0.15)]"
+            data-testid="timer-unacked-alert"
+          >
+            <p className="font-bold text-danger">⚠️ ストップ！</p>
+            <p className="text-sm text-ink">未確認の採点結果があります。</p>
+            <p className="text-sm text-danger">
+              「採点結果を先に確認」してから、タイマーを使いましょう。
             </p>
             <Button
-              variant="navResults"
+              fullWidth
+              variant="secondary"
               onClick={() => navigate("/results")}
             >
-              📊 採点結果を確認する
+              👀 結果を確認する
             </Button>
           </div>
         )}

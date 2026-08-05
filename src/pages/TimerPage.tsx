@@ -22,11 +22,19 @@ export function TimerPage() {
   const queryClient = useQueryClient();
   const { data: home } = useQuery(homeQuery);
   const displayBalance = home?.displayBalance ?? 0;
+  const penaltyMinutes = home?.penaltyMinutes ?? 0;
   const timerBlockCount = home?.timerBlockCount ?? 0;
   const blockedByUnacked = timerBlockCount > 0;
   const { display, start, stop, canStart, isRunning, state } =
     useTimer(displayBalance);
-  const allowStart = canStart && !blockedByUnacked && (home?.canStartTimer ?? false);
+  const allowStart =
+    canStart &&
+    penaltyMinutes === 0 &&
+    !blockedByUnacked &&
+    (home?.canStartTimer ?? false);
+  const showsStoredDebt = !isRunning && penaltyMinutes > 0;
+  const showsPenalty = display.isPenalty || showsStoredDebt;
+  const timerSeconds = showsStoredDebt ? penaltyMinutes * 60 : display.seconds;
 
   const stopMutation = useMutation({
     mutationFn: async () => {
@@ -68,24 +76,32 @@ export function TimerPage() {
           <Card
             className={[
               "flex min-h-[36vh] w-full flex-col items-center justify-center gap-4 border-4 text-center md:min-h-[42vh] md:p-10",
-              display.isPenalty
+              showsPenalty
                 ? "border-danger bg-danger-soft"
                 : "border-border bg-surface",
             ].join(" ")}
           >
             <p className="text-lg text-muted">
-              {display.isPenalty ? "超過時間" : "のこりのゲーム時間"}
+              {display.isPenalty
+                ? "超過時間"
+                : showsStoredDebt
+                  ? "タイマー超過の負債"
+                  : "のこりのゲーム時間"}
             </p>
             <p
               className={[
                 "font-display text-app-timer leading-none",
-                display.isPenalty ? "text-danger" : "text-ink",
+                showsPenalty ? "text-danger" : "text-ink",
               ].join(" ")}
             >
-              {display.isPenalty ? "+" : ""}
-              {formatMinutesSeconds(display.seconds)}
+              {display.isPenalty ? "+" : showsStoredDebt ? "-" : ""}
+              {formatMinutesSeconds(timerSeconds)}
             </p>
-            <p className="text-sm text-muted">残高 {displayBalance} 分</p>
+            <p className="text-sm text-muted">
+              {showsStoredDebt
+                ? `次のごほうび時間から ${penaltyMinutes} 分を相殺します`
+                : `残高 ${displayBalance} 分`}
+            </p>
           </Card>
 
           {!blockedByUnacked && !canStart && !isRunning && displayBalance <= 0 && (

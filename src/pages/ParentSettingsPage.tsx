@@ -26,11 +26,12 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { todayLocal } from "@/lib/date";
-import { evaluateParentBedtimeChange } from "@/lib/homeMode";
+import {
+  evaluateParentBedtimeChange,
+  getParentSelectableBedtimeHours,
+  PARENT_BEDTIME_HOUR_OPTIONS,
+} from "@/lib/homeMode";
 import type { BedtimeHour, ExemptionPeriod } from "@/types/api";
-
-/** 就寝候補（仕様正・22:30 不可） */
-const BEDTIME_OPTIONS: BedtimeHour[] = [21, 22, 23];
 
 /** 長期休み説明（D12 仕様勝ち） */
 const VACATION_HELP =
@@ -103,6 +104,35 @@ export function ParentSettingsPage() {
     }
   }, [parentHome?.bedtimeHour]);
 
+  /** 保護者が今選べる就寝候補（変更先ごとの 1 時間前期限で絞る） */
+  const selectableBedtimeHours = useMemo(() => {
+    if (!parentHome?.canEditBedtimeAsParent) {
+      return [];
+    }
+    return getParentSelectableBedtimeHours(today);
+  }, [parentHome?.canEditBedtimeAsParent, today]);
+
+  useEffect(() => {
+    if (selectableBedtimeHours.length === 0) {
+      return;
+    }
+    if (selectableBedtimeHours.includes(bedtimeHour)) {
+      return;
+    }
+    const preferred = parentHome?.bedtimeHour;
+    if (
+      preferred === 21 ||
+      preferred === 22 ||
+      preferred === 23
+    ) {
+      if (selectableBedtimeHours.includes(preferred)) {
+        setBedtimeHour(preferred);
+        return;
+      }
+    }
+    setBedtimeHour(selectableBedtimeHours[0]);
+  }, [selectableBedtimeHours, bedtimeHour, parentHome?.bedtimeHour]);
+
   const vacationConfigured = Boolean(
     longVacation?.startDate && longVacation?.endDate,
   );
@@ -119,6 +149,12 @@ export function ParentSettingsPage() {
       };
     }
     if (parentHome.canEditBedtimeAsParent) {
+      if (selectableBedtimeHours.length === 0) {
+        return {
+          allowed: false,
+          message: "就寝1時間前を過ぎているため変更できません",
+        };
+      }
       return { allowed: true, message: "" };
     }
     const status = parentHome.todayRegistrationStatus;
@@ -156,7 +192,7 @@ export function ParentSettingsPage() {
       allowed: false,
       message: local.message || "現在は就寝時刻を変更できません",
     };
-  }, [parentHome, today]);
+  }, [parentHome, today, selectableBedtimeHours]);
 
   const invalidateParentSettings = (): void => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.parentHome });
@@ -446,10 +482,10 @@ export function ParentSettingsPage() {
           {bedtimeChange.allowed ? (
             <>
               <p className="mb-3 text-sm text-muted">
-                候補は 21 / 22 / 23 のみです（仕様勝ち・22:30 なし）。初期は21時。子どもは18時まで、保護者は回答提出前かつ就寝1時間前まで変更できます。
+                候補は {PARENT_BEDTIME_HOUR_OPTIONS.join(" / ")} のみです（仕様勝ち・22:30 なし）。初期は21時。子どもは18時まで、保護者は回答提出前かつ就寝1時間前まで変更できます。期限を過ぎた時刻は表示されません。
               </p>
-              <div className="mb-3 flex gap-2">
-                {BEDTIME_OPTIONS.map((hour) => {
+              <div className="mb-3 flex gap-2" data-testid="bedtime-options">
+                {selectableBedtimeHours.map((hour) => {
                   const selected = bedtimeHour === hour;
                   return (
                     <button
@@ -470,7 +506,10 @@ export function ParentSettingsPage() {
               </div>
               <Button
                 fullWidth
-                disabled={bedtimeMutation.isPending}
+                disabled={
+                  bedtimeMutation.isPending ||
+                  !selectableBedtimeHours.includes(bedtimeHour)
+                }
                 onClick={() => bedtimeMutation.mutate(bedtimeHour)}
                 data-testid="bedtime-save"
               >

@@ -6,7 +6,9 @@ import { describe, expect, it } from "vitest";
 import {
   canChildSaveBedtime,
   evaluateParentBedtimeChange,
+  getParentSelectableBedtimeHours,
   isLongVacationFinalDayBeforeWeekday,
+  isParentBedtimeHourSelectable,
   resolveBedtimeUiMode,
   resolveHomeVariant,
   shouldShowWakeUpSetting,
@@ -217,6 +219,28 @@ describe("canChildSaveBedtime", () => {
         now: new Date(2026, 6, 3, 17, 59, 0),
       }),
     ).toBe(true);
+  });
+});
+
+describe("getParentSelectableBedtimeHours", () => {
+  const date = "2026-07-03";
+
+  it("20:55 では 21 時は選べず 22・23 時のみ", () => {
+    const now = new Date(2026, 6, 3, 20, 55, 0);
+    expect(isParentBedtimeHourSelectable(date, 21, now)).toBe(false);
+    expect(isParentBedtimeHourSelectable(date, 22, now)).toBe(true);
+    expect(isParentBedtimeHourSelectable(date, 23, now)).toBe(true);
+    expect(getParentSelectableBedtimeHours(date, now)).toEqual([22, 23]);
+  });
+
+  it("20:00 ちょうどでは 21 時は選べない", () => {
+    const now = new Date(2026, 6, 3, 20, 0, 0);
+    expect(getParentSelectableBedtimeHours(date, now)).toEqual([22, 23]);
+  });
+
+  it("19:59 までは 21 時も選べる", () => {
+    const now = new Date(2026, 6, 3, 19, 59, 0);
+    expect(getParentSelectableBedtimeHours(date, now)).toEqual([21, 22, 23]);
   });
 });
 

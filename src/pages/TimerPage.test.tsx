@@ -111,6 +111,38 @@ describe("TimerPage", () => {
     expect(start.hasAttribute("disabled")).toBe(true);
   });
 
+  it("タイマー超過負債はマイナス表記し、次の加算との相殺を説明する", () => {
+    renderTimer(
+      buildHome({
+        displayBalance: 0,
+        penaltyMinutes: 15,
+        canStartTimer: false,
+      }),
+    );
+
+    expect(screen.getByText("タイマー超過の負債")).toBeTruthy();
+    expect(screen.getByText("-15:00")).toBeTruthy();
+    expect(screen.getByText("次のごほうび時間から 15 分を相殺します")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /スタート/ }).hasAttribute("disabled")).toBe(
+      true,
+    );
+  });
+
+  it("残高があってもタイマー超過負債が残っていればスタートできない", () => {
+    renderTimer(
+      buildHome({
+        displayBalance: 10,
+        penaltyMinutes: 5,
+        canStartTimer: true,
+      }),
+    );
+
+    expect(screen.getByText("-5:00")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /スタート/ }).hasAttribute("disabled")).toBe(
+      true,
+    );
+  });
+
   it("未確認なし・残高ありならスタート可能", () => {
     renderTimer(
       buildHome({

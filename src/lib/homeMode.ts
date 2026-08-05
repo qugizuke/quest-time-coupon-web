@@ -123,6 +123,9 @@ export function isBeforeVacationBedtimeCutoff(
   return isBeforeChildBedtimeSettingCutoff(date, now);
 }
 
+/** 保護者が選べる就寝候補（仕様正・22:30 不可） */
+export const PARENT_BEDTIME_HOUR_OPTIONS: readonly BedtimeHour[] = [21, 22, 23];
+
 /**
  * 保護者の就寝変更期限（就寝 1 時間前）を返す
  * @param {string} date - YYYY-MM-DD
@@ -136,6 +139,37 @@ export function getParentBedtimeChangeDeadline(
   const hour = resolveQuestDeadlineBedtimeHour(date, bedtimeHour);
   const [y, m, d] = date.split("-").map(Number);
   return new Date(y, m - 1, d, hour - 1, 0, 0, 0);
+}
+
+/**
+ * 保護者が指定就寝時刻をまだ選べるか（変更先の 1 時間前まで）
+ * @param {string} date - YYYY-MM-DD
+ * @param {BedtimeHour} bedtimeHour - 変更先の就寝時刻（時）
+ * @param {Date} [now] - 判定時刻
+ * @returns {boolean} 選択・保存可なら true
+ */
+export function isParentBedtimeHourSelectable(
+  date: string,
+  bedtimeHour: BedtimeHour,
+  now: Date = new Date(),
+): boolean {
+  const deadline = getParentBedtimeChangeDeadline(date, bedtimeHour);
+  return now.getTime() < deadline.getTime();
+}
+
+/**
+ * 保護者 UI に表示する就寝候補（期限切れを除く）
+ * @param {string} date - YYYY-MM-DD
+ * @param {Date} [now] - 判定時刻
+ * @returns {BedtimeHour[]} 選択可能な就寝時刻一覧
+ */
+export function getParentSelectableBedtimeHours(
+  date: string,
+  now: Date = new Date(),
+): BedtimeHour[] {
+  return PARENT_BEDTIME_HOUR_OPTIONS.filter((hour) =>
+    isParentBedtimeHourSelectable(date, hour, now),
+  );
 }
 
 /**

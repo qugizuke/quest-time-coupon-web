@@ -5,7 +5,7 @@
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { queryKeys } from "@/api/queries";
 import { ParentHomePage } from "@/pages/ParentHomePage";
@@ -229,5 +229,28 @@ describe("ParentSettingsPage API 接続", () => {
     });
     expect(screen.getByTestId("bedtime-change-blocked")).toBeTruthy();
     expect(screen.queryByTestId("bedtime-save")).toBeNull();
+  });
+
+  it("20:55 では 21 時は候補から外し 22・23 のみ表示する", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 7, 11, 20, 55, 0));
+
+    renderParentPages({
+      path: "/parent/settings",
+      parentHome: buildParentHome({
+        date: "2026-08-11",
+        isLongVacation: true,
+        canEditBedtimeAsParent: true,
+        todayRegistrationStatus: "open_unregistered",
+        bedtimeHour: 22,
+      }),
+    });
+
+    const options = screen.getByTestId("bedtime-options");
+    expect(options.textContent).toContain("22:00");
+    expect(options.textContent).toContain("23:00");
+    expect(options.textContent).not.toContain("21:00");
+
+    vi.useRealTimers();
   });
 });

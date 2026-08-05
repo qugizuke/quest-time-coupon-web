@@ -815,7 +815,8 @@ export async function mockApi<T>(
         questAction,
         unacknowledgedCount,
         timerBlockCount,
-        canStartTimer: displayBalance > 0 && timerBlockCount === 0,
+        canStartTimer:
+          displayBalance > 0 && store.penaltyMinutes === 0 && timerBlockCount === 0,
         bedtimeHour,
         isWeekendEve: weekendEve,
         isLongVacation,
@@ -1459,6 +1460,7 @@ export async function mockApi<T>(
         store.rejectedDates.has(date) || store.missedRegistrationDates.has(date)
           ? MISSED_REGISTRATION_PENALTY
           : calcMockTotalPoints(date);
+      const balanceBefore = store.balanceMinutes;
       store.acknowledgedDates.add(date);
       let penaltyOffset = 0;
       if (delta > 0) {
@@ -1466,11 +1468,13 @@ export async function mockApi<T>(
         store.penaltyMinutes -= penaltyOffset;
         store.balanceMinutes += delta - penaltyOffset;
       } else if (delta < 0) {
-        store.balanceMinutes += delta;
+        store.balanceMinutes = Math.max(0, store.balanceMinutes + delta);
       }
-      store.appliedDeltaByDate.set(date, delta - penaltyOffset);
+      const appliedDelta =
+        delta < 0 ? store.balanceMinutes - balanceBefore : delta - penaltyOffset;
+      store.appliedDeltaByDate.set(date, appliedDelta);
       return {
-        appliedDelta: delta - penaltyOffset,
+        appliedDelta,
         penaltyOffset,
         displayBalance: Math.max(0, store.balanceMinutes),
         penaltyMinutes: store.penaltyMinutes,
@@ -1495,7 +1499,7 @@ export async function mockApi<T>(
         usedMinutes: number;
         overrunMinutes: number;
       };
-      store.balanceMinutes -= usedMinutes;
+      store.balanceMinutes = Math.max(0, store.balanceMinutes - usedMinutes);
       store.penaltyMinutes += overrunMinutes;
       return {
         displayBalance: Math.max(0, store.balanceMinutes),
@@ -1507,4 +1511,3 @@ export async function mockApi<T>(
       throw new Error(`mockApi: 未対応 action=${action}`);
   }
 }
-

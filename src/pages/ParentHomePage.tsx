@@ -18,6 +18,7 @@ import {
   DEFAULT_REOPEN_DURATION_MINUTES,
   buildEndsAtFromDuration,
   buildReopenDurationOptions,
+  formatRegistrationReopenEndsAtLabel,
   parseReopenDurationMinutes,
 } from "@/lib/registrationReopen";
 import type { TodayRegistrationStatus } from "@/types/api";
@@ -198,7 +199,12 @@ export function ParentHomePage() {
             {parentHome.registrationReopen.isOpen &&
               parentHome.registrationReopen.endsAt && (
                 <p className="mt-2 text-sm text-muted" data-testid="reopen-open-hint">
-                  登録受付再開中（〜{parentHome.registrationReopen.endsAt}）
+                  登録受付再開中（〜
+                  {formatRegistrationReopenEndsAtLabel(
+                    parentHome.registrationReopen.endsAt,
+                    targetDate,
+                  )}
+                  まで）
                 </p>
               )}
           </Card>

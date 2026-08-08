@@ -19,6 +19,7 @@ import {
   isPastQuestRegistrationCutoff,
   isWeekendEve,
 } from "@/lib/deadline";
+import { isRegistrationReopenActive } from "@/lib/registrationReopen";
 import {
   DEFAULT_WAKE_UP,
   shouldShowWakeUpSetting,
@@ -187,9 +188,11 @@ export function QuestConfirmPage() {
     if (homeData.questAction !== "start") return;
     const bedtimeHour = getBedtimeHourDraft(date) ?? homeData.bedtimeHour;
     const now = new Date();
+    const reopenActive = isRegistrationReopenActive(homeData.registrationReopen);
     if (
-      isBeforeQuestRegistrationStart(date, now, bedtimeHour) ||
-      isPastQuestRegistrationCutoff(date, now, bedtimeHour)
+      !reopenActive &&
+      (isBeforeQuestRegistrationStart(date, now, bedtimeHour) ||
+        isPastQuestRegistrationCutoff(date, now, bedtimeHour))
     ) {
       navigate("/", { replace: true });
     }

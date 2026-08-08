@@ -750,9 +750,17 @@ export async function mockApi<T>(
       const bedtimeHour = store.bedtimeByDate.get(date) as HomeData["bedtimeHour"];
       const isExemptToday = resolveMockExemptDay(date);
       const isLongVacation = resolveMockVacationMode(date);
+      const now = Date.now();
+      const reopenEarly = store.registrationReopenByDate.get(date);
+      const reopenOpenEarly =
+        !!reopenEarly &&
+        reopenEarly.used &&
+        new Date(reopenEarly.endsAt).getTime() > now;
       const pastCutoff = isPastQuestRegistrationCutoff(date, new Date(), bedtimeHour);
 
       if (isExemptToday) {
+        store.missedRegistrationDates.delete(date);
+      } else if (reopenOpenEarly) {
         store.missedRegistrationDates.delete(date);
       } else if (
         pastCutoff &&
@@ -769,7 +777,10 @@ export async function mockApi<T>(
         todayStatus = "exempt";
         questAction = "none";
       } else if (!hasAnswers) {
-        if (store.missedRegistrationDates.has(date)) {
+        if (reopenOpenEarly) {
+          todayStatus = "unanswered";
+          questAction = "start";
+        } else if (store.missedRegistrationDates.has(date)) {
           todayStatus = isAcked ? "completed" : "pending_ack";
           questAction = "none";
         } else {
@@ -790,14 +801,13 @@ export async function mockApi<T>(
       const unacknowledgedCount = countUnacknowledged();
       const timerBlockCount = countTimerBlock();
       const displayBalance = Math.max(0, store.balanceMinutes);
-      const reopen = store.registrationReopenByDate.get(date);
-      const now = Date.now();
+      const reopen = reopenEarly;
       const registrationReopen = reopen
         ? {
             endsAt: reopen.endsAt,
             setAt: reopen.setAt,
             used: reopen.used,
-            isOpen: reopen.used && new Date(reopen.endsAt).getTime() > now,
+            isOpen: reopenOpenEarly,
           }
         : null;
       const weekendEve = isWeekendEve(date);

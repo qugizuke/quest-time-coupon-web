@@ -25,6 +25,10 @@ import {
   resolveHomeVariant,
 } from "@/lib/homeMode";
 import {
+  formatRegistrationReopenEndsAtLabel,
+  isRegistrationReopenActive,
+} from "@/lib/registrationReopen";
+import {
   clearBedtimeHourDraft,
   setBedtimeHourDraft,
 } from "@/lib/sessionStorage";
@@ -102,12 +106,15 @@ export function HomePage() {
   const isVacationMode = data?.isVacationMode ?? false;
   const weekendEve = data?.isWeekendEve ?? isWeekendEve(today);
 
+  const isReopenActive = isRegistrationReopenActive(data?.registrationReopen);
+
   const deadlineActive =
     !isLoading &&
     !!data &&
     !isExemptDay &&
     data.todayStatus === "unanswered" &&
-    data.questAction === "start";
+    data.questAction === "start" &&
+    !isReopenActive;
 
   const deadline = useQuestDeadlineClock(today, deadlineActive, bedtimeHour);
 
@@ -144,11 +151,12 @@ export function HomePage() {
   const canStartQuest =
     !isExemptDay &&
     data.questAction === "start" &&
-    !deadline.pastRegistrationCutoff &&
-    !deadline.beforeRegistrationStart &&
+    (isReopenActive ||
+      (!deadline.pastRegistrationCutoff && !deadline.beforeRegistrationStart)) &&
     !registrationMutation.isPending;
   const showMissedStartMessage =
     !isExemptDay &&
+    !isReopenActive &&
     deadline.pastRegistrationCutoff &&
     data.todayStatus === "unanswered" &&
     data.questAction === "start";
@@ -235,7 +243,18 @@ export function HomePage() {
             >
               {statusBody}
             </p>
+            {!isExemptDay && isReopenActive && data.registrationReopen?.endsAt && (
+              <p className="mt-2 text-sm text-muted" data-testid="reopen-active-hint">
+                ママが受付を再開してくれたよ！
+                {formatRegistrationReopenEndsAtLabel(
+                  data.registrationReopen.endsAt,
+                  today,
+                )}
+                までクエストできる
+              </p>
+            )}
             {!isExemptDay &&
+              !isReopenActive &&
               !deadline.pastRegistrationCutoff &&
               deadline.beforeRegistrationStart &&
               data.questAction === "start" && (
@@ -245,6 +264,7 @@ export function HomePage() {
                 </p>
               )}
             {!isExemptDay &&
+              !isReopenActive &&
               !deadline.pastRegistrationCutoff &&
               (data.questAction === "start" || data.questAction === "retry") &&
               !deadline.beforeRegistrationStart &&

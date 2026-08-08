@@ -18,6 +18,7 @@ import {
   isBeforeQuestRegistrationStart,
   isPastQuestRegistrationCutoff,
 } from "@/lib/deadline";
+import { isRegistrationReopenActive } from "@/lib/registrationReopen";
 import { HOMEWORK_QUEST_ID, PHONE_QUEST_ID } from "@/lib/questLabels";
 import { ensureQuestSessionStarted, getBedtimeHourDraft } from "@/lib/sessionStorage";
 
@@ -178,9 +179,11 @@ export function QuestPage() {
     if (homeData.questAction !== "start") return;
     const bedtimeHour = getBedtimeHourDraft(date) ?? homeData.bedtimeHour;
     const now = new Date();
+    const reopenActive = isRegistrationReopenActive(homeData.registrationReopen);
     if (
-      isBeforeQuestRegistrationStart(date, now, bedtimeHour) ||
-      isPastQuestRegistrationCutoff(date, now, bedtimeHour)
+      !reopenActive &&
+      (isBeforeQuestRegistrationStart(date, now, bedtimeHour) ||
+        isPastQuestRegistrationCutoff(date, now, bedtimeHour))
     ) {
       navigate("/", { replace: true });
     }

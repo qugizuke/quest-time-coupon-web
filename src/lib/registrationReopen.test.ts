@@ -8,6 +8,8 @@ import {
   buildEndsAtFromDuration,
   buildReopenDurationOptions,
   formatEndsAtJst,
+  formatRegistrationReopenEndsAtLabel,
+  isRegistrationReopenActive,
   parseReopenDurationMinutes,
 } from "@/lib/registrationReopen";
 
@@ -71,5 +73,51 @@ describe("buildEndsAtFromDuration", () => {
       new Date("2026-07-30T20:15:30+09:00"),
     );
     expect(endsAt).toBe("2026-07-30T22:15:30+09:00");
+  });
+});
+
+describe("formatRegistrationReopenEndsAtLabel", () => {
+  it("同日なら時刻のみ返す", () => {
+    expect(
+      formatRegistrationReopenEndsAtLabel(
+        "2026-08-08T22:02:00+09:00",
+        "2026-08-08",
+      ),
+    ).toBe("22時02分");
+  });
+
+  it("日付またぎなら月日付きで返す", () => {
+    expect(
+      formatRegistrationReopenEndsAtLabel(
+        "2026-08-09T00:30:00+09:00",
+        "2026-08-08",
+      ),
+    ).toBe("8月9日 0時30分");
+  });
+});
+
+describe("isRegistrationReopenActive", () => {
+  it("isOpen=true のとき true", () => {
+    expect(
+      isRegistrationReopenActive({
+        endsAt: "2026-08-08T22:00:00+09:00",
+        setAt: "2026-08-08T21:00:00+09:00",
+        used: true,
+        isOpen: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("null または isOpen=false のとき false", () => {
+    expect(isRegistrationReopenActive(null)).toBe(false);
+    expect(
+      isRegistrationReopenActive({
+        endsAt: null,
+        setAt: null,
+        used: true,
+        isOpen: false,
+        available: false,
+      }),
+    ).toBe(false);
   });
 });

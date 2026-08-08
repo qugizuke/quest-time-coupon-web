@@ -5,7 +5,11 @@
  *   時刻判定はブラウザローカルではなく JST（Asia/Tokyo）を正とする。
  * @limitation 日付またぎ（翌日の endsAt）を許容する。
  */
-import { getJstClockParts } from "@/lib/date";
+import { formatJstClockJa, getJstClockParts } from "@/lib/date";
+import type {
+  HomeRegistrationReopen,
+  ParentRegistrationReopen,
+} from "@/types/api";
 
 /** 再開タイマー候補（分） */
 export type ReopenDurationMinutes = 30 | 60 | 90 | 120;
@@ -119,4 +123,47 @@ export function parseReopenDurationMinutes(
     return minutes;
   }
   return null;
+}
+
+/**
+ * 登録受付再開枠が有効か
+ * @param {HomeRegistrationReopen | ParentRegistrationReopen | null | undefined} registrationReopen - API の再開参照
+ * @returns {boolean} 再開枠内なら true
+ */
+export function isRegistrationReopenActive(
+  registrationReopen:
+    | HomeRegistrationReopen
+    | ParentRegistrationReopen
+    | null
+    | undefined,
+): boolean {
+  return registrationReopen?.isOpen === true;
+}
+
+/**
+ * 再開終了時刻の画面表示ラベル（JST）
+ * @param {string} endsAt - `YYYY-MM-DDTHH:mm:ss+09:00`
+ * @param {string} [referenceDateYmd] - 対象日 YYYY-MM-DD（日付またぎ時に月日を付ける）
+ * @returns {string} 例: `22時02分` / `8月9日 0時30分`。不正時は `—`
+ */
+export function formatRegistrationReopenEndsAtLabel(
+  endsAt: string,
+  referenceDateYmd?: string,
+): string {
+  const parsed = new Date(endsAt);
+  if (Number.isNaN(parsed.getTime())) {
+    return "—";
+  }
+  const parts = getJstClockParts(parsed);
+  const clock = formatJstClockJa(endsAt);
+  if (
+    referenceDateYmd !== undefined &&
+    referenceDateYmd !== "" &&
+    parts.dateYmd !== referenceDateYmd
+  ) {
+    const month = Number(parts.dateYmd.slice(5, 7));
+    const day = Number(parts.dateYmd.slice(8, 10));
+    return `${month}月${day}日 ${clock}`;
+  }
+  return clock;
 }

@@ -132,4 +132,28 @@ describe("HomePage", () => {
     );
     expect(screen.getByTestId("bedtime-entry")).toBeTruthy();
   });
+
+  it("受付再開中は締切後でもクエスト開始ボタンを有効にする", () => {
+    vi.setSystemTime(new Date(2026, 7, 8, 22, 0, 0));
+
+    renderHome(
+      buildHome({
+        today: "2026-08-08",
+        todayStatus: "unanswered",
+        questAction: "start",
+        registrationReopen: {
+          endsAt: "2026-08-08T22:30:00+09:00",
+          setAt: "2026-08-08T21:30:00+09:00",
+          used: true,
+          isOpen: true,
+        },
+      }),
+    );
+
+    expect(screen.getByTestId("reopen-active-hint")).toBeTruthy();
+    const startButton = screen.getByRole("button", {
+      name: "⚔️ クエストをはじめる！",
+    });
+    expect(startButton.hasAttribute("disabled")).toBe(false);
+  });
 });

@@ -169,6 +169,29 @@ describe("ParentHomePage parentHome", () => {
       "2026-07-20",
     );
   });
+
+  it("再開中は endsAt を読みやすい時刻で表示する", () => {
+    renderParentPages({
+      path: "/parent",
+      parentHome: buildParentHome({
+        date: "2026-08-08",
+        todayRegistrationStatus: "reopen_open",
+        registrationReopen: {
+          available: false,
+          used: true,
+          endsAt: "2026-08-08T22:02:00+09:00",
+          setAt: "2026-08-08T21:02:00+09:00",
+          isOpen: true,
+        },
+      }),
+    });
+    expect(screen.getByTestId("reopen-open-hint").textContent).toContain(
+      "22時02分",
+    );
+    expect(screen.getByTestId("reopen-open-hint").textContent).not.toContain(
+      "T22:02",
+    );
+  });
 });
 
 describe("ParentSettingsPage API 接続", () => {
@@ -205,9 +228,13 @@ describe("ParentSettingsPage API 接続", () => {
   });
 
   it("canEditBedtimeAsParent=true なら就寝保存 UI を出す", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 7, 8, 10, 0, 0));
+
     renderParentPages({
       path: "/parent/settings",
       parentHome: buildParentHome({
+        date: "2026-08-08",
         isLongVacation: true,
         canEditBedtimeAsParent: true,
         todayRegistrationStatus: "open_unregistered",
@@ -216,6 +243,8 @@ describe("ParentSettingsPage API 接続", () => {
     });
     expect(screen.getByTestId("bedtime-save")).toBeTruthy();
     expect(screen.queryByTestId("bedtime-change-blocked")).toBeNull();
+
+    vi.useRealTimers();
   });
 
   it("canEditBedtimeAsParent=false なら就寝変更を遮断する", () => {

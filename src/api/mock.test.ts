@@ -655,6 +655,26 @@ describe("mockApi registrationReopen 受付再開", () => {
     });
     expect(result.submittedAt).toBeTruthy();
   });
+
+  it("再開枠内なら home が questAction=start を返す", async () => {
+    const date = "2026-06-07";
+    vi.setSystemTime(new Date("2026-06-07T21:30:00+09:00"));
+
+    await mockApi("registrationReopen", {
+      method: "POST",
+      body: JSON.stringify({
+        date,
+        endsAt: "2026-06-07T22:30:00+09:00",
+      }),
+    });
+
+    vi.setSystemTime(new Date("2026-06-07T21:45:00+09:00"));
+
+    const home = await mockApi<HomeData>("home", undefined, { date });
+    expect(home.questAction).toBe("start");
+    expect(home.todayStatus).toBe("unanswered");
+    expect(home.registrationReopen?.isOpen).toBe(true);
+  });
 });
 
 describe("mockApi questExemptions 後付け救済・未来日除外", () => {

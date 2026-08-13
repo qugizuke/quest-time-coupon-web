@@ -1,29 +1,16 @@
 ---
-description: quest-time-coupon src リポジトリの開発ルール
+description: quest-time-coupon web の最小制約。巨大 docs を毎回全文読まない。
 alwaysApply: true
 ---
 
-# quest-time-coupon (src)
+# quest-time-coupon / web
 
-## 最初に読むファイル
+正本: 集約ルートの `../../AGENTS.md`。必要になった設計書だけパス指定で読む。
+（本 repo の workspace ルートは `src/web/`。集約ルート `quest-time-coupon/` は `../..`）
 
-1. `README.md`
-2. 兄弟リポジトリ `../docs/requirements.md`
-3. 兄弟リポジトリ `../docs/screen-design.md`
-4. API 実装は兄弟 `../gas/`（本リポジトリはフロントのみ）
-
-## 記録
-
-| 内容 | 場所 |
-|------|------|
-| 要件・画面設計の更新 | `../docs/` リポジトリ |
-| ADR・API 仕様 | `../docs/` または `docs/`（src 内の実装メモ） |
-
-## クエスト定義
-
-- `quests/` 配下でコード管理
-- 変更はデプロイで反映（保護者はアプリ内編集しない）
-
-## 会社リポジトリ
-
-- 企画カード: `cursor-company` の `.company/pm/projects/quest-time-coupon.md`
+- default branch は `develop`。PR 先も `develop`。`main` マージは CEO 確認後
+- GitHub Pages は使わない（Firebase App Hosting）
+- クエスト定義は `quests/`。保護者はアプリ内編集しない
+- secret / `.env` / 鍵はコミットしない
+- commit / push / MR は CEO 明示時のみ
+- `../../docs/screen-design.md` 等はオンデマンド。Always で全文読まない

@@ -41,6 +41,11 @@ function buildParentHome(
     bedtimeHour: 21,
     canEditBedtimeAsParent: false,
     questDeadlineAt: null,
+    balanceMinutes: 60,
+    displayBalance: 60,
+    penaltyMinutes: 0,
+    debtMinutes: 0,
+    issuablePenaltyTicketCount: 0,
     ...overrides,
   };
 }

@@ -12,6 +12,12 @@ import type {
 } from "@/types/api";
 import { todayLocal } from "@/lib/date";
 import {
+  PENALTY_TICKET_MINUTES,
+  calcDebtMinutes,
+  calcIssuableTicketCount,
+} from "@/lib/debt";
+import { normalizeBalanceDebtFields } from "@/lib/balanceDebt";
+import {
   isBeforeQuestRegistrationStart,
   isPastQuestBonusDeadline,
   isPastQuestRegistrationCutoff,
@@ -93,6 +99,41 @@ const store: MockStore = {
   longVacation: { startDate: "", endDate: "", updatedAt: "" },
   exemptionPeriods: [],
 };
+
+/**
+ * 現在ストアから残高・負債フィールドを組み立てる
+ * @returns {ReturnType<typeof normalizeBalanceDebtFields>} 残高・負債
+ */
+function buildBalanceDebtSnapshot() {
+  const debtMinutes = calcDebtMinutes(
+    store.balanceMinutes,
+    store.penaltyMinutes,
+  );
+  return normalizeBalanceDebtFields({
+    balanceMinutes: store.balanceMinutes,
+    displayBalance: store.balanceMinutes,
+    penaltyMinutes: store.penaltyMinutes,
+    debtMinutes,
+    issuablePenaltyTicketCount: calcIssuableTicketCount(debtMinutes),
+  });
+}
+
+/**
+ * テスト用: 残高・超過を上書きする
+ * @param {{ balanceMinutes?: number; penaltyMinutes?: number }} opts - 上書き値
+ * @returns {void}
+ */
+export function setMockBalanceDebt(opts: {
+  balanceMinutes?: number;
+  penaltyMinutes?: number;
+}): void {
+  if (opts.balanceMinutes !== undefined) {
+    store.balanceMinutes = opts.balanceMinutes;
+  }
+  if (opts.penaltyMinutes !== undefined) {
+    store.penaltyMinutes = Math.max(0, opts.penaltyMinutes);
+  }
+}
 
 /**
  * localStorage からモックフラグを読む（SSR／テストで失敗しても false）
@@ -800,7 +841,7 @@ export async function mockApi<T>(
 
       const unacknowledgedCount = countUnacknowledged();
       const timerBlockCount = countTimerBlock();
-      const displayBalance = Math.max(0, store.balanceMinutes);
+      const balance = buildBalanceDebtSnapshot();
       const reopen = reopenEarly;
       const registrationReopen = reopen
         ? {
@@ -818,15 +859,16 @@ export async function mockApi<T>(
         : null;
 
       return {
-        displayBalance,
-        penaltyMinutes: store.penaltyMinutes,
+        ...balance,
         today: date,
         todayStatus,
         questAction,
         unacknowledgedCount,
         timerBlockCount,
         canStartTimer:
-          displayBalance > 0 && store.penaltyMinutes === 0 && timerBlockCount === 0,
+          balance.displayBalance > 0 &&
+          balance.penaltyMinutes === 0 &&
+          timerBlockCount === 0,
         bedtimeHour,
         isWeekendEve: weekendEve,
         isLongVacation,
@@ -906,6 +948,7 @@ export async function mockApi<T>(
           !isGraded &&
           (isWeekendEve(date) || isLongVacation),
         questDeadlineAt: null,
+        ...buildBalanceDebtSnapshot(),
       } as T;
     }
 
@@ -1478,7 +1521,8 @@ export async function mockApi<T>(
         store.penaltyMinutes -= penaltyOffset;
         store.balanceMinutes += delta - penaltyOffset;
       } else if (delta < 0) {
-        store.balanceMinutes = Math.max(0, store.balanceMinutes + delta);
+        // 2026-08-24〜: 負残高を許容（日付分岐・過去再計算は Functions 正本）
+        store.balanceMinutes = store.balanceMinutes + delta;
       }
       const appliedDelta =
         delta < 0 ? store.balanceMinutes - balanceBefore : delta - penaltyOffset;
@@ -1486,8 +1530,7 @@ export async function mockApi<T>(
       return {
         appliedDelta,
         penaltyOffset,
-        displayBalance: Math.max(0, store.balanceMinutes),
-        penaltyMinutes: store.penaltyMinutes,
+        ...buildBalanceDebtSnapshot(),
       } as T;
     }
 
@@ -1509,11 +1552,62 @@ export async function mockApi<T>(
         usedMinutes: number;
         overrunMinutes: number;
       };
-      store.balanceMinutes = Math.max(0, store.balanceMinutes - usedMinutes);
-      store.penaltyMinutes += overrunMinutes;
+      // 2026-08-24〜: 使用分で負残高になり得る。超過は penaltyMinutes に加算。
+      store.balanceMinutes = store.balanceMinutes - usedMinutes;
+      store.penaltyMinutes += Math.max(0, overrunMinutes);
+      return buildBalanceDebtSnapshot() as T;
+    }
+
+    case "penaltyTicketIssue": {
+      const { count, actor } = body as { count?: number; actor?: string };
+      if (actor !== "parent") {
+        throw new Error(
+          `BAD_REQUEST: penaltyTicketIssue.actor は parent が必須です actor=${String(actor)}`,
+        );
+      }
+      if (
+        typeof count !== "number" ||
+        !Number.isInteger(count) ||
+        count < 1
+      ) {
+        throw new Error(
+          `BAD_REQUEST: penaltyTicketIssue.count は1以上の整数が必要です count=${String(count)}`,
+        );
+      }
+      const debtBefore = calcDebtMinutes(
+        store.balanceMinutes,
+        store.penaltyMinutes,
+      );
+      const issuable = calcIssuableTicketCount(debtBefore);
+      if (debtBefore < PENALTY_TICKET_MINUTES || issuable < 1) {
+        throw new Error(
+          `FORBIDDEN_STATE: 負債が60分未満のため発行できません debtMinutes=${debtBefore}`,
+        );
+      }
+      if (count > issuable) {
+        throw new Error(
+          `BAD_REQUEST: 発行枚数が発行可能数を超えています count=${count} issuable=${issuable}`,
+        );
+      }
+
+      const settledMinutes = count * PENALTY_TICKET_MINUTES;
+      let settle = settledMinutes;
+      const fromPenalty = Math.min(store.penaltyMinutes, settle);
+      store.penaltyMinutes -= fromPenalty;
+      settle -= fromPenalty;
+      store.balanceMinutes += settle;
+
+      const after = buildBalanceDebtSnapshot();
       return {
-        displayBalance: Math.max(0, store.balanceMinutes),
-        penaltyMinutes: store.penaltyMinutes,
+        ticketId: `mock-penalty-ticket-${Date.now()}-${count}`,
+        count,
+        settledMinutes,
+        debtBefore,
+        debtAfter: after.debtMinutes,
+        displayBalance: after.displayBalance,
+        balanceMinutes: after.balanceMinutes,
+        penaltyMinutes: after.penaltyMinutes,
+        issuablePenaltyTicketCount: after.issuablePenaltyTicketCount,
       } as T;
     }
 

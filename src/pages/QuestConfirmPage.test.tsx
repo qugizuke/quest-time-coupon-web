@@ -51,7 +51,10 @@ function buildCompleteDraft(): QuestDraft {
 function buildHome(overrides: Partial<HomeData> = {}): HomeData {
   return {
     displayBalance: 60,
+    balanceMinutes: 60,
     penaltyMinutes: 0,
+    debtMinutes: 0,
+    issuablePenaltyTicketCount: 0,
     today: todayLocal(),
     todayStatus: "unanswered",
     questAction: "start",

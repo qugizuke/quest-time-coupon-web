@@ -75,8 +75,22 @@ export interface WakePromiseView {
 
 /** GET home（契約 §3.4） */
 export interface HomeData {
+  /** ご褒美残高（分）。2026-08-24〜は負可。表示は丸めない */
+  balanceMinutes: number;
+  /**
+   * 表示用残高（分）。負あり（例: -30）。
+   * サーバ未対応時は balanceMinutes と同値に正規化する。
+   */
   displayBalance: number;
+  /** タイマー超過分（分）。ペナルティチケットとは別概念 */
   penaltyMinutes: number;
+  /**
+   * 合算負債（分）= max(0, -balanceMinutes) + penaltyMinutes。
+   * サーバ未返却時は UI 側で算出する。
+   */
+  debtMinutes: number;
+  /** 発行可能枚数 = floor(debtMinutes / 60)。発行＝即精算（在庫なし） */
+  issuablePenaltyTicketCount: number;
   today: string;
   todayStatus: TodayStatus;
   questAction: QuestAction;
@@ -139,6 +153,32 @@ export interface ParentHomeData {
   bedtimeHour: BedtimeHour;
   canEditBedtimeAsParent: boolean;
   questDeadlineAt: string | null;
+  /** ご褒美残高（分・負可） */
+  balanceMinutes: number;
+  /** 表示用残高（負あり） */
+  displayBalance: number;
+  /** タイマー超過分（分） */
+  penaltyMinutes: number;
+  /** 合算負債（分） */
+  debtMinutes: number;
+  /** 発行可能枚数 = floor(debtMinutes / 60) */
+  issuablePenaltyTicketCount: number;
+}
+
+/**
+ * POST penaltyTicketIssue レスポンス
+ * @description 発行＝即精算。在庫チケットは持たない。
+ */
+export interface PenaltyTicketIssueResult {
+  ticketId: string;
+  count: number;
+  settledMinutes: number;
+  debtBefore: number;
+  debtAfter: number;
+  displayBalance: number;
+  balanceMinutes: number;
+  penaltyMinutes: number;
+  issuablePenaltyTicketCount: number;
 }
 
 /** GET/POST longVacation */

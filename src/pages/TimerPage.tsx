@@ -2,6 +2,7 @@
  * @file TimerPage
  * @description クーポン時間のカウントダウンと使用記録。
  *   未確認採点結果があるときは Start 不可（screen-design §6.6）。
+ *   負債（負残高＋超過）があるときも Start 不可。
  *   Figma v6 kid-timer に合わせ、タイマーと未確認警告を縦に配置する。
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -12,6 +13,7 @@ import { ChildPageFrame } from "@/components/layout/ChildPageFrame";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { formatMinutesSeconds, useTimer } from "@/hooks/useTimer";
+import { calcDebtMinutes, resolveTimerStartBlockReason } from "@/lib/debt";
 
 /**
  * タイマー画面
@@ -21,20 +23,28 @@ export function TimerPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: home } = useQuery(homeQuery);
-  const displayBalance = home?.displayBalance ?? 0;
+  const balanceMinutes = home?.balanceMinutes ?? home?.displayBalance ?? 0;
+  const displayBalance = Math.max(0, balanceMinutes);
   const penaltyMinutes = home?.penaltyMinutes ?? 0;
+  const debtMinutes =
+    home?.debtMinutes ?? calcDebtMinutes(balanceMinutes, penaltyMinutes);
   const timerBlockCount = home?.timerBlockCount ?? 0;
   const blockedByUnacked = timerBlockCount > 0;
   const { display, start, stop, canStart, isRunning, state } =
     useTimer(displayBalance);
   const allowStart =
     canStart &&
-    penaltyMinutes === 0 &&
+    debtMinutes === 0 &&
     !blockedByUnacked &&
     (home?.canStartTimer ?? false);
   const showsStoredDebt = !isRunning && penaltyMinutes > 0;
   const showsPenalty = display.isPenalty || showsStoredDebt;
   const timerSeconds = showsStoredDebt ? penaltyMinutes * 60 : display.seconds;
+  const startBlockReason = resolveTimerStartBlockReason({
+    balanceMinutes,
+    debtMinutes,
+    blockedByUnacked,
+  });
 
   const stopMutation = useMutation({
     mutationFn: async () => {
@@ -100,13 +110,16 @@ export function TimerPage() {
             <p className="text-sm text-muted">
               {showsStoredDebt
                 ? `次のごほうび時間から ${penaltyMinutes} 分を相殺します`
-                : `残高 ${displayBalance} 分`}
+                : `残高 ${balanceMinutes} 分`}
             </p>
           </Card>
 
-          {!blockedByUnacked && !canStart && !isRunning && displayBalance <= 0 && (
-            <p className="text-center text-muted">
-              残高がないので スタートできません
+          {!isRunning && startBlockReason && (
+            <p
+              className="text-center text-muted"
+              data-testid="timer-start-block-reason"
+            >
+              {startBlockReason}
             </p>
           )}
 

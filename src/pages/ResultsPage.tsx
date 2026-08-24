@@ -214,12 +214,17 @@ export function ResultsPage() {
 
         return {
           ...currentHome,
+          balanceMinutes: ack.balanceMinutes ?? ack.displayBalance,
           displayBalance: ack.displayBalance,
           penaltyMinutes: ack.penaltyMinutes,
+          debtMinutes: ack.debtMinutes ?? 0,
+          issuablePenaltyTicketCount: ack.issuablePenaltyTicketCount ?? 0,
           unacknowledgedCount: nextUnacknowledgedCount,
           timerBlockCount: nextTimerBlockCount,
           canStartTimer:
-            ack.displayBalance > 0 && nextTimerBlockCount === 0,
+            ack.displayBalance > 0 &&
+            ack.penaltyMinutes === 0 &&
+            nextTimerBlockCount === 0,
           todayStatus:
             currentHome.today === date &&
             currentHome.todayStatus === "pending_ack"

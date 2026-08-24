@@ -1,6 +1,6 @@
 /**
  * @file TimerPage 描画テスト
- * @description 未確認・残高0でスタートが disabled になることを検証する。
+ * @description 未確認・残高0・負債でスタートが disabled になることを検証する。
  * @vitest-environment jsdom
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -9,36 +9,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { queryKeys } from "@/api/queries";
 import { TimerPage } from "@/pages/TimerPage";
+import { buildHomeData } from "@/test/fixtures";
 import type { HomeData } from "@/types/api";
-
-/**
- * テスト用 HomeData を組み立てる
- * @param {Partial<HomeData>} [overrides] - 上書き
- * @returns {HomeData} HomeData
- */
-function buildHome(overrides: Partial<HomeData> = {}): HomeData {
-  return {
-    displayBalance: 60,
-    penaltyMinutes: 0,
-    today: "2026-07-30",
-    todayStatus: "completed",
-    questAction: "none",
-    unacknowledgedCount: 0,
-    canStartTimer: true,
-    timerBlockCount: 0,
-    isLongVacation: false,
-    isExemptToday: false,
-    isWeekendEve: false,
-    registrationReopen: null,
-    wakePromiseYesterday: null,
-    bedtimeEditableUntil: null,
-    questDeadlineAt: null,
-    bonusDeadlineAt: null,
-    isExemptDay: false,
-    isVacationMode: false,
-    ...overrides,
-  };
-}
 
 /**
  * TimerPage を描画する
@@ -76,11 +48,12 @@ describe("TimerPage", () => {
 
   it("未確認があるときスタートは disabled", () => {
     renderTimer(
-      buildHome({
+      buildHomeData({
         unacknowledgedCount: 1,
         timerBlockCount: 1,
         canStartTimer: false,
         displayBalance: 60,
+        balanceMinutes: 60,
       }),
     );
 
@@ -99,8 +72,10 @@ describe("TimerPage", () => {
 
   it("残高0のときスタートは disabled", () => {
     renderTimer(
-      buildHome({
+      buildHomeData({
         displayBalance: 0,
+        balanceMinutes: 0,
+        debtMinutes: 0,
         unacknowledgedCount: 0,
         canStartTimer: false,
       }),
@@ -113,9 +88,11 @@ describe("TimerPage", () => {
 
   it("タイマー超過負債はマイナス表記し、次の加算との相殺を説明する", () => {
     renderTimer(
-      buildHome({
+      buildHomeData({
         displayBalance: 0,
+        balanceMinutes: 0,
         penaltyMinutes: 15,
+        debtMinutes: 15,
         canStartTimer: false,
       }),
     );
@@ -130,9 +107,11 @@ describe("TimerPage", () => {
 
   it("残高があってもタイマー超過負債が残っていればスタートできない", () => {
     renderTimer(
-      buildHome({
+      buildHomeData({
         displayBalance: 10,
+        balanceMinutes: 10,
         penaltyMinutes: 5,
+        debtMinutes: 5,
         canStartTimer: true,
       }),
     );
@@ -143,10 +122,30 @@ describe("TimerPage", () => {
     );
   });
 
+  it("負残高の負債中はスタート不可と理由を表示する", () => {
+    renderTimer(
+      buildHomeData({
+        displayBalance: -30,
+        balanceMinutes: -30,
+        penaltyMinutes: 0,
+        debtMinutes: 30,
+        canStartTimer: false,
+      }),
+    );
+
+    expect(screen.getByTestId("timer-start-block-reason").textContent).toMatch(
+      /負債/,
+    );
+    expect(screen.getByRole("button", { name: /スタート/ }).hasAttribute("disabled")).toBe(
+      true,
+    );
+  });
+
   it("未確認なし・残高ありならスタート可能", () => {
     renderTimer(
-      buildHome({
+      buildHomeData({
         displayBalance: 30,
+        balanceMinutes: 30,
         unacknowledgedCount: 0,
         canStartTimer: true,
       }),

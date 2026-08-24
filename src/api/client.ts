@@ -15,12 +15,14 @@ import type {
   HomeData,
   LongVacationData,
   ParentHomeData,
+  PenaltyTicketIssueResult,
   QuestExemptionsData,
   RegistrationActor,
   ResultItem,
   WakeTime,
 } from "@/types/api";
 import { mockApi } from "@/api/mock";
+import { normalizeBalanceDebtFields } from "@/lib/balanceDebt";
 import { todayLocal } from "@/lib/date";
 
 /**
@@ -52,13 +54,15 @@ function buildAuthHeaders(): Record<string, string> {
 }
 
 /**
- * home レスポンスに UI 互換エイリアスを付与する
+ * home レスポンスに UI 互換エイリアスと負債フィールドを付与する
  * @param {HomeData} data - サーバ／モックの home data
  * @returns {HomeData} エイリアス付き
  */
 function withHomeAliases(data: HomeData): HomeData {
+  const balance = normalizeBalanceDebtFields(data);
   return {
     ...data,
+    ...balance,
     isExemptDay: data.isExemptToday,
     isVacationMode: data.isLongVacation,
     isWeekendEve: data.isWeekendEve ?? false,
@@ -68,6 +72,18 @@ function withHomeAliases(data: HomeData): HomeData {
     bedtimeEditableUntil: data.bedtimeEditableUntil ?? null,
     questDeadlineAt: data.questDeadlineAt ?? null,
     bonusDeadlineAt: data.bonusDeadlineAt ?? null,
+  };
+}
+
+/**
+ * parentHome に負債フィールドを付与する
+ * @param {ParentHomeData} data - サーバ／モックの parentHome
+ * @returns {ParentHomeData} 正規化済み
+ */
+function withParentHomeBalance(data: ParentHomeData): ParentHomeData {
+  return {
+    ...data,
+    ...normalizeBalanceDebtFields(data),
   };
 }
 
@@ -155,10 +171,15 @@ export function fetchDailyQuests(date: string = todayLocal()): Promise<DailyQues
 }
 
 /** GET parentHome */
-export function fetchParentHome(
+export async function fetchParentHome(
   date: string = todayLocal(),
 ): Promise<ParentHomeData> {
-  return request<ParentHomeData>("parentHome", { method: "GET" }, { date });
+  const data = await request<ParentHomeData>(
+    "parentHome",
+    { method: "GET" },
+    { date },
+  );
+  return withParentHomeBalance(data);
 }
 
 /** POST answers */
@@ -231,8 +252,11 @@ export function fetchResults(opts?: {
 export function postResultsAck(date: string): Promise<{
   appliedDelta: number;
   penaltyOffset: number;
+  balanceMinutes: number;
   displayBalance: number;
   penaltyMinutes: number;
+  debtMinutes: number;
+  issuablePenaltyTicketCount: number;
 }> {
   return request("resultsAck", {
     method: "POST",
@@ -346,10 +370,31 @@ export function postTimerStop(payload: {
   stoppedAt: string;
   usedMinutes: number;
   overrunMinutes: number;
-}): Promise<{ displayBalance: number; penaltyMinutes: number }> {
+}): Promise<{
+  balanceMinutes: number;
+  displayBalance: number;
+  penaltyMinutes: number;
+  debtMinutes: number;
+  issuablePenaltyTicketCount: number;
+}> {
   return request("timerStop", {
     method: "POST",
     headers: JSON_POST_HEADERS,
     body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * POST penaltyTicketIssue（保護者のみ・1枚=60分即精算）
+ * @param {{ count: number }} payload - 発行枚数（1以上・issuable 以下）。actor は常に parent
+ * @returns {Promise<PenaltyTicketIssueResult>} 精算結果
+ */
+export function postPenaltyTicketIssue(payload: {
+  count: number;
+}): Promise<PenaltyTicketIssueResult> {
+  return request("penaltyTicketIssue", {
+    method: "POST",
+    headers: JSON_POST_HEADERS,
+    body: JSON.stringify({ actor: "parent", count: payload.count }),
   });
 }

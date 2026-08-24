@@ -19,7 +19,10 @@ import type { HomeData } from "@/types/api";
 function buildHome(overrides: Partial<HomeData> = {}): HomeData {
   return {
     displayBalance: 60,
+    balanceMinutes: 60,
     penaltyMinutes: 0,
+    debtMinutes: 0,
+    issuablePenaltyTicketCount: 0,
     today: "2026-07-30",
     todayStatus: "unanswered",
     questAction: "start",
@@ -155,5 +158,26 @@ describe("HomePage", () => {
       name: "⚔️ クエストをはじめる！",
     });
     expect(startButton.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("負残高を表示し、発行 UI は出さない", () => {
+    renderHome(
+      buildHome({
+        displayBalance: -30,
+        balanceMinutes: -30,
+        debtMinutes: 30,
+        penaltyMinutes: 0,
+        issuablePenaltyTicketCount: 0,
+        todayStatus: "completed",
+        questAction: "none",
+      }),
+    );
+
+    expect(screen.getByTestId("balance-minutes").textContent).toBe("-30");
+    expect(screen.getByTestId("balance-debt-minutes").textContent).toContain(
+      "30分",
+    );
+    expect(screen.getByTestId("balance-child-hint")).toBeTruthy();
+    expect(screen.queryByTestId("penalty-ticket-issue-section")).toBeNull();
   });
 });

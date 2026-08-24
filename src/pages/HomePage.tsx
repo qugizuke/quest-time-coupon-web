@@ -11,6 +11,7 @@ import { QuestDeadlineCountdown } from "@/components/QuestDeadlineCountdown";
 import { QuestRegistrationCutoffCountdown } from "@/components/QuestRegistrationCutoffCountdown";
 import { QuestRulesDialog } from "@/components/QuestRulesDialog";
 import { BedtimeModal } from "@/components/BedtimeModal";
+import { BalanceDisplay } from "@/components/BalanceDisplay";
 import { homeQuery, queryKeys } from "@/api/queries";
 import { postRegistrationSetting } from "@/api/client";
 import { ChildPageFrame } from "@/components/layout/ChildPageFrame";
@@ -204,16 +205,13 @@ export function HomePage() {
           tone="hero"
           className="flex flex-col items-center justify-center gap-3 p-8 text-center"
         >
-          <p className="text-base text-muted">いま使えるゲーム・YouTubeの時間</p>
-          <p className="flex items-baseline justify-center gap-3 text-ink">
-            <span className="font-display text-app-xl leading-none">
-              {data.displayBalance}
-            </span>
-            <span className="text-xl">分</span>
-          </p>
-          <span className="rounded-pill bg-primary px-3 py-1 text-xs text-white">
-            ごほうびチケット
-          </span>
+          <BalanceDisplay
+            balanceMinutes={data.balanceMinutes ?? data.displayBalance}
+            penaltyMinutes={data.penaltyMinutes}
+            debtMinutes={data.debtMinutes}
+            audience="child"
+            compact
+          />
         </Card>
 
         {data.unacknowledgedCount > 0 && (

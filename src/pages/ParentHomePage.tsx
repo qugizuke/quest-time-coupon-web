@@ -9,6 +9,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { postRegistrationReopen } from "@/api/client";
 import { parentHomeQuery, queryKeys } from "@/api/queries";
+import { PenaltyTicketIssueSection } from "@/components/PenaltyTicketIssueSection";
 import { ParentPageFrame } from "@/components/layout/ParentPageFrame";
 import { LoadingScreen } from "@/components/layout/LoadingScreen";
 import { Button } from "@/components/ui/Button";
@@ -272,6 +273,13 @@ export function ParentHomePage() {
               )}
             </Card>
           )}
+
+          <PenaltyTicketIssueSection
+            balanceMinutes={parentHome.balanceMinutes}
+            penaltyMinutes={parentHome.penaltyMinutes}
+            debtMinutes={parentHome.debtMinutes}
+            issuablePenaltyTicketCount={parentHome.issuablePenaltyTicketCount}
+          />
         </div>
 
         <div className="flex flex-col gap-4">

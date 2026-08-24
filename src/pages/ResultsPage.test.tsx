@@ -63,7 +63,10 @@ afterEach(() => {
 function buildHome(): HomeData {
   return {
     displayBalance: 0,
+    balanceMinutes: 0,
     penaltyMinutes: 0,
+    debtMinutes: 0,
+    issuablePenaltyTicketCount: 0,
     today: "2026-07-30",
     todayStatus: "pending_ack",
     questAction: "none",
@@ -317,8 +320,11 @@ describe("ResultsPage week UI (#17)", () => {
     apiMocks.postResultsAck.mockResolvedValue({
       appliedDelta: 45,
       penaltyOffset: 0,
+      balanceMinutes: 45,
       displayBalance: 45,
       penaltyMinutes: 0,
+      debtMinutes: 0,
+      issuablePenaltyTicketCount: 0,
     });
     apiMocks.fetchHome.mockRejectedValue(new Error("home refetch failed"));
     apiMocks.fetchResults.mockRejectedValue(new Error("results refetch failed"));
@@ -356,8 +362,11 @@ describe("ResultsPage week UI (#17)", () => {
     apiMocks.postResultsAck.mockResolvedValue({
       appliedDelta: 20,
       penaltyOffset: 0,
+      balanceMinutes: 20,
       displayBalance: 20,
       penaltyMinutes: 0,
+      debtMinutes: 0,
+      issuablePenaltyTicketCount: 0,
     });
     apiMocks.fetchHome.mockRejectedValue(new Error("home refetch failed"));
     apiMocks.fetchResults.mockRejectedValue(new Error("results refetch failed"));

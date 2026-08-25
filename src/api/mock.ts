@@ -245,6 +245,14 @@ function resolveMockVacationTransition(date?: string): boolean {
   return isVacationTransitionPeriod(date ?? todayLocal(), store.longVacation);
 }
 
+/** モック用: 長期休みの3値phase */
+function resolveMockVacationPhase(date?: string): "none" | "active" | "transition" {
+  const target = date ?? todayLocal();
+  if (resolveMockVacationTransition(target)) return "transition";
+  if (resolveMockVacationMode(target)) return "active";
+  return "none";
+}
+
 /**
  * モックの免除日判定
  * @param {string} date - YYYY-MM-DD
@@ -900,10 +908,12 @@ export async function mockApi<T>(
       const hasAnswers = !!dayAnswers && dayAnswers.size > 0;
       const isGraded = store.gradedDates.has(date) || store.rejectedDates.has(date);
       const isAcked = store.acknowledgedDates.has(date);
-      const bedtimeHour = store.bedtimeByDate.get(date) as HomeData["bedtimeHour"];
       const isExemptToday = resolveMockExemptDay(date);
       const isLongVacation = resolveMockVacationMode(date);
       const isVacationTransition = resolveMockVacationTransition(date);
+      const bedtimeHour = (isVacationTransition
+        ? 21
+        : store.bedtimeByDate.get(date)) as HomeData["bedtimeHour"];
       const now = Date.now();
       const reopenEarly = store.registrationReopenByDate.get(date);
       const reopenOpenEarly =
@@ -991,6 +1001,11 @@ export async function mockApi<T>(
         isWeekendEve: weekendEve,
         isLongVacation,
         isVacationTransition,
+        vacationPhase: isVacationTransition
+          ? "transition"
+          : isLongVacation
+            ? "active"
+            : "none",
         isExemptToday,
         registrationReopen,
         wakePromiseYesterday: null,
@@ -1007,6 +1022,9 @@ export async function mockApi<T>(
       const isExemptToday = resolveMockExemptDay(date);
       const isLongVacation = resolveMockVacationMode(date);
       const isVacationTransition = resolveMockVacationTransition(date);
+      const bedtimeHour = (isVacationTransition
+        ? 21
+        : (store.bedtimeByDate.get(date) ?? 21)) as 21 | 22 | 23;
       const hasAnswers = store.answers.has(date);
       const isGraded =
         store.gradedDates.has(date) || store.rejectedDates.has(date);
@@ -1023,7 +1041,7 @@ export async function mockApi<T>(
         isPastQuestRegistrationCutoff(
           date,
           new Date(),
-          store.bedtimeByDate.get(date),
+          bedtimeHour,
         );
       let todayRegistrationStatus = "open_unregistered";
       if (isExemptToday) todayRegistrationStatus = "exempt";
@@ -1036,7 +1054,7 @@ export async function mockApi<T>(
         isPastQuestRegistrationCutoff(
           date,
           new Date(),
-          store.bedtimeByDate.get(date),
+          bedtimeHour,
         )
       ) {
         todayRegistrationStatus = "closed_unregistered";
@@ -1057,12 +1075,17 @@ export async function mockApi<T>(
         isExemptToday,
         isLongVacation,
         isVacationTransition,
+        vacationPhase: isVacationTransition
+          ? "transition"
+          : isLongVacation
+            ? "active"
+            : "none",
         longVacation: {
           startDate: store.longVacation.startDate,
           endDate: store.longVacation.endDate,
           active: isLongVacation,
         },
-        bedtimeHour: (store.bedtimeByDate.get(date) ?? 21) as 21 | 22 | 23,
+        bedtimeHour,
         canEditBedtimeAsParent:
           !isExemptToday &&
           !isVacationTransition &&
@@ -1070,6 +1093,7 @@ export async function mockApi<T>(
           !isGraded &&
           (isWeekendEve(date) || isLongVacation),
         questDeadlineAt: null,
+        rewardVouchers: normalizeRewardVouchers(store.rewardVouchers),
         ...buildBalanceSnapshot(),
       } as T;
     }
@@ -1439,6 +1463,7 @@ export async function mockApi<T>(
             !!startDate &&
             !!endDate &&
             isDateInInclusiveRange(today, startDate, endDate),
+          vacationPhase: resolveMockVacationPhase(today),
         } as T;
       }
       const { startDate, endDate, updatedAt } = store.longVacation;
@@ -1450,6 +1475,7 @@ export async function mockApi<T>(
           !!startDate &&
           !!endDate &&
           isDateInInclusiveRange(today, startDate, endDate),
+        vacationPhase: resolveMockVacationPhase(today),
       } as T;
     }
 

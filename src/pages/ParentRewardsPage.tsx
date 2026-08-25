@@ -12,6 +12,7 @@ import {
 } from "@/api/client";
 import {
   pointExchangeRequestsQuery,
+  parentHomeQuery,
   queryKeys,
   rewardVoucherRefundRequestsQuery,
 } from "@/api/queries";
@@ -29,7 +30,11 @@ import {
   formatRefundLineItemLabel,
   pointExchangeStatusTone,
 } from "@/lib/pointExchangeUi";
-import type { PointExchangeRequest, RewardVoucherRefundRequest } from "@/types/api";
+import type {
+  PointExchangeRequest,
+  RewardVoucherRefundRequest,
+  RewardVouchers,
+} from "@/types/api";
 
 /**
  * @typedef {object} PointExchangeRequestCardProps
@@ -38,6 +43,9 @@ import type { PointExchangeRequest, RewardVoucherRefundRequest } from "@/types/a
 interface PointExchangeRequestCardProps {
   /** @type {PointExchangeRequest} 申請1件 */
   request: PointExchangeRequest;
+  currentBalancePoints: number | null;
+  currentRewardVouchers: RewardVouchers | null;
+  currentPenaltyTicketCount: number | null;
 }
 
 /**
@@ -45,7 +53,12 @@ interface PointExchangeRequestCardProps {
  * @param {PointExchangeRequestCardProps} props - props
  * @returns {JSX.Element} カード
  */
-function PointExchangeRequestCard({ request }: PointExchangeRequestCardProps) {
+function PointExchangeRequestCard({
+  request,
+  currentBalancePoints,
+  currentRewardVouchers,
+  currentPenaltyTicketCount,
+}: PointExchangeRequestCardProps) {
   const queryClient = useQueryClient();
   const [panel, setPanel] = useState<"idle" | "approve" | "reject">("idle");
   const [rejectReason, setRejectReason] = useState("");
@@ -69,6 +82,10 @@ function PointExchangeRequestCard({ request }: PointExchangeRequestCardProps) {
   });
 
   const isPending = request.status === "pending";
+  const consumedPenaltyTickets = request.effects.consumedPenaltyTickets;
+  const penaltyTicketShortage =
+    currentPenaltyTicketCount !== null &&
+    consumedPenaltyTickets > currentPenaltyTicketCount;
 
   return (
     <li
@@ -89,6 +106,34 @@ function PointExchangeRequestCard({ request }: PointExchangeRequestCardProps) {
         ))}
       </ul>
       <p className="text-sm font-bold text-ink">合計 {request.totalPoints}pt</p>
+      {isPending && currentBalancePoints !== null && currentRewardVouchers && (
+        <div className="mt-2 grid gap-1 rounded-default bg-surface-warm px-3 py-2 text-sm text-ink sm:grid-cols-2">
+          <p className="sm:col-span-2 text-xs text-muted">現在値からの目安（確定は承認時）</p>
+          <p>
+            承認後残高: <strong>{currentBalancePoints - request.effects.spentPoints}pt</strong>
+          </p>
+          <div>
+            {Object.entries(request.effects.issuedRewardVouchers).map(
+              ([catalogItemId, count]) => (
+                <p key={catalogItemId}>
+                  承認後 {request.items.find((item) => item.catalogItemId === catalogItemId)?.label ?? catalogItemId}: {currentRewardVouchers[catalogItemId as keyof RewardVouchers] + count}枚
+                </p>
+              ),
+            )}
+          </div>
+          {consumedPenaltyTickets > 0 && currentPenaltyTicketCount !== null && (
+            <p className="sm:col-span-2">
+              承認後 ペナルティチケット: {currentPenaltyTicketCount - consumedPenaltyTickets}枚
+              （現在 {currentPenaltyTicketCount}枚）
+            </p>
+          )}
+          {penaltyTicketShortage && (
+            <p className="sm:col-span-2 font-bold text-danger" role="alert">
+              ペナルティチケットが{consumedPenaltyTickets - currentPenaltyTicketCount}枚不足しているため承認できません。
+            </p>
+          )}
+        </div>
+      )}
       <p className="text-sm text-muted">
         {isPending ? "承認時の反映予定" : "反映"}: {formatEffectsSummary(request.effects)}
       </p>
@@ -100,6 +145,7 @@ function PointExchangeRequestCard({ request }: PointExchangeRequestCardProps) {
         <div className="mt-3 flex gap-2">
           <Button
             className="flex-1"
+            disabled={penaltyTicketShortage}
             onClick={() => setPanel("approve")}
             data-testid={`parent-rewards-approve-open-${request.id}`}
           >
@@ -131,7 +177,7 @@ function PointExchangeRequestCard({ request }: PointExchangeRequestCardProps) {
           <div className="flex gap-2">
             <Button
               className="flex-1"
-              disabled={decisionMutation.isPending}
+              disabled={decisionMutation.isPending || penaltyTicketShortage}
               onClick={() => decisionMutation.mutate({ decision: "approve" })}
               data-testid={`parent-rewards-approve-submit-${request.id}`}
             >
@@ -200,6 +246,8 @@ function PointExchangeRequestCard({ request }: PointExchangeRequestCardProps) {
 interface RewardVoucherRefundRequestCardProps {
   /** @type {RewardVoucherRefundRequest} 申請1件 */
   request: RewardVoucherRefundRequest;
+  currentBalancePoints: number | null;
+  currentRewardVouchers: RewardVouchers | null;
 }
 
 /**
@@ -209,6 +257,8 @@ interface RewardVoucherRefundRequestCardProps {
  */
 function RewardVoucherRefundRequestCard({
   request,
+  currentBalancePoints,
+  currentRewardVouchers,
 }: RewardVoucherRefundRequestCardProps) {
   const queryClient = useQueryClient();
   const [panel, setPanel] = useState<"idle" | "approve" | "reject">("idle");
@@ -235,6 +285,12 @@ function RewardVoucherRefundRequestCard({
   });
 
   const isPending = request.status === "pending";
+  const voucherShortages = currentRewardVouchers
+    ? request.items.filter(
+        (item) => currentRewardVouchers[item.catalogItemId] < item.quantity,
+      )
+    : [];
+  const hasVoucherShortage = voucherShortages.length > 0;
 
   return (
     <li
@@ -255,6 +311,31 @@ function RewardVoucherRefundRequestCard({
         ))}
       </ul>
       <p className="text-sm font-bold text-ink">戻る合計 {request.totalPoints}pt</p>
+      {isPending && currentBalancePoints !== null && currentRewardVouchers && (
+        <div className="mt-2 grid gap-1 rounded-default bg-surface-warm px-3 py-2 text-sm text-ink sm:grid-cols-2">
+          <p className="sm:col-span-2 text-xs text-muted">現在値からの目安（確定は承認時）</p>
+          <p>
+            承認後残高: <strong>{currentBalancePoints + request.totalPoints}pt</strong>
+          </p>
+          <div>
+            {request.items.map((item) => (
+              <p key={item.catalogItemId}>
+                承認後 {item.label}: {currentRewardVouchers[item.catalogItemId] - item.quantity}枚
+              </p>
+            ))}
+          </div>
+          {hasVoucherShortage && (
+            <p className="sm:col-span-2 font-bold text-danger" role="alert">
+              {voucherShortages
+                .map(
+                  (item) =>
+                    `${item.label}が${item.quantity - currentRewardVouchers[item.catalogItemId]}枚不足`,
+                )
+                .join("、")}しているため承認できません。
+            </p>
+          )}
+        </div>
+      )}
       {request.status === "rejected" && request.rejectReason && (
         <p className="text-sm text-muted">理由: {request.rejectReason}</p>
       )}
@@ -263,6 +344,7 @@ function RewardVoucherRefundRequestCard({
         <div className="mt-3 flex gap-2">
           <Button
             className="flex-1"
+            disabled={hasVoucherShortage}
             onClick={() => setPanel("approve")}
             data-testid={`parent-refund-approve-open-${request.id}`}
           >
@@ -294,7 +376,7 @@ function RewardVoucherRefundRequestCard({
           <div className="flex gap-2">
             <Button
               className="flex-1"
-              disabled={decisionMutation.isPending}
+              disabled={decisionMutation.isPending || hasVoucherShortage}
               onClick={() => decisionMutation.mutate({ decision: "approve" })}
               data-testid={`parent-refund-approve-submit-${request.id}`}
             >
@@ -362,6 +444,7 @@ function RewardVoucherRefundRequestCard({
  */
 export function ParentRewardsPage() {
   const [month, setMonth] = useState(currentMonth());
+  const { data: parentHome } = useQuery(parentHomeQuery);
   const { data, isLoading, error } = useQuery(pointExchangeRequestsQuery(month));
   const {
     data: refundData,
@@ -390,12 +473,22 @@ export function ParentRewardsPage() {
   const refundItems = refundData?.items ?? [];
   const refundPendingItems = refundItems.filter((item) => item.status === "pending");
   const refundDecidedItems = refundItems.filter((item) => item.status !== "pending");
+  const currentBalancePoints = parentHome?.balancePoints ?? null;
+  const currentRewardVouchers = parentHome?.rewardVouchers ?? null;
+  const currentPenaltyTicketCount = parentHome?.penaltyTicketCount ?? null;
 
   return (
     <ParentPageFrame>
       <div className="mb-6">
         <p className="text-sm text-muted">保護者モード</p>
         <h1 className="text-app-lg font-bold text-ink">ポイント交換承認</h1>
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-2" data-testid="parent-rewards-pending-summary">
+        <StatusBadge tone={pendingItems.length + refundPendingItems.length > 0 ? "warning" : "muted"}>
+          承認待ち {pendingItems.length + refundPendingItems.length}件
+        </StatusBadge>
+        <span className="text-sm text-muted">交換 {pendingItems.length}件・戻し {refundPendingItems.length}件</span>
       </div>
 
       <Card className="mb-4" data-testid="parent-rewards-pending-card">
@@ -410,7 +503,13 @@ export function ParentRewardsPage() {
         ) : (
           <ul className="flex flex-col gap-2">
             {pendingItems.map((request) => (
-              <PointExchangeRequestCard key={request.id} request={request} />
+              <PointExchangeRequestCard
+                key={request.id}
+                request={request}
+                currentBalancePoints={currentBalancePoints}
+                currentRewardVouchers={currentRewardVouchers}
+                currentPenaltyTicketCount={currentPenaltyTicketCount}
+              />
             ))}
           </ul>
         )}
@@ -434,7 +533,12 @@ export function ParentRewardsPage() {
         ) : (
           <ul className="flex flex-col gap-2">
             {refundPendingItems.map((request) => (
-              <RewardVoucherRefundRequestCard key={request.id} request={request} />
+              <RewardVoucherRefundRequestCard
+                key={request.id}
+                request={request}
+                currentBalancePoints={currentBalancePoints}
+                currentRewardVouchers={currentRewardVouchers}
+              />
             ))}
           </ul>
         )}
@@ -471,7 +575,13 @@ export function ParentRewardsPage() {
         ) : (
           <ul className="flex flex-col gap-2">
             {decidedItems.map((request) => (
-              <PointExchangeRequestCard key={request.id} request={request} />
+              <PointExchangeRequestCard
+                key={request.id}
+                request={request}
+                currentBalancePoints={currentBalancePoints}
+                currentRewardVouchers={currentRewardVouchers}
+                currentPenaltyTicketCount={currentPenaltyTicketCount}
+              />
             ))}
           </ul>
         )}
@@ -486,7 +596,12 @@ export function ParentRewardsPage() {
         ) : (
           <ul className="flex flex-col gap-2">
             {refundDecidedItems.map((request) => (
-              <RewardVoucherRefundRequestCard key={request.id} request={request} />
+              <RewardVoucherRefundRequestCard
+                key={request.id}
+                request={request}
+                currentBalancePoints={currentBalancePoints}
+                currentRewardVouchers={currentRewardVouchers}
+              />
             ))}
           </ul>
         )}

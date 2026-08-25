@@ -8,13 +8,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { postRegistrationReopen } from "@/api/client";
-import { parentHomeQuery, queryKeys } from "@/api/queries";
+import { parentHomeQuery, pointExchangeRequestsQuery, queryKeys } from "@/api/queries";
+import { PenaltyTicketConsumeSection } from "@/components/PenaltyTicketConsumeSection";
 import { PenaltyTicketIssueSection } from "@/components/PenaltyTicketIssueSection";
 import { ParentPageFrame } from "@/components/layout/ParentPageFrame";
 import { LoadingScreen } from "@/components/layout/LoadingScreen";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { currentMonth } from "@/lib/month";
 import {
   DEFAULT_REOPEN_DURATION_MINUTES,
   buildEndsAtFromDuration,
@@ -68,6 +70,10 @@ export function ParentHomePage() {
     isLoading,
     error,
   } = useQuery(parentHomeQuery);
+  const { data: pendingExchange } = useQuery(
+    pointExchangeRequestsQuery(currentMonth(), "pending"),
+  );
+  const pendingExchangeCount = pendingExchange?.items.length ?? 0;
   const [reopenDuration, setReopenDuration] = useState(
     String(DEFAULT_REOPEN_DURATION_MINUTES),
   );
@@ -274,11 +280,36 @@ export function ParentHomePage() {
             </Card>
           )}
 
+          <Card data-testid="point-exchange-pending-card">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <h2 className="font-bold text-ink">🎁 ポイント交換</h2>
+              <StatusBadge tone={pendingExchangeCount > 0 ? "warning" : "muted"}>
+                {pendingExchangeCount}件
+              </StatusBadge>
+            </div>
+            {pendingExchangeCount > 0 && (
+              <p className="mb-3 text-sm text-ink">
+                お子様からの交換申請が {pendingExchangeCount}件 承認待ちです
+              </p>
+            )}
+            <Button
+              fullWidth
+              variant={pendingExchangeCount > 0 ? "primary" : "secondary"}
+              onClick={() => navigate("/parent/rewards")}
+            >
+              {pendingExchangeCount > 0 ? "承認をはじめる →" : "交換履歴をみる"}
+            </Button>
+          </Card>
+
           <PenaltyTicketIssueSection
-            balanceMinutes={parentHome.balanceMinutes}
+            switchMinutes={parentHome.switchMinutes}
             penaltyMinutes={parentHome.penaltyMinutes}
             debtMinutes={parentHome.debtMinutes}
             issuablePenaltyTicketCount={parentHome.issuablePenaltyTicketCount}
+          />
+
+          <PenaltyTicketConsumeSection
+            penaltyTicketCount={parentHome.penaltyTicketCount}
           />
         </div>
 
@@ -302,6 +333,14 @@ export function ParentHomePage() {
               >
                 {vacationActive ? "モード中" : "オフ"}
               </p>
+              {parentHome.isVacationTransition && (
+                <p
+                  className="mt-1 text-sm font-medium text-warning"
+                  data-testid="vacation-transition-indicator"
+                >
+                  ⏰ 終了1週間前の移行期間中（就寝21時固定）
+                </p>
+              )}
               {vacationPeriod ? (
                 <p className="mt-1 text-sm text-muted" data-testid="vacation-period">
                   期間：{vacationPeriod.startDate} 〜 {vacationPeriod.endDate}

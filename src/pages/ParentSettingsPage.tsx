@@ -174,6 +174,7 @@ export function ParentSettingsPage() {
       hasAnswers,
       hasResult,
       bedtimeHour: parentHome.bedtimeHour,
+      isTransitionPeriod: parentHome.isVacationTransition,
     });
     if (
       local.reason === "not_target_day" ||
@@ -336,11 +337,24 @@ export function ParentSettingsPage() {
           <Card data-testid="long-vacation-card">
             <div className="mb-2 flex items-center justify-between gap-3">
               <h2 className="font-bold text-ink">🏖️ 長期休みモード</h2>
-              <StatusBadge tone={vacationConfigured ? "info" : "muted"}>
-                {vacationConfigured ? "設定あり" : "未設定"}
-              </StatusBadge>
+              <div className="flex items-center gap-2">
+                {parentHome?.isVacationTransition && (
+                  <StatusBadge tone="warning" data-testid="vacation-transition-badge">
+                    移行期間中
+                  </StatusBadge>
+                )}
+                <StatusBadge tone={vacationConfigured ? "info" : "muted"}>
+                  {vacationConfigured ? "設定あり" : "未設定"}
+                </StatusBadge>
+              </div>
             </div>
             <p className="mb-3 text-sm text-muted">{VACATION_HELP}</p>
+            {parentHome?.isVacationTransition && (
+              <p className="mb-3 text-sm text-info" data-testid="vacation-transition-help">
+                終了1週間前の移行期間中です。就寝は21時固定、起床は7:00 / 7:30 / 8:00
+                から選べます。
+              </p>
+            )}
             <div className="mb-3 flex flex-col gap-2 sm:flex-row">
               <label className="flex flex-1 flex-col gap-1 text-sm">
                 開始日

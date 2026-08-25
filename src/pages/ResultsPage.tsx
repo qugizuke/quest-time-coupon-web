@@ -8,7 +8,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { postResultsAck } from "@/api/client";
-import { homeQuery, queryKeys, resultsQuery } from "@/api/queries";
+import { queryKeys, resultsQuery } from "@/api/queries";
 import { ChildPageFrame } from "@/components/layout/ChildPageFrame";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -17,6 +17,7 @@ import { useDailyQuests } from "@/hooks/useDailyQuests";
 import { formatDateJa, formatDayNumber, formatWeekdayJa, todayLocal } from "@/lib/date";
 import { actualDoneLabel, childAnswerLabel, isUnknownChildAnswer } from "@/lib/labels";
 import { isSkipAnswerQuest, resolveQuestTitle } from "@/lib/questLabels";
+import { isOnOrAfterPointsCutover } from "@/lib/points";
 import {
   formatWeekLabel,
   getMondayWithOffset,
@@ -34,12 +35,12 @@ interface ResultsCacheData {
 const UNKNOWN_ANSWER_MESSAGE =
   "「分からない」は、その日クエストを意識できていなかった扱いで大きめの減点だよ。次からは思い出して「できた」「できなかった」で答えよう！";
 
-/** 採点拒否（grade_rejected）の理由文（screen-design §6.5） */
+/** 採点拒否（grade_rejected）の理由文（screen-design §6.5・Issue #37 以降 -100pt） */
 const GRADE_REJECTED_REASON =
-  "ママが採点を拒否しました。ママをどんな気持ちにさせたか、振り返ってみよう。";
+  "ママが採点を拒否しました。ママをどんな気持ちにさせたか、振り返ってみよう。（-100pt）";
 
-/** 未登録（unregistered）の理由文（screen-design §6.5） */
-const UNREGISTERED_REASON = "クエストが登録されませんでした（-60分）";
+/** 未登録（unregistered）の理由文（screen-design §6.5・Issue #37 以降 -100pt） */
+const UNREGISTERED_REASON = "クエストが登録されませんでした（-100pt）";
 
 /** 免除（exempt）の理由文（screen-design §6.5） */
 const EXEMPT_REASON = "今日はクエスト免除日でした";
@@ -54,6 +55,15 @@ function reasonCodeMessage(reasonCode: ReasonCode): string | null {
   if (reasonCode === "unregistered") return UNREGISTERED_REASON;
   if (reasonCode === "exempt") return EXEMPT_REASON;
   return null;
+}
+
+/**
+ * 日次結果の単位ラベルを返す（ADR-005: 切替日前は「分（旧）」、以降は「pt」）
+ * @param {string} date - 結果の対象日
+ * @returns {string} 単位ラベル
+ */
+function pointsUnitLabel(date: string): string {
+  return isOnOrAfterPointsCutover(date) ? "pt" : "分（旧）";
 }
 
 /**
@@ -72,7 +82,7 @@ function weekCardLabel(item: ResultItem | undefined): {
   if (item.reasonCode === "exempt") {
     return { pointsText: "±0", statusText: "免除", tone: "info" };
   }
-  const pointsText = `${item.totalPoints >= 0 ? "+" : ""}${item.totalPoints}分`;
+  const pointsText = `${item.totalPoints >= 0 ? "+" : ""}${item.totalPoints}${pointsUnitLabel(item.date)}`;
   if (item.requiresAck && !item.acknowledged) {
     return { pointsText, statusText: "未確認", tone: "danger" };
   }
@@ -99,10 +109,14 @@ function needsAck(item: ResultItem): boolean {
 }
 
 /** 登録タイミング調整の表示ラベル */
-function registrationTimingLabel(adjustment: number, reason?: string): string {
+function registrationTimingLabel(
+  adjustment: number,
+  unit: string,
+  reason?: string,
+): string {
   if (reason) return reason;
-  if (adjustment > 0) return `定時登録ボーナス +${adjustment}分`;
-  if (adjustment < 0) return `登録締切超過 ${adjustment}分`;
+  if (adjustment > 0) return `定時登録ボーナス +${adjustment}${unit}`;
+  if (adjustment < 0) return `登録締切超過 ${adjustment}${unit}`;
   return "";
 }
 
@@ -132,7 +146,6 @@ export function ResultsPage() {
   const today = todayLocal();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const { data, isLoading, error } = useQuery(resultsQuery);
-  const { data: homeData } = useQuery(homeQuery);
   const { data: daily } = useDailyQuests(selectedDate ?? today);
   const [weekOffset, setWeekOffset] = useState(0);
   const [weekInitialized, setWeekInitialized] = useState(false);
@@ -178,15 +191,6 @@ export function ResultsPage() {
   }, [items]);
 
   const selected = selectedDate ? byDate.get(selectedDate) : undefined;
-  const unackedCount = items.filter((item) => needsAck(item)).length;
-  const hasMultipleUnacked = unackedCount > 1;
-  const penaltyPreviewOffset =
-    selected && needsAck(selected) && selected.totalPoints > 0
-      ? Math.min(homeData?.penaltyMinutes ?? 0, selected.totalPoints)
-      : 0;
-  const effectiveDeltaPreview = selected
-    ? selected.totalPoints - penaltyPreviewOffset
-    : 0;
 
   const ackMutation = useMutation({
     mutationFn: (date: string) => postResultsAck(date),
@@ -214,7 +218,8 @@ export function ResultsPage() {
 
         return {
           ...currentHome,
-          balanceMinutes: ack.balanceMinutes ?? ack.displayBalance,
+          balancePoints: ack.balancePoints ?? currentHome.balancePoints,
+          switchMinutes: ack.switchMinutes ?? ack.displayBalance,
           displayBalance: ack.displayBalance,
           penaltyMinutes: ack.penaltyMinutes,
           debtMinutes: ack.debtMinutes ?? 0,
@@ -387,16 +392,10 @@ export function ResultsPage() {
             <p className="font-display text-app-xl leading-none text-ink">
               {selected.totalPoints >= 0 ? "+" : ""}
               {selected.totalPoints}
-              <span className="ml-2 font-sans text-xl font-normal">分</span>
+              <span className="ml-2 font-sans text-xl font-normal">
+                {pointsUnitLabel(selected.date)}
+              </span>
             </p>
-            {needsAck(selected) && penaltyPreviewOffset > 0 && (
-              <p className="mt-2 text-sm text-muted">
-                {hasMultipleUnacked ? "この結果を先に確認すると、" : ""}
-                超過ペナルティ {penaltyPreviewOffset}分を相殺後、実質{" "}
-                {effectiveDeltaPreview >= 0 ? "+" : ""}
-                {effectiveDeltaPreview}分
-              </p>
-            )}
           </Card>
 
           {selected.details.some(
@@ -433,17 +432,25 @@ export function ResultsPage() {
               >
                 {registrationTimingLabel(
                   selected.registrationTimingAdjustment,
+                  pointsUnitLabel(selected.date),
                   selected.registrationTimingReason,
                 )}
               </div>
             )}
+
+          {selected.reasonCode === "normal" && !!selected.breakdown?.perfectBonus && (
+            <div className="rounded-default border-2 border-success bg-success/10 px-4 py-3 text-base text-ink">
+              全達成ボーナス +{selected.breakdown.perfectBonus}
+              {pointsUnitLabel(selected.date)}
+            </div>
+          )}
 
           {selected.reasonCode === "normal" &&
             !!selected.bedtimePrepPenalty &&
             selected.bedtimePrepPenalty !== 0 && (
               <div className="rounded-default border-2 border-danger bg-danger/10 px-4 py-3 text-base text-ink">
                 {selected.bedtimePrepPenaltyReason ??
-                  `寝る準備の虚偽ペナルティ ${selected.bedtimePrepPenalty}分`}
+                  `寝る準備の虚偽ペナルティ ${selected.bedtimePrepPenalty}${pointsUnitLabel(selected.date)}`}
               </div>
             )}
 
@@ -454,13 +461,14 @@ export function ResultsPage() {
                   <li
                     key={`${adj.kind}-${adj.code}`}
                     className={`rounded-default px-4 py-3 text-base ${
-                      adj.minutes > 0
+                      adj.points > 0
                         ? "border-2 border-success bg-success/10 text-ink"
                         : "border-2 border-danger bg-danger/10 text-ink"
                     }`}
                   >
-                    {adj.label}: {adj.minutes > 0 ? "+" : ""}
-                    {adj.minutes}分
+                    {adj.label}: {adj.points > 0 ? "+" : ""}
+                    {adj.points}
+                    {pointsUnitLabel(selected.date)}
                   </li>
                 ))}
               </ul>
@@ -495,7 +503,10 @@ export function ResultsPage() {
                       ママの採点: {actualDoneLabel(d.actualDone)}
                     </p>
                   )}
-                  <p className="text-sm text-muted">{d.finalPoints}分</p>
+                  <p className="text-sm text-muted">
+                    {d.finalPoints}
+                    {pointsUnitLabel(selected.date)}
+                  </p>
                 </li>
               );
             })}

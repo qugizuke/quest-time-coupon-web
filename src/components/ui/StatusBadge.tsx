@@ -22,6 +22,8 @@ interface StatusBadgeProps {
   children: ReactNode;
   /** @type {StatusBadgeTone} 色 */
   tone?: StatusBadgeTone;
+  /** @type {string} テスト用フック */
+  "data-testid"?: string;
 }
 
 const toneClass: Record<StatusBadgeTone, string> = {
@@ -37,10 +39,15 @@ const toneClass: Record<StatusBadgeTone, string> = {
  * @param {StatusBadgeProps} props - props
  * @returns {JSX.Element} バッジ
  */
-export function StatusBadge({ children, tone = "muted" }: StatusBadgeProps) {
+export function StatusBadge({
+  children,
+  tone = "muted",
+  "data-testid": dataTestId,
+}: StatusBadgeProps) {
   return (
     <span
       className={`inline-flex items-center rounded-pill px-3 py-1 text-xs font-medium ${toneClass[tone]}`}
+      data-testid={dataTestId}
     >
       {children}
     </span>

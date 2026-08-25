@@ -46,9 +46,13 @@ const STATUS_LABEL = {
 /** 免除日のお休み文言（仕様正） */
 const EXEMPT_MESSAGE = "今日はクエストお休みです（ママが免除日に設定）";
 
+/** 長期休みモード終了1週間前の移行期間バナー文言（仕様正・Issue #36） */
+const VACATION_TRANSITION_MESSAGE =
+  "長期休みモード終了の1週間前なので、生活リズムを元に戻そう。寝る時間は21時だよ";
+
 /** 登録受付締切後に未着手だった場合のメッセージ */
 function missedStartMessage(cutoffLabel: string): string {
-  return `${cutoffLabel}を過ぎたので、今日はクエストを開始できません（-60分）`;
+  return `${cutoffLabel}を過ぎたので、今日はクエストを開始できません（-100pt）`;
 }
 
 /**
@@ -105,6 +109,7 @@ export function HomePage() {
 
   const isExemptDay = data?.isExemptDay ?? false;
   const isVacationMode = data?.isVacationMode ?? false;
+  const isVacationTransition = data?.isVacationTransition ?? false;
   const weekendEve = data?.isWeekendEve ?? isWeekendEve(today);
 
   const isReopenActive = isRegistrationReopenActive(data?.registrationReopen);
@@ -147,6 +152,7 @@ export function HomePage() {
     bedtimeHour,
     todayStatus: data.todayStatus,
     date: today,
+    isTransitionPeriod: isVacationTransition,
   });
 
   const canStartQuest =
@@ -206,9 +212,11 @@ export function HomePage() {
           className="flex flex-col items-center justify-center gap-3 p-8 text-center"
         >
           <BalanceDisplay
-            balanceMinutes={data.balanceMinutes ?? data.displayBalance}
+            balancePoints={data.balancePoints}
+            switchMinutes={data.switchMinutes ?? data.displayBalance}
             penaltyMinutes={data.penaltyMinutes}
             debtMinutes={data.debtMinutes}
+            penaltyTicketCount={data.penaltyTicketCount}
             audience="child"
             compact
           />
@@ -218,6 +226,20 @@ export function HomePage() {
           <Banner onClick={() => navigate("/results?unacked=1")}>
             採点結果を確認する（未確認あり！）
           </Banner>
+        )}
+
+        {!isExemptDay && isVacationTransition && (
+          <div
+            className="flex items-start gap-3 rounded-default border-[3px] border-info bg-info-soft px-4 py-4"
+            data-testid="vacation-transition-banner"
+          >
+            <span className="mt-0.5 shrink-0 text-lg" aria-hidden>
+              ⏰
+            </span>
+            <p className="min-w-0 flex-1 text-[15px] leading-snug text-ink">
+              {VACATION_TRANSITION_MESSAGE}
+            </p>
+          </div>
         )}
 
         <div
@@ -270,7 +292,7 @@ export function HomePage() {
               !deadline.showRegistrationCountdown && (
                 <p className="mt-2 text-sm text-muted">
                   {deadline.bonusDeadlineLabel}{" "}
-                  までに登録して、寝る準備をママが確認できたら +15分！（
+                  までに登録して、寝る準備をママが確認できたら +5pt！（
                   {deadline.registrationStartLabel}〜
                   {deadline.registrationCutoffLabel} 受付）
                 </p>
@@ -335,6 +357,14 @@ export function HomePage() {
             </Button>
             <Button
               fullWidth
+              variant="navRewards"
+              onClick={() => navigate("/rewards")}
+              data-testid="nav-rewards"
+            >
+              🎁 ポイントを交換する
+            </Button>
+            <Button
+              fullWidth
               variant="navTimer"
               onClick={() => navigate("/timer")}
               data-testid="nav-timer"
@@ -370,12 +400,7 @@ export function HomePage() {
         </div>
       </div>
 
-      <QuestRulesDialog
-        open={rulesOpen}
-        onClose={() => setRulesOpen(false)}
-        bedtimeHour={bedtimeHour}
-        isRestDayEve={weekendEve || isVacationMode}
-      />
+      <QuestRulesDialog open={rulesOpen} onClose={() => setRulesOpen(false)} />
 
       <BedtimeModal
         open={bedtimeModalOpen}

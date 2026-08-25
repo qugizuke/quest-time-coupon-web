@@ -17,10 +17,11 @@ vi.mock("@/api/client", async (importOriginal) => {
       settledMinutes: count * 60,
       debtBefore: 120,
       debtAfter: 120 - count * 60,
-      balanceMinutes: -30,
+      switchMinutes: -30,
       displayBalance: -30,
       penaltyMinutes: 0,
       issuablePenaltyTicketCount: 0,
+      penaltyTicketCount: count,
     })),
   };
 });
@@ -31,7 +32,7 @@ vi.mock("@/api/client", async (importOriginal) => {
  * @returns {void}
  */
 function renderSection(props: {
-  balanceMinutes: number;
+  switchMinutes: number;
   penaltyMinutes: number;
   debtMinutes: number;
   issuablePenaltyTicketCount?: number;
@@ -42,7 +43,7 @@ function renderSection(props: {
   render(
     <QueryClientProvider client={queryClient}>
       <PenaltyTicketIssueSection
-        balanceMinutes={props.balanceMinutes}
+        switchMinutes={props.switchMinutes}
         penaltyMinutes={props.penaltyMinutes}
         debtMinutes={props.debtMinutes}
         issuablePenaltyTicketCount={props.issuablePenaltyTicketCount}
@@ -62,7 +63,7 @@ describe("PenaltyTicketIssueSection", () => {
 
   it("負債59分は発行ボタン disabled と理由表示", () => {
     renderSection({
-      balanceMinutes: -59,
+      switchMinutes: -59,
       penaltyMinutes: 0,
       debtMinutes: 59,
       issuablePenaltyTicketCount: 0,
@@ -77,7 +78,7 @@ describe("PenaltyTicketIssueSection", () => {
 
   it("負債60分は1枚発行の確認プレビューへ進める", () => {
     renderSection({
-      balanceMinutes: -60,
+      switchMinutes: -60,
       penaltyMinutes: 0,
       debtMinutes: 60,
       issuablePenaltyTicketCount: 1,
@@ -90,7 +91,7 @@ describe("PenaltyTicketIssueSection", () => {
 
   it("負債150分で2枚発行のプレビューは残り30分", () => {
     renderSection({
-      balanceMinutes: -90,
+      switchMinutes: -90,
       penaltyMinutes: 60,
       debtMinutes: 150,
       issuablePenaltyTicketCount: 2,
@@ -107,7 +108,7 @@ describe("PenaltyTicketIssueSection", () => {
   it("確認して発行すると API を呼ぶ", async () => {
     const { postPenaltyTicketIssue } = await import("@/api/client");
     renderSection({
-      balanceMinutes: -120,
+      switchMinutes: -120,
       penaltyMinutes: 0,
       debtMinutes: 120,
       issuablePenaltyTicketCount: 2,

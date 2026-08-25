@@ -1,7 +1,7 @@
 /**
  * @file QuestRegistrationCutoffCountdown
  * @description 未着手時、定時ボーナス締切以降に登録受付締切までのカウントダウンを表示する。
- *   未登録ペナルティ（-60分）を赤文字で知らせる。
+ *   未登録ペナルティ（-100pt）を赤文字で知らせる。
  */
 
 /** 表示用 props */
@@ -26,10 +26,10 @@ export function QuestRegistrationCutoffCountdown({
       className="flex flex-col items-center gap-1 rounded-default border-2 border-danger bg-danger/10 px-4 py-4 text-center"
       role="timer"
       aria-live="polite"
-      aria-label={`登録締切 ${registrationCutoffLabel} まであと ${countdownFormatted}。過ぎると60分減点`}
+      aria-label={`登録締切 ${registrationCutoffLabel} まであと ${countdownFormatted}。過ぎると100pt減点`}
     >
       <p className="text-base font-bold text-danger">
-        登録を忘れると -60分！
+        登録を忘れると -100pt！
       </p>
       <p className="text-app-xl font-bold tabular-nums text-danger">
         {countdownFormatted}
@@ -38,7 +38,7 @@ export function QuestRegistrationCutoffCountdown({
         {registrationCutoffLabel} までに「クエスト開始」して登録しよう
       </p>
       <p className="text-sm text-danger/80">
-        ボーナス（+15分）の時間は過ぎました
+        ボーナス（+5pt）の時間は過ぎました
       </p>
     </div>
   );

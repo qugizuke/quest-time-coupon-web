@@ -9,9 +9,12 @@ import {
   getParentSelectableBedtimeHours,
   isLongVacationFinalDayBeforeWeekday,
   isParentBedtimeHourSelectable,
+  isVacationTransitionPeriod,
   resolveBedtimeUiMode,
   resolveHomeVariant,
+  resolveWakeUpOptions,
   shouldShowWakeUpSetting,
+  TRANSITION_WAKE_UP_OPTIONS,
   WAKE_UP_OPTIONS,
 } from "./homeMode";
 
@@ -108,6 +111,51 @@ describe("resolveBedtimeUiMode", () => {
       }),
     ).toBe("hidden");
   });
+
+  it("移行期間中は18時前・未設定でも locked21（就寝選択不可・Issue #36）", () => {
+    expect(
+      resolveBedtimeUiMode({
+        isExemptDay: false,
+        isVacationMode: true,
+        isWeekendEveDay: false,
+        bedtimeHour: undefined,
+        todayStatus: "unanswered",
+        date: "2026-08-25",
+        now: new Date(2026, 7, 25, 10, 0, 0),
+        isTransitionPeriod: true,
+      }),
+    ).toBe("locked21");
+  });
+
+  it("移行期間中は就寝設定済みでも locked21", () => {
+    expect(
+      resolveBedtimeUiMode({
+        isExemptDay: false,
+        isVacationMode: true,
+        isWeekendEveDay: false,
+        bedtimeHour: 21,
+        todayStatus: "unanswered",
+        date: "2026-08-25",
+        now: new Date(2026, 7, 25, 10, 0, 0),
+        isTransitionPeriod: true,
+      }),
+    ).toBe("locked21");
+  });
+
+  it("免除日は移行期間中でも hidden（仕様勝ち）", () => {
+    expect(
+      resolveBedtimeUiMode({
+        isExemptDay: true,
+        isVacationMode: true,
+        isWeekendEveDay: false,
+        bedtimeHour: undefined,
+        todayStatus: "exempt",
+        date: "2026-08-25",
+        now: new Date(2026, 7, 25, 10, 0, 0),
+        isTransitionPeriod: true,
+      }),
+    ).toBe("hidden");
+  });
 });
 
 describe("isLongVacationFinalDayBeforeWeekday", () => {
@@ -184,6 +232,47 @@ describe("shouldShowWakeUpSetting", () => {
   });
 });
 
+describe("isVacationTransitionPeriod", () => {
+  const summer = { startDate: "2026-08-01", endDate: "2026-08-31" };
+
+  it("endDate から6日前（両端含む7日間）は移行期間", () => {
+    expect(isVacationTransitionPeriod("2026-08-25", summer)).toBe(true);
+    expect(isVacationTransitionPeriod("2026-08-31", summer)).toBe(true);
+  });
+
+  it("移行期間の1日前は false", () => {
+    expect(isVacationTransitionPeriod("2026-08-24", summer)).toBe(false);
+  });
+
+  it("長期休み期間外は false", () => {
+    expect(isVacationTransitionPeriod("2026-09-01", summer)).toBe(false);
+    expect(isVacationTransitionPeriod("2026-07-31", summer)).toBe(false);
+  });
+
+  it("長期休みが7日未満なら全日程が移行期間", () => {
+    const shortPeriod = { startDate: "2026-08-10", endDate: "2026-08-13" };
+    expect(isVacationTransitionPeriod("2026-08-10", shortPeriod)).toBe(true);
+    expect(isVacationTransitionPeriod("2026-08-13", shortPeriod)).toBe(true);
+  });
+
+  it("期間未設定（null/undefined）は false", () => {
+    expect(isVacationTransitionPeriod("2026-08-25", null)).toBe(false);
+    expect(isVacationTransitionPeriod("2026-08-25", undefined)).toBe(false);
+  });
+});
+
+describe("resolveWakeUpOptions", () => {
+  it("通常期間は5値", () => {
+    expect(resolveWakeUpOptions(false)).toEqual(WAKE_UP_OPTIONS);
+  });
+
+  it("移行期間中は3値（07:00/07:30/08:00）に縮小", () => {
+    expect(resolveWakeUpOptions(true)).toEqual(TRANSITION_WAKE_UP_OPTIONS);
+    expect(resolveWakeUpOptions(true)).not.toContain("08:30");
+    expect(resolveWakeUpOptions(true)).not.toContain("09:00");
+  });
+});
+
 describe("canChildSaveBedtime", () => {
   it("免除日は保存不可", () => {
     expect(
@@ -219,6 +308,19 @@ describe("canChildSaveBedtime", () => {
         now: new Date(2026, 6, 3, 17, 59, 0),
       }),
     ).toBe(true);
+  });
+
+  it("移行期間中は18時前でも保存不可（Issue #36）", () => {
+    expect(
+      canChildSaveBedtime({
+        isExemptDay: false,
+        isVacationMode: true,
+        isWeekendEveDay: false,
+        date: "2026-08-25",
+        now: new Date(2026, 7, 25, 10, 0, 0),
+        isTransitionPeriod: true,
+      }),
+    ).toBe(false);
   });
 });
 
@@ -297,5 +399,16 @@ describe("evaluateParentBedtimeChange", () => {
         now: new Date(2026, 6, 3, 19, 0, 0),
       }).allowed,
     ).toBe(true);
+  });
+
+  it("移行期間中は parent も変更不可（Issue #36）", () => {
+    const result = evaluateParentBedtimeChange({
+      ...base,
+      isWeekendEveDay: false,
+      isVacationMode: true,
+      isTransitionPeriod: true,
+    });
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toBe("vacation_transition");
   });
 });

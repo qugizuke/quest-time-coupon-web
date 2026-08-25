@@ -49,7 +49,7 @@ describe("calcIssuableTicketCount / canIssuePenaltyTicket", () => {
 describe("normalizeBalanceDebtFields", () => {
   it("欠落フィールドを補完する", () => {
     const fields = normalizeBalanceDebtFields({
-      balanceMinutes: -30,
+      switchMinutes: -30,
       penaltyMinutes: 40,
     });
     expect(fields.displayBalance).toBe(-30);
@@ -61,13 +61,13 @@ describe("normalizeBalanceDebtFields", () => {
 describe("resolveTimerStartBlockReason", () => {
   it("負債中はスタート不可理由を返す", () => {
     expect(
-      resolveTimerStartBlockReason({ balanceMinutes: 10, debtMinutes: 5 }),
+      resolveTimerStartBlockReason({ switchMinutes: 10, debtMinutes: 5 }),
     ).toMatch(/負債/);
   });
 
   it("残高0は従来メッセージ", () => {
     expect(
-      resolveTimerStartBlockReason({ balanceMinutes: 0, debtMinutes: 0 }),
+      resolveTimerStartBlockReason({ switchMinutes: 0, debtMinutes: 0 }),
     ).toBe("残高がないので スタートできません");
   });
 });

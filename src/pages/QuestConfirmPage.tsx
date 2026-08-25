@@ -22,8 +22,9 @@ import {
 import { isRegistrationReopenActive } from "@/lib/registrationReopen";
 import {
   DEFAULT_WAKE_UP,
+  isVacationTransitionPeriod,
+  resolveWakeUpOptions,
   shouldShowWakeUpSetting,
-  WAKE_UP_OPTIONS,
 } from "@/lib/homeMode";
 import { childAnswerLabel } from "@/lib/labels";
 import { HOMEWORK_QUEST_ID, PHONE_QUEST_ID } from "@/lib/questLabels";
@@ -178,6 +179,8 @@ export function QuestConfirmPage() {
       vacationPeriod,
     );
   const vacationMode = homeData?.isVacationMode === true;
+  const isTransitionPeriod = isVacationTransitionPeriod(date, vacationPeriod);
+  const wakeUpOptions = resolveWakeUpOptions(isTransitionPeriod);
 
   useEffect(() => {
     if (!homeData) return;
@@ -206,9 +209,12 @@ export function QuestConfirmPage() {
       const answers = buildSubmittableAnswers(daily, draft);
       const canSendBedtime =
         isWeekendEve(date) || !!homeData?.isVacationMode;
-      const bedtimeHour: BedtimeHour | undefined = canSendBedtime
-        ? (getBedtimeHourDraft(date) ?? homeData?.bedtimeHour)
-        : undefined;
+      // 移行期間中は就寝21時固定のため、他の値が残っていても送らない（Issue #36）
+      const bedtimeHour: BedtimeHour | undefined = isTransitionPeriod
+        ? undefined
+        : canSendBedtime
+          ? (getBedtimeHourDraft(date) ?? homeData?.bedtimeHour)
+          : undefined;
       // 長期休み最終日（翌日平日）は showWakeUp=false のため wakePromise を送らない
       return postAnswers({
         date,
@@ -283,7 +289,7 @@ export function QuestConfirmPage() {
             <Card data-testid="wake-up-section">
               <h2 className="mb-3 text-base font-bold">明日の起きる時間</h2>
               <div className="flex flex-wrap gap-2">
-                {WAKE_UP_OPTIONS.map((option) => {
+                {wakeUpOptions.map((option) => {
                   const selected = wakeUpTime === option;
                   return (
                     <button

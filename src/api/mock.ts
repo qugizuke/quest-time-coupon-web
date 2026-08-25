@@ -7,16 +7,33 @@ import type {
   ChildAnswer,
   GradeAdjustment,
   HomeData,
+  PointExchangeRequest,
+  PointExchangeStatus,
   QuestDefinition,
+  RewardVoucherCatalogItemId,
+  RewardVoucherRefundRequest,
+  RewardVoucherRefundStatus,
+  RewardVouchers,
+  SwitchTicketCatalogItemId,
   WakeUpTime,
 } from "@/types/api";
 import { todayLocal } from "@/lib/date";
+import { toMonth } from "@/lib/month";
+import { calcExchangeTotals } from "@/lib/pointExchangeCatalog";
 import {
   PENALTY_TICKET_MINUTES,
   calcDebtMinutes,
   calcIssuableTicketCount,
 } from "@/lib/debt";
 import { normalizeBalanceDebtFields } from "@/lib/balanceDebt";
+import {
+  SWITCH_TICKET_MINUTES,
+  calcRewardVoucherTotals,
+  hasEnoughRewardVouchers,
+  isRewardVoucherCatalogItemId,
+  normalizeRewardVouchers,
+  zeroRewardVouchers,
+} from "@/lib/rewardVouchers";
 import {
   isBeforeQuestRegistrationStart,
   isPastQuestBonusDeadline,
@@ -29,6 +46,8 @@ import {
   canChildSaveBedtime,
   getChildBedtimeSettingCutoff,
   isLongVacationFinalDayBeforeWeekday,
+  isVacationTransitionPeriod,
+  resolveWakeUpOptions,
 } from "@/lib/homeMode";
 import {
   BEDTIME_PREP_QUEST_ID,
@@ -53,12 +72,16 @@ const MOCK_VACATION_KEY = "qtc:mock:vacation";
 /** @type {string} モック免除フラグ（localStorage） */
 const MOCK_EXEMPT_KEY = "qtc:mock:exempt";
 
-/** @type {number} 未登録ペナルティ（分） */
-const MISSED_REGISTRATION_PENALTY = -60;
+/** @type {number} 未登録・採点拒否ペナルティ（pt・ADR-005） */
+const MISSED_REGISTRATION_PENALTY = -100;
 
 interface MockStore {
-  balanceMinutes: number;
+  /** クエスト結果で増減するポイント残高（pt）。0未満にはならない */
+  balancePoints: number;
+  switchMinutes: number;
   penaltyMinutes: number;
+  /** 未消費のペナルティチケット枚数（≥ 0） */
+  penaltyTicketCount: number;
   answers: Map<string, Map<string, ChildAnswer>>;
   grades: Map<string, Map<string, boolean>>;
   gradedDates: Set<string>;
@@ -75,6 +98,16 @@ interface MockStore {
   registrationReopenByDate: Map<string, { endsAt: string; setAt: string; used: boolean }>;
   longVacation: { startDate: string; endDate: string; updatedAt: string };
   exemptionPeriods: Array<{ startDate: string; endDate: string; createdAt: string }>;
+  /** id → ポイント交換申請（Issue #38） */
+  pointExchangeRequests: Map<string, PointExchangeRequest>;
+  /** 申請 ID 発行用の連番 */
+  pointExchangeSeq: number;
+  /** 報酬チケット在庫（Issue #43・ADR-006・5キー固定） */
+  rewardVouchers: RewardVouchers;
+  /** id → 報酬チケット戻し申請（Issue #46） */
+  rewardVoucherRefundRequests: Map<string, RewardVoucherRefundRequest>;
+  /** 戻し申請 ID 発行用の連番 */
+  rewardVoucherRefundSeq: number;
   /** テスト用オーバーライド（undefined なら localStorage） */
   vacationModeOverride?: boolean;
   /** テスト用免除日セット（未設定なら localStorage の当日免除） */
@@ -82,8 +115,10 @@ interface MockStore {
 }
 
 const store: MockStore = {
-  balanceMinutes: 60,
+  balancePoints: 0,
+  switchMinutes: 60,
   penaltyMinutes: 0,
+  penaltyTicketCount: 0,
   answers: new Map(),
   grades: new Map(),
   gradedDates: new Set(),
@@ -98,40 +133,68 @@ const store: MockStore = {
   registrationReopenByDate: new Map(),
   longVacation: { startDate: "", endDate: "", updatedAt: "" },
   exemptionPeriods: [],
+  pointExchangeRequests: new Map(),
+  pointExchangeSeq: 0,
+  rewardVouchers: zeroRewardVouchers(),
+  rewardVoucherRefundRequests: new Map(),
+  rewardVoucherRefundSeq: 0,
 };
 
 /**
- * 現在ストアから残高・負債フィールドを組み立てる
+ * 現在ストアから残高・負債フィールドを組み立てる（ADR-005 二財布）
  * @returns {ReturnType<typeof normalizeBalanceDebtFields>} 残高・負債
  */
-function buildBalanceDebtSnapshot() {
+function buildBalanceSnapshot() {
   const debtMinutes = calcDebtMinutes(
-    store.balanceMinutes,
+    store.switchMinutes,
     store.penaltyMinutes,
   );
   return normalizeBalanceDebtFields({
-    balanceMinutes: store.balanceMinutes,
-    displayBalance: store.balanceMinutes,
+    balancePoints: store.balancePoints,
+    switchMinutes: store.switchMinutes,
+    displayBalance: store.switchMinutes,
     penaltyMinutes: store.penaltyMinutes,
     debtMinutes,
     issuablePenaltyTicketCount: calcIssuableTicketCount(debtMinutes),
+    penaltyTicketCount: store.penaltyTicketCount,
   });
 }
 
 /**
- * テスト用: 残高・超過を上書きする
- * @param {{ balanceMinutes?: number; penaltyMinutes?: number }} opts - 上書き値
+ * テスト用: 残高・超過・チケット在庫を上書きする
+ * @param {object} opts - 上書き値
+ * @param {number} [opts.balancePoints] - ポイント残高（ADR-006: 負も可・丸めない）
+ * @param {number} [opts.switchMinutes] - Switch/YouTube 時間残高
+ * @param {number} [opts.penaltyMinutes] - タイマー超過分
+ * @param {number} [opts.penaltyTicketCount] - ペナルティチケット在庫
+ * @param {Partial<RewardVouchers>} [opts.rewardVouchers] - 報酬チケット在庫（欠落キーは既存値を保持）
  * @returns {void}
  */
 export function setMockBalanceDebt(opts: {
-  balanceMinutes?: number;
+  balancePoints?: number;
+  switchMinutes?: number;
   penaltyMinutes?: number;
+  penaltyTicketCount?: number;
+  rewardVouchers?: Partial<RewardVouchers>;
 }): void {
-  if (opts.balanceMinutes !== undefined) {
-    store.balanceMinutes = opts.balanceMinutes;
+  if (opts.balancePoints !== undefined) {
+    // ADR-006: balancePoints は負を許容するため丸めない。
+    store.balancePoints = opts.balancePoints;
+  }
+  if (opts.switchMinutes !== undefined) {
+    store.switchMinutes = opts.switchMinutes;
   }
   if (opts.penaltyMinutes !== undefined) {
     store.penaltyMinutes = Math.max(0, opts.penaltyMinutes);
+  }
+  if (opts.penaltyTicketCount !== undefined) {
+    store.penaltyTicketCount = Math.max(0, opts.penaltyTicketCount);
+  }
+  if (opts.rewardVouchers !== undefined) {
+    store.rewardVouchers = normalizeRewardVouchers({
+      ...store.rewardVouchers,
+      ...opts.rewardVouchers,
+    });
   }
 }
 
@@ -166,6 +229,20 @@ function resolveMockVacationMode(date?: string): boolean {
     );
   }
   return readMockFlag(MOCK_VACATION_KEY);
+}
+
+/**
+ * モック用: 長期休み終了1週間前の移行期間中か（Issue #36）
+ * @description `store.longVacation` の期間が設定されているときのみ判定する
+ *   （vacationModeOverride / フラグのみの場合は期間不明のため false）。
+ * @param {string} [date] - 業務日。省略時は当日
+ * @returns {boolean} 移行期間なら true
+ */
+function resolveMockVacationTransition(date?: string): boolean {
+  if (!store.longVacation.startDate || !store.longVacation.endDate) {
+    return false;
+  }
+  return isVacationTransitionPeriod(date ?? todayLocal(), store.longVacation);
 }
 
 /**
@@ -266,7 +343,8 @@ function convertUnregisteredToExempt(date: string): "changed" | "skipped" | "noo
   if (store.acknowledgedDates.has(date)) {
     const applied =
       store.appliedDeltaByDate.get(date) ?? MISSED_REGISTRATION_PENALTY;
-    store.balanceMinutes -= applied;
+    // ADR-006: balancePoints は負を許容するため0止めしない。
+    store.balancePoints = store.balancePoints - applied;
     store.appliedDeltaByDate.delete(date);
   }
   store.missedRegistrationDates.delete(date);
@@ -395,8 +473,10 @@ export function getMockWakeUp(date: string): WakeUpTime | undefined {
  * @returns {void}
  */
 export function resetMockStore(): void {
-  store.balanceMinutes = 60;
+  store.balancePoints = 0;
+  store.switchMinutes = 60;
   store.penaltyMinutes = 0;
+  store.penaltyTicketCount = 0;
   store.answers.clear();
   store.grades.clear();
   store.gradedDates.clear();
@@ -411,6 +491,11 @@ export function resetMockStore(): void {
   store.registrationReopenByDate.clear();
   store.longVacation = { startDate: "", endDate: "", updatedAt: "" };
   store.exemptionPeriods = [];
+  store.pointExchangeRequests.clear();
+  store.pointExchangeSeq = 0;
+  store.rewardVouchers = zeroRewardVouchers();
+  store.rewardVoucherRefundRequests.clear();
+  store.rewardVoucherRefundSeq = 0;
   clearMockHomeModeFlags();
 }
 
@@ -473,8 +558,11 @@ function countTimerBlock(): number {
   return count;
 }
 
-/** @type {number} 定時登録ボーナス（分） */
-const REGISTRATION_ON_TIME_BONUS = 15;
+/** @type {number} 定時登録ボーナス（pt・ADR-005） */
+const REGISTRATION_ON_TIME_BONUS = 5;
+
+/** @type {number} 全達成ボーナス（pt・ADR-005）。bedtime-prep を除く9問すべて達成で加算 */
+const FULL_ACHIEVEMENT_BONUS = 50;
 
 /**
  * 就寝時刻 payload が有効か
@@ -520,7 +608,7 @@ function describeMockRegistrationTimingReason(
   adjustment: number,
 ): string {
   if (adjustment > 0) {
-    return `定時登録ボーナス +${adjustment}分（寝る準備確認済み）`;
+    return `定時登録ボーナス +${adjustment}pt（寝る準備確認済み）`;
   }
   const bedtimePrep = mockBedtimePrepEvaluation(date);
   if (!bedtimePrep) {
@@ -565,8 +653,31 @@ function calcMockBedtimePrepPenalty(date: string): number {
  */
 function sumMockAdjustments(date: string): number {
   return (store.adjustmentsByDate.get(date) ?? []).reduce((sum, adj) => {
-    return sum + (adj.kind === "bonus" ? adj.minutes : -adj.minutes);
+    return sum + (adj.kind === "bonus" ? adj.points : -adj.points);
   }, 0);
+}
+
+/**
+ * モック用の全達成ボーナスを算出する（ADR-005）
+ * @description bedtime-prep を除く設問すべてが不一致なしで達成のとき +50pt。
+ *   クエスト点自体は未シミュレートのため、不一致（mismatch）判定を達成基準に使う。
+ * @param {string} date - 対象日
+ * @returns {number} 全達成なら FULL_ACHIEVEMENT_BONUS、それ以外は 0
+ */
+function calcMockFullAchievementBonus(date: string): number {
+  const dayAnswers = store.answers.get(date);
+  if (!dayAnswers) return 0;
+  const dayGrades = store.grades.get(date) ?? new Map<string, boolean>();
+  let hasScoredQuest = false;
+  for (const [questId, childAnswer] of dayAnswers) {
+    if (questId === BEDTIME_PREP_QUEST_ID) continue;
+    hasScoredQuest = true;
+    const actualDone = dayGrades.get(questId) ?? false;
+    if (isMockMismatch(childAnswer, actualDone)) {
+      return 0;
+    }
+  }
+  return hasScoredQuest ? FULL_ACHIEVEMENT_BONUS : 0;
 }
 
 /**
@@ -578,6 +689,7 @@ function calcMockTotalPoints(date: string): number {
   return (
     calcMockRegistrationTimingAdjustment(date) +
     calcMockBedtimePrepPenalty(date) +
+    calcMockFullAchievementBonus(date) +
     sumMockAdjustments(date)
   );
 }
@@ -752,11 +864,11 @@ function validateMockAdjustments(adjustments: GradeAdjustment[]): void {
     if (def.kind !== adj.kind) {
       throw new Error(`BAD_REQUEST: kind と code の組み合わせが不正 code=${adj.code}`);
     }
-    if (typeof adj.minutes !== "number" || !Number.isFinite(adj.minutes)) {
-      throw new Error(`BAD_REQUEST: minutes は数値である必要があります code=${adj.code}`);
+    if (typeof adj.points !== "number" || !Number.isFinite(adj.points)) {
+      throw new Error(`BAD_REQUEST: points は数値である必要があります code=${adj.code}`);
     }
-    if (adj.minutes < 10 || adj.minutes > 60 || adj.minutes % 10 !== 0) {
-      throw new Error(`BAD_REQUEST: minutes は10〜60の10分刻み code=${adj.code}`);
+    if (adj.points < 10 || adj.points > 100 || adj.points % 10 !== 0) {
+      throw new Error(`BAD_REQUEST: points は10〜100の10pt刻み code=${adj.code}`);
     }
     const key = `${adj.kind}:${adj.code}`;
     if (seen.has(key)) {
@@ -791,6 +903,7 @@ export async function mockApi<T>(
       const bedtimeHour = store.bedtimeByDate.get(date) as HomeData["bedtimeHour"];
       const isExemptToday = resolveMockExemptDay(date);
       const isLongVacation = resolveMockVacationMode(date);
+      const isVacationTransition = resolveMockVacationTransition(date);
       const now = Date.now();
       const reopenEarly = store.registrationReopenByDate.get(date);
       const reopenOpenEarly =
@@ -841,7 +954,7 @@ export async function mockApi<T>(
 
       const unacknowledgedCount = countUnacknowledged();
       const timerBlockCount = countTimerBlock();
-      const balance = buildBalanceDebtSnapshot();
+      const balance = buildBalanceSnapshot();
       const reopen = reopenEarly;
       const registrationReopen = reopen
         ? {
@@ -853,13 +966,18 @@ export async function mockApi<T>(
         : null;
       const weekendEve = isWeekendEve(date);
       const childCanEditBedtime =
-        !isExemptToday && (weekendEve || isLongVacation) && !hasAnswers && !isGraded;
+        !isExemptToday &&
+        !isVacationTransition &&
+        (weekendEve || isLongVacation) &&
+        !hasAnswers &&
+        !isGraded;
       const bedtimeEditableUntil = childCanEditBedtime
         ? getChildBedtimeSettingCutoff(date).toISOString()
         : null;
 
       return {
         ...balance,
+        rewardVouchers: normalizeRewardVouchers(store.rewardVouchers),
         today: date,
         todayStatus,
         questAction,
@@ -872,6 +990,7 @@ export async function mockApi<T>(
         bedtimeHour,
         isWeekendEve: weekendEve,
         isLongVacation,
+        isVacationTransition,
         isExemptToday,
         registrationReopen,
         wakePromiseYesterday: null,
@@ -887,6 +1006,7 @@ export async function mockApi<T>(
       const date = query?.date ?? today;
       const isExemptToday = resolveMockExemptDay(date);
       const isLongVacation = resolveMockVacationMode(date);
+      const isVacationTransition = resolveMockVacationTransition(date);
       const hasAnswers = store.answers.has(date);
       const isGraded =
         store.gradedDates.has(date) || store.rejectedDates.has(date);
@@ -936,6 +1056,7 @@ export async function mockApi<T>(
         },
         isExemptToday,
         isLongVacation,
+        isVacationTransition,
         longVacation: {
           startDate: store.longVacation.startDate,
           endDate: store.longVacation.endDate,
@@ -944,11 +1065,12 @@ export async function mockApi<T>(
         bedtimeHour: (store.bedtimeByDate.get(date) ?? 21) as 21 | 22 | 23,
         canEditBedtimeAsParent:
           !isExemptToday &&
+          !isVacationTransition &&
           !hasAnswers &&
           !isGraded &&
           (isWeekendEve(date) || isLongVacation),
         questDeadlineAt: null,
-        ...buildBalanceDebtSnapshot(),
+        ...buildBalanceSnapshot(),
       } as T;
     }
 
@@ -971,8 +1093,14 @@ export async function mockApi<T>(
       const isExemptDay = resolveMockExemptDay(date);
       const isVacationMode = resolveMockVacationMode(date);
       const isWeekendEveDay = isWeekendEve(date);
+      const isTransitionPeriod = resolveMockVacationTransition(date);
       if (isExemptDay) {
         throw new Error("FORBIDDEN_STATE: 免除日は bedtimeHour を設定できません");
+      }
+      if (isTransitionPeriod) {
+        throw new Error(
+          "FORBIDDEN_STATE: 移行期間中は就寝時刻が21時固定のため設定できません",
+        );
       }
       if (actor === "child") {
         if (!isWeekendEveDay && !isVacationMode) {
@@ -1054,6 +1182,7 @@ export async function mockApi<T>(
         throw new Error("FORBIDDEN_STATE: 免除日は回答を登録できません");
       }
       const isVacationMode = resolveMockVacationMode(date);
+      const isTransitionPeriod = resolveMockVacationTransition(date);
       if (
         bedtimeHour !== undefined &&
         bedtimeHour !== 21 &&
@@ -1062,6 +1191,11 @@ export async function mockApi<T>(
       ) {
         throw new Error(
           "BAD_REQUEST: 休日前日・長期休み以外は bedtimeHour を変更できません",
+        );
+      }
+      if (isTransitionPeriod && bedtimeHour !== undefined && bedtimeHour !== 21) {
+        throw new Error(
+          "BAD_REQUEST: 移行期間中は bedtimeHour を21時以外に変更できません",
         );
       }
       if (store.gradedDates.has(date) || store.rejectedDates.has(date)) {
@@ -1134,6 +1268,19 @@ export async function mockApi<T>(
         }
         store.wakeUpByDate.set(date, AUTO_WAKE_TIME_VACATION_LAST_DAY);
       } else if (wake) {
+        // 移行期間中は 07:00 / 07:30 / 08:00 の3値のみ許可（Issue #36）
+        const isVacationTransitionForWrite = isVacationTransitionPeriod(
+          date,
+          vacationPeriod,
+        );
+        if (
+          isVacationTransitionForWrite &&
+          !(resolveWakeUpOptions(true) as string[]).includes(wake)
+        ) {
+          throw new Error(
+            `BAD_REQUEST: 移行期間中の wakePromise.wakeTime が不正です wakeTime=${wake}`,
+          );
+        }
         store.wakeUpByDate.set(date, wake);
       }
       return {
@@ -1400,7 +1547,7 @@ export async function mockApi<T>(
             kind: a.kind,
             code: a.code,
             label: a.code,
-            minutes: a.kind === "bonus" ? a.minutes : -a.minutes,
+            points: a.kind === "bonus" ? a.points : -a.points,
           }),
         );
         const registrationTimingAdjustment =
@@ -1410,6 +1557,8 @@ export async function mockApi<T>(
           registrationTimingAdjustment,
         );
         const bedtimePrepPenalty = calcMockBedtimePrepPenalty(date);
+        const perfectBonus = calcMockFullAchievementBonus(date);
+        const adjustmentsSum = sumMockAdjustments(date);
         const totalPoints = calcMockTotalPoints(date);
         const details = [...dayAnswers.entries()]
           .filter(([questId]) => questId !== BEDTIME_PREP_QUEST_ID)
@@ -1430,12 +1579,19 @@ export async function mockApi<T>(
           totalPoints,
           acknowledged,
           reasonCode: "normal" as const,
+          breakdown: {
+            questPoints: 0,
+            onTimeBonus: Math.max(0, registrationTimingAdjustment),
+            perfectBonus,
+            adjustmentsSum,
+            bedtimePrepPenalty,
+          },
           registrationTimingAdjustment,
           registrationTimingReason,
           bedtimePrepPenalty,
           bedtimePrepPenaltyReason:
             bedtimePrepPenalty !== 0
-              ? `寝る準備の虚偽ペナルティ ${bedtimePrepPenalty}分`
+              ? `寝る準備の虚偽ペナルティ ${bedtimePrepPenalty}pt`
               : undefined,
           adjustments,
           details,
@@ -1463,7 +1619,7 @@ export async function mockApi<T>(
           acknowledged: store.acknowledgedDates.has(date),
           reasonCode: "unregistered" as const,
           registrationTimingAdjustment: MISSED_REGISTRATION_PENALTY,
-          registrationTimingReason: `登録締切までにクエストを登録しなかったため ${MISSED_REGISTRATION_PENALTY}分`,
+          registrationTimingReason: `登録締切までにクエストを登録しなかったため ${MISSED_REGISTRATION_PENALTY}pt`,
           adjustments: [],
           details: [],
           requiresAck: true,
@@ -1513,24 +1669,17 @@ export async function mockApi<T>(
         store.rejectedDates.has(date) || store.missedRegistrationDates.has(date)
           ? MISSED_REGISTRATION_PENALTY
           : calcMockTotalPoints(date);
-      const balanceBefore = store.balanceMinutes;
+      // ADR-005: resultsAck はポイントだけを更新する（Switch時間・タイマー負債は不変）。
+      // ADR-006: balancePoints は負を許容するため0止めしない。
+      const pointsBefore = store.balancePoints;
       store.acknowledgedDates.add(date);
-      let penaltyOffset = 0;
-      if (delta > 0) {
-        penaltyOffset = Math.min(store.penaltyMinutes, delta);
-        store.penaltyMinutes -= penaltyOffset;
-        store.balanceMinutes += delta - penaltyOffset;
-      } else if (delta < 0) {
-        // 2026-08-24〜: 負残高を許容（日付分岐・過去再計算は Functions 正本）
-        store.balanceMinutes = store.balanceMinutes + delta;
-      }
-      const appliedDelta =
-        delta < 0 ? store.balanceMinutes - balanceBefore : delta - penaltyOffset;
+      store.balancePoints = store.balancePoints + delta;
+      const appliedDelta = store.balancePoints - pointsBefore;
       store.appliedDeltaByDate.set(date, appliedDelta);
       return {
         appliedDelta,
-        penaltyOffset,
-        ...buildBalanceDebtSnapshot(),
+        penaltyOffset: 0,
+        ...buildBalanceSnapshot(),
       } as T;
     }
 
@@ -1552,10 +1701,10 @@ export async function mockApi<T>(
         usedMinutes: number;
         overrunMinutes: number;
       };
-      // 2026-08-24〜: 使用分で負残高になり得る。超過は penaltyMinutes に加算。
-      store.balanceMinutes = store.balanceMinutes - usedMinutes;
+      // ADR-005: timerStop は switchMinutes とタイマー負債だけを更新する。0未満にはしない。
+      store.switchMinutes = Math.max(0, store.switchMinutes - usedMinutes);
       store.penaltyMinutes += Math.max(0, overrunMinutes);
-      return buildBalanceDebtSnapshot() as T;
+      return buildBalanceSnapshot() as T;
     }
 
     case "penaltyTicketIssue": {
@@ -1575,7 +1724,7 @@ export async function mockApi<T>(
         );
       }
       const debtBefore = calcDebtMinutes(
-        store.balanceMinutes,
+        store.switchMinutes,
         store.penaltyMinutes,
       );
       const issuable = calcIssuableTicketCount(debtBefore);
@@ -1595,9 +1744,10 @@ export async function mockApi<T>(
       const fromPenalty = Math.min(store.penaltyMinutes, settle);
       store.penaltyMinutes -= fromPenalty;
       settle -= fromPenalty;
-      store.balanceMinutes += settle;
+      store.switchMinutes += settle;
+      store.penaltyTicketCount += count;
 
-      const after = buildBalanceDebtSnapshot();
+      const after = buildBalanceSnapshot();
       return {
         ticketId: `mock-penalty-ticket-${Date.now()}-${count}`,
         count,
@@ -1605,13 +1755,443 @@ export async function mockApi<T>(
         debtBefore,
         debtAfter: after.debtMinutes,
         displayBalance: after.displayBalance,
-        balanceMinutes: after.balanceMinutes,
+        switchMinutes: after.switchMinutes,
         penaltyMinutes: after.penaltyMinutes,
         issuablePenaltyTicketCount: after.issuablePenaltyTicketCount,
+        penaltyTicketCount: after.penaltyTicketCount,
+      } as T;
+    }
+
+    case "penaltyTicketConsume": {
+      const { actor } = body as { actor?: string };
+      if (actor !== "parent") {
+        throw new Error(
+          `BAD_REQUEST: penaltyTicketConsume.actor は parent が必須です actor=${String(actor)}`,
+        );
+      }
+      if (store.penaltyTicketCount < 1) {
+        throw new Error(
+          `FORBIDDEN_STATE: 在庫チケットがないため消費できません penaltyTicketCount=${store.penaltyTicketCount}`,
+        );
+      }
+      store.penaltyTicketCount -= 1;
+      return {
+        ticketId: `mock-penalty-ticket-consume-${Date.now()}`,
+        penaltyTicketCount: store.penaltyTicketCount,
+      } as T;
+    }
+
+    case "pointExchangeRequests": {
+      if (init?.method === "POST") {
+        const { items } = body as {
+          items?: { catalogItemId: string; quantity: number }[];
+        };
+        if (!Array.isArray(items) || items.length === 0) {
+          throw new Error("BAD_REQUEST: items は1件以上必要です");
+        }
+        for (const item of items) {
+          if (
+            !item ||
+            typeof item.catalogItemId !== "string" ||
+            typeof item.quantity !== "number" ||
+            !Number.isInteger(item.quantity) ||
+            item.quantity < 1
+          ) {
+            throw new Error(
+              `BAD_REQUEST: items の形式が不正です item=${JSON.stringify(item)}`,
+            );
+          }
+        }
+        let totals: ReturnType<typeof calcExchangeTotals>;
+        try {
+          totals = calcExchangeTotals(items);
+        } catch (cause) {
+          const reason = cause instanceof Error ? cause.message : String(cause);
+          throw new Error(`BAD_REQUEST: ${reason}`);
+        }
+        const { lineItems, totalPoints, issuedRewardVouchers, consumedPenaltyTickets } =
+          totals;
+        if (totalPoints <= 0) {
+          throw new Error("BAD_REQUEST: totalPoints は1以上が必要です");
+        }
+        // ADR-006 / 契約 T10a: balancePoints は負を許容するため、申請時点の残高不足だけでは拒否しない。
+        store.pointExchangeSeq += 1;
+        const id = `pex_mock_${Date.now()}_${store.pointExchangeSeq}`;
+        const requestedAt = new Date().toISOString();
+        const request: PointExchangeRequest = {
+          id,
+          status: "pending",
+          requestedAt,
+          decidedAt: "",
+          items: lineItems,
+          totalPoints,
+          effects: {
+            spentPoints: totalPoints,
+            issuedRewardVouchers,
+            consumedPenaltyTickets,
+          },
+          rejectReason: "",
+        };
+        store.pointExchangeRequests.set(id, request);
+        return {
+          id,
+          status: "pending",
+          totalPoints,
+          balancePoints: store.balancePoints,
+        } as T;
+      }
+
+      const month = query?.month;
+      if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+        throw new Error("BAD_REQUEST: month が必要です（YYYY-MM）");
+      }
+      const statusFilter = query?.status as PointExchangeStatus | undefined;
+      if (
+        statusFilter !== undefined &&
+        statusFilter !== "pending" &&
+        statusFilter !== "approved" &&
+        statusFilter !== "rejected"
+      ) {
+        throw new Error(`BAD_REQUEST: status が不正です status=${statusFilter}`);
+      }
+      const list = [...store.pointExchangeRequests.values()]
+        .filter((r) => toMonth(r.requestedAt.slice(0, 10)) === month)
+        .filter((r) => !statusFilter || r.status === statusFilter)
+        .sort(comparePointExchangeRequests);
+      return { month, items: list } as T;
+    }
+
+    case "pointExchangeDecision": {
+      const { id, decision, rejectReason } = body as {
+        id?: string;
+        decision?: string;
+        rejectReason?: string;
+      };
+      if (!id) {
+        throw new Error("BAD_REQUEST: id が必要です");
+      }
+      const request = store.pointExchangeRequests.get(id);
+      if (!request) {
+        throw new Error(`NOT_FOUND: 申請が見つかりません id=${id}`);
+      }
+      if (request.status !== "pending") {
+        throw new Error(
+          `FORBIDDEN_STATE: pending 以外は決定できません id=${id}, status=${request.status}`,
+        );
+      }
+      if (decision !== "approve" && decision !== "reject") {
+        throw new Error(
+          `BAD_REQUEST: decision が不正です decision=${String(decision)}`,
+        );
+      }
+      if (decision === "reject") {
+        request.status = "rejected";
+        request.decidedAt = new Date().toISOString();
+        request.rejectReason = rejectReason ?? "";
+        return {
+          id,
+          status: "rejected",
+          balancePoints: store.balancePoints,
+        } as T;
+      }
+      // ADR-006 / 契約 T10b: 承認はポイント不足では拒否しない（負残高化を許容）。
+      // penaltyTicketCount 不足だけは承認時点で再検証する。
+      if (
+        request.effects.consumedPenaltyTickets > 0 &&
+        store.penaltyTicketCount < request.effects.consumedPenaltyTickets
+      ) {
+        throw new Error(
+          `FORBIDDEN_STATE: ペナルティチケットの在庫が不足しているため承認できません id=${id}, penaltyTicketCount=${store.penaltyTicketCount}`,
+        );
+      }
+      store.balancePoints -= request.totalPoints;
+      for (const [voucherId, quantity] of Object.entries(
+        request.effects.issuedRewardVouchers,
+      )) {
+        if (!quantity) continue;
+        const key = voucherId as RewardVoucherCatalogItemId;
+        store.rewardVouchers[key] = (store.rewardVouchers[key] ?? 0) + quantity;
+      }
+      store.penaltyTicketCount -= request.effects.consumedPenaltyTickets;
+      request.status = "approved";
+      request.decidedAt = new Date().toISOString();
+      return {
+        id,
+        status: "approved",
+        spentPoints: request.totalPoints,
+        balancePoints: store.balancePoints,
+        rewardVouchers: normalizeRewardVouchers(store.rewardVouchers),
+        penaltyTicketCount: store.penaltyTicketCount,
+      } as T;
+    }
+
+    case "switchTicketRedeem": {
+      const { catalogItemId } = body as { catalogItemId?: string };
+      if (catalogItemId !== "switch-30" && catalogItemId !== "switch-60") {
+        throw new Error(
+          `BAD_REQUEST: catalogItemId は switch-30 または switch-60 が必要です catalogItemId=${String(catalogItemId)}`,
+        );
+      }
+      const key = catalogItemId as SwitchTicketCatalogItemId;
+      if ((store.rewardVouchers[key] ?? 0) < 1) {
+        throw new Error(
+          `FORBIDDEN_STATE: 対象の券がありません catalogItemId=${catalogItemId}`,
+        );
+      }
+      store.rewardVouchers[key] -= 1;
+      const redeemedMinutes = SWITCH_TICKET_MINUTES[key];
+      store.switchMinutes += redeemedMinutes;
+      return {
+        catalogItemId,
+        redeemedMinutes,
+        switchMinutes: store.switchMinutes,
+        rewardVouchers: normalizeRewardVouchers(store.rewardVouchers),
+      } as T;
+    }
+
+    case "rewardVoucherRefundRequests": {
+      if (init?.method === "POST") {
+        const { items } = body as {
+          items?: { catalogItemId: string; quantity: number }[];
+        };
+        if (!Array.isArray(items) || items.length === 0) {
+          throw new Error("BAD_REQUEST: items は1件以上必要です");
+        }
+        for (const item of items) {
+          if (
+            !item ||
+            typeof item.catalogItemId !== "string" ||
+            typeof item.quantity !== "number" ||
+            !Number.isInteger(item.quantity) ||
+            item.quantity < 1
+          ) {
+            throw new Error(
+              `BAD_REQUEST: items の形式が不正です item=${JSON.stringify(item)}`,
+            );
+          }
+          if (!isRewardVoucherCatalogItemId(item.catalogItemId)) {
+            throw new Error(
+              `BAD_REQUEST: 対象外の catalogItemId です catalogItemId=${item.catalogItemId}`,
+            );
+          }
+        }
+        let totals: ReturnType<typeof calcRewardVoucherTotals>;
+        try {
+          totals = calcRewardVoucherTotals(items);
+        } catch (cause) {
+          const reason = cause instanceof Error ? cause.message : String(cause);
+          throw new Error(`BAD_REQUEST: ${reason}`);
+        }
+        const validatedItems = items as {
+          catalogItemId: RewardVoucherCatalogItemId;
+          quantity: number;
+        }[];
+        if (!hasEnoughRewardVouchers(store.rewardVouchers, validatedItems)) {
+          throw new Error(
+            "FORBIDDEN_STATE: 保有している券が不足しているため申請できません",
+          );
+        }
+        store.rewardVoucherRefundSeq += 1;
+        const id = `rvr_mock_${Date.now()}_${store.rewardVoucherRefundSeq}`;
+        const requestedAt = new Date().toISOString();
+        const request: RewardVoucherRefundRequest = {
+          id,
+          status: "pending",
+          requestedAt,
+          decidedAt: "",
+          items: totals.lineItems,
+          totalPoints: totals.totalPoints,
+          rejectReason: "",
+        };
+        store.rewardVoucherRefundRequests.set(id, request);
+        return {
+          id,
+          status: "pending",
+          totalPoints: totals.totalPoints,
+        } as T;
+      }
+
+      const month = query?.month;
+      if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+        throw new Error("BAD_REQUEST: month が必要です（YYYY-MM）");
+      }
+      const statusFilter = query?.status as RewardVoucherRefundStatus | undefined;
+      if (
+        statusFilter !== undefined &&
+        statusFilter !== "pending" &&
+        statusFilter !== "approved" &&
+        statusFilter !== "rejected"
+      ) {
+        throw new Error(`BAD_REQUEST: status が不正です status=${statusFilter}`);
+      }
+      const list = [...store.rewardVoucherRefundRequests.values()]
+        .filter((r) => toMonth(r.requestedAt.slice(0, 10)) === month)
+        .filter((r) => !statusFilter || r.status === statusFilter)
+        .sort(compareRewardVoucherRefundRequests);
+      return { month, items: list } as T;
+    }
+
+    case "rewardVoucherRefundDecision": {
+      const { id, decision, rejectReason } = body as {
+        id?: string;
+        decision?: string;
+        rejectReason?: string;
+      };
+      if (!id) {
+        throw new Error("BAD_REQUEST: id が必要です");
+      }
+      const request = store.rewardVoucherRefundRequests.get(id);
+      if (!request) {
+        throw new Error(`NOT_FOUND: 申請が見つかりません id=${id}`);
+      }
+      if (request.status !== "pending") {
+        throw new Error(
+          `FORBIDDEN_STATE: pending 以外は決定できません id=${id}, status=${request.status}`,
+        );
+      }
+      if (decision !== "approve" && decision !== "reject") {
+        throw new Error(
+          `BAD_REQUEST: decision が不正です decision=${String(decision)}`,
+        );
+      }
+      if (decision === "reject") {
+        request.status = "rejected";
+        request.decidedAt = new Date().toISOString();
+        request.rejectReason = rejectReason ?? "";
+        return {
+          id,
+          status: "rejected",
+          balancePoints: store.balancePoints,
+        } as T;
+      }
+      const requiredItems = request.items.map((item) => ({
+        catalogItemId: item.catalogItemId,
+        quantity: item.quantity,
+      }));
+      if (!hasEnoughRewardVouchers(store.rewardVouchers, requiredItems)) {
+        throw new Error(
+          `FORBIDDEN_STATE: 保有している券が不足しているため承認できません id=${id}`,
+        );
+      }
+      for (const item of request.items) {
+        store.rewardVouchers[item.catalogItemId] -= item.quantity;
+      }
+      store.balancePoints += request.totalPoints;
+      request.status = "approved";
+      request.decidedAt = new Date().toISOString();
+      return {
+        id,
+        status: "approved",
+        restoredPoints: request.totalPoints,
+        balancePoints: store.balancePoints,
+        rewardVouchers: normalizeRewardVouchers(store.rewardVouchers),
+      } as T;
+    }
+
+    case "pointDebtOffset": {
+      const { items } = body as {
+        items?: { catalogItemId: string; quantity: number }[];
+      };
+      if (store.balancePoints >= 0) {
+        throw new Error(
+          `FORBIDDEN_STATE: 負債がないため穴埋めできません balancePoints=${store.balancePoints}`,
+        );
+      }
+      if (!Array.isArray(items) || items.length === 0) {
+        throw new Error("BAD_REQUEST: items は1件以上必要です");
+      }
+      for (const item of items) {
+        if (
+          !item ||
+          typeof item.catalogItemId !== "string" ||
+          typeof item.quantity !== "number" ||
+          !Number.isInteger(item.quantity) ||
+          item.quantity < 1
+        ) {
+          throw new Error(
+            `BAD_REQUEST: items の形式が不正です item=${JSON.stringify(item)}`,
+          );
+        }
+        if (!isRewardVoucherCatalogItemId(item.catalogItemId)) {
+          throw new Error(
+            `BAD_REQUEST: 対象外の catalogItemId です catalogItemId=${item.catalogItemId}`,
+          );
+        }
+      }
+      let totals: ReturnType<typeof calcRewardVoucherTotals>;
+      try {
+        totals = calcRewardVoucherTotals(items);
+      } catch (cause) {
+        const reason = cause instanceof Error ? cause.message : String(cause);
+        throw new Error(`BAD_REQUEST: ${reason}`);
+      }
+      if (totals.totalPoints <= 0) {
+        throw new Error("BAD_REQUEST: 穴埋め対象の合計が0です");
+      }
+      const validatedItems = items as {
+        catalogItemId: RewardVoucherCatalogItemId;
+        quantity: number;
+      }[];
+      if (!hasEnoughRewardVouchers(store.rewardVouchers, validatedItems)) {
+        throw new Error(
+          "FORBIDDEN_STATE: 保有している券が不足しているため穴埋めできません",
+        );
+      }
+      for (const item of validatedItems) {
+        store.rewardVouchers[item.catalogItemId] -= item.quantity;
+      }
+      store.balancePoints += totals.totalPoints;
+      return {
+        offsetPoints: totals.totalPoints,
+        balancePoints: store.balancePoints,
+        remainingDebtPoints: Math.max(0, -store.balancePoints),
+        rewardVouchers: normalizeRewardVouchers(store.rewardVouchers),
       } as T;
     }
 
     default:
       throw new Error(`mockApi: 未対応 action=${action}`);
   }
+}
+
+/**
+ * モック用: ポイント交換申請の並び順（契約 §3.11.1）。
+ * pending を先に requestedAt 昇順、決定済みは decidedAt 降順。
+ * @param {PointExchangeRequest} a - 比較対象
+ * @param {PointExchangeRequest} b - 比較対象
+ * @returns {number} 比較結果（負なら a が先）
+ */
+function comparePointExchangeRequests(
+  a: PointExchangeRequest,
+  b: PointExchangeRequest,
+): number {
+  const aPending = a.status === "pending";
+  const bPending = b.status === "pending";
+  if (aPending && !bPending) return -1;
+  if (!aPending && bPending) return 1;
+  if (aPending) {
+    return a.requestedAt.localeCompare(b.requestedAt);
+  }
+  return b.decidedAt.localeCompare(a.decidedAt);
+}
+
+/**
+ * モック用: 報酬チケット戻し申請の並び順（契約 §3.11.3）。
+ * pending を先に requestedAt 昇順、決定済みは decidedAt 降順。
+ * @param {RewardVoucherRefundRequest} a - 比較対象
+ * @param {RewardVoucherRefundRequest} b - 比較対象
+ * @returns {number} 比較結果（負なら a が先）
+ */
+function compareRewardVoucherRefundRequests(
+  a: RewardVoucherRefundRequest,
+  b: RewardVoucherRefundRequest,
+): number {
+  const aPending = a.status === "pending";
+  const bPending = b.status === "pending";
+  if (aPending && !bPending) return -1;
+  if (!aPending && bPending) return 1;
+  if (aPending) {
+    return a.requestedAt.localeCompare(b.requestedAt);
+  }
+  return b.decidedAt.localeCompare(a.decidedAt);
 }

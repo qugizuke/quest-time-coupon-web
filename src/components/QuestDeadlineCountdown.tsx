@@ -27,7 +27,7 @@ export function QuestDeadlineCountdown({
       aria-live="polite"
       aria-label={`定時ボーナス締切 ${bonusDeadlineLabel} まであと ${countdownFormatted}`}
     >
-      <p className="text-base font-bold text-gray-900">定時ボーナス（+15分）まで</p>
+      <p className="text-base font-bold text-gray-900">定時ボーナス（+5pt）まで</p>
       <p className="text-app-xl font-bold tabular-nums text-primary">{countdownFormatted}</p>
       <p className="text-sm text-muted">
         {bonusDeadlineLabel} までに登録し、寝る準備をママが確認できたら付くよ

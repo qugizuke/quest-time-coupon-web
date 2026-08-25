@@ -7,13 +7,24 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { postTimerStop } from "@/api/client";
+import { postSwitchTicketRedeem, postTimerStop } from "@/api/client";
 import { homeQuery, queryKeys } from "@/api/queries";
 import { ChildPageFrame } from "@/components/layout/ChildPageFrame";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { formatMinutesSeconds, useTimer } from "@/hooks/useTimer";
 import { calcDebtMinutes, resolveTimerStartBlockReason } from "@/lib/debt";
+import {
+  REWARD_VOUCHER_LABELS,
+  SWITCH_TICKET_MINUTES,
+} from "@/lib/rewardVouchers";
+import type { SwitchTicketCatalogItemId } from "@/types/api";
+
+/** タイマー画面で消費できる Switch券の表示順（契約 §3.11.2・Issue #45） */
+const SWITCH_TICKET_ITEMS: readonly SwitchTicketCatalogItemId[] = [
+  "switch-30",
+  "switch-60",
+];
 
 /**
  * タイマー画面
@@ -23,11 +34,11 @@ export function TimerPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: home } = useQuery(homeQuery);
-  const balanceMinutes = home?.balanceMinutes ?? home?.displayBalance ?? 0;
-  const displayBalance = Math.max(0, balanceMinutes);
+  const switchMinutes = home?.switchMinutes ?? home?.displayBalance ?? 0;
+  const displayBalance = Math.max(0, switchMinutes);
   const penaltyMinutes = home?.penaltyMinutes ?? 0;
   const debtMinutes =
-    home?.debtMinutes ?? calcDebtMinutes(balanceMinutes, penaltyMinutes);
+    home?.debtMinutes ?? calcDebtMinutes(switchMinutes, penaltyMinutes);
   const timerBlockCount = home?.timerBlockCount ?? 0;
   const blockedByUnacked = timerBlockCount > 0;
   const { display, start, stop, canStart, isRunning, state } =
@@ -41,7 +52,7 @@ export function TimerPage() {
   const showsPenalty = display.isPenalty || showsStoredDebt;
   const timerSeconds = showsStoredDebt ? penaltyMinutes * 60 : display.seconds;
   const startBlockReason = resolveTimerStartBlockReason({
-    balanceMinutes,
+    switchMinutes,
     debtMinutes,
     blockedByUnacked,
   });
@@ -67,6 +78,16 @@ export function TimerPage() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.home });
     },
   });
+
+  const redeemMutation = useMutation({
+    mutationFn: (catalogItemId: SwitchTicketCatalogItemId) =>
+      postSwitchTicketRedeem({ catalogItemId }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.home });
+    },
+  });
+
+  const rewardVouchers = home?.rewardVouchers;
 
   return (
     <ChildPageFrame vacationMode={home?.isVacationMode}>
@@ -110,7 +131,7 @@ export function TimerPage() {
             <p className="text-sm text-muted">
               {showsStoredDebt
                 ? `次のごほうび時間から ${penaltyMinutes} 分を相殺します`
-                : `残高 ${balanceMinutes} 分`}
+                : `残高 ${switchMinutes} 分`}
             </p>
           </Card>
 
@@ -169,6 +190,47 @@ export function TimerPage() {
               👀 結果を確認する
             </Button>
           </div>
+        )}
+
+        {rewardVouchers && (
+          <Card
+            className="flex flex-col gap-3"
+            data-testid="switch-ticket-redeem-section"
+          >
+            <h2 className="font-bold text-ink">Switch券を使う</h2>
+            <ul className="flex flex-col gap-2">
+              {SWITCH_TICKET_ITEMS.map((catalogItemId) => {
+                const count = rewardVouchers[catalogItemId];
+                return (
+                  <li
+                    key={catalogItemId}
+                    className="flex items-center justify-between gap-3"
+                    data-testid={`switch-ticket-row-${catalogItemId}`}
+                  >
+                    <span className="text-sm text-ink">
+                      {REWARD_VOUCHER_LABELS[catalogItemId]}: {count}枚
+                    </span>
+                    <Button
+                      variant="secondary"
+                      className="px-4 text-sm"
+                      disabled={count < 1 || redeemMutation.isPending}
+                      onClick={() => redeemMutation.mutate(catalogItemId)}
+                      data-testid={`switch-ticket-redeem-${catalogItemId}`}
+                    >
+                      {SWITCH_TICKET_MINUTES[catalogItemId]}分券を使う
+                    </Button>
+                  </li>
+                );
+              })}
+            </ul>
+            {redeemMutation.error && (
+              <p className="text-sm text-danger" role="alert">
+                {redeemMutation.error instanceof Error
+                  ? redeemMutation.error.message
+                  : "券の消費に失敗しました"}
+              </p>
+            )}
+          </Card>
         )}
       </div>
     </ChildPageFrame>

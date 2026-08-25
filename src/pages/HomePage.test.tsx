@@ -8,6 +8,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { queryKeys } from "@/api/queries";
+import { zeroRewardVouchers } from "@/lib/rewardVouchers";
 import { HomePage } from "@/pages/HomePage";
 import type { HomeData } from "@/types/api";
 
@@ -19,10 +20,13 @@ import type { HomeData } from "@/types/api";
 function buildHome(overrides: Partial<HomeData> = {}): HomeData {
   return {
     displayBalance: 60,
-    balanceMinutes: 60,
+    balancePoints: 0,
+    switchMinutes: 60,
     penaltyMinutes: 0,
     debtMinutes: 0,
     issuablePenaltyTicketCount: 0,
+    penaltyTicketCount: 0,
+    rewardVouchers: zeroRewardVouchers(),
     today: "2026-07-30",
     todayStatus: "unanswered",
     questAction: "start",
@@ -30,6 +34,7 @@ function buildHome(overrides: Partial<HomeData> = {}): HomeData {
     canStartTimer: true,
     timerBlockCount: 0,
     isLongVacation: false,
+    isVacationTransition: false,
     isExemptToday: false,
     isWeekendEve: false,
     registrationReopen: null,
@@ -164,7 +169,7 @@ describe("HomePage", () => {
     renderHome(
       buildHome({
         displayBalance: -30,
-        balanceMinutes: -30,
+        switchMinutes: -30,
         debtMinutes: 30,
         penaltyMinutes: 0,
         issuablePenaltyTicketCount: 0,

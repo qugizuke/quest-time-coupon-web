@@ -40,7 +40,7 @@ describe("ParentHomePage penalty ticket", () => {
   it("発行セクションを表示し、負債59分は disabled", () => {
     renderParentHome(
       buildParentHomeData({
-        balanceMinutes: -59,
+        switchMinutes: -59,
         displayBalance: -59,
         debtMinutes: 59,
         issuablePenaltyTicketCount: 0,
@@ -55,7 +55,7 @@ describe("ParentHomePage penalty ticket", () => {
   it("負債120分は発行可能2枚を表示する", () => {
     renderParentHome(
       buildParentHomeData({
-        balanceMinutes: 0,
+        switchMinutes: 0,
         displayBalance: 0,
         penaltyMinutes: 120,
         debtMinutes: 120,
@@ -65,6 +65,23 @@ describe("ParentHomePage penalty ticket", () => {
     expect(screen.getByTestId("issue-issuable-count").textContent).toBe("2枚");
     expect(
       screen.getByTestId("issue-open-confirm").hasAttribute("disabled"),
+    ).toBe(false);
+  });
+
+  it("消費セクションを表示し、在庫0枚は disabled", () => {
+    renderParentHome(buildParentHomeData({ penaltyTicketCount: 0 }));
+    expect(screen.getByTestId("penalty-ticket-consume-section")).toBeTruthy();
+    expect(
+      screen.getByTestId("consume-open-confirm").hasAttribute("disabled"),
+    ).toBe(true);
+    expect(screen.getByTestId("consume-disabled-reason")).toBeTruthy();
+  });
+
+  it("在庫2枚は消費ボタンが有効", () => {
+    renderParentHome(buildParentHomeData({ penaltyTicketCount: 2 }));
+    expect(screen.getByTestId("consume-ticket-count").textContent).toBe("2枚");
+    expect(
+      screen.getByTestId("consume-open-confirm").hasAttribute("disabled"),
     ).toBe(false);
   });
 });

@@ -1,6 +1,6 @@
 /**
  * @file ご褒美時間の負債・ペナルティチケット計算
- * @description debtMinutes = max(0, -balanceMinutes) + penaltyMinutes（超過）。
+ * @description debtMinutes = max(0, -switchMinutes) + penaltyMinutes（超過）。
  *   1枚 = 60分精算のみ。適用日 2026-08-24〜の API 正本は Functions 側。
  *   UI は表示・発行可否判定に本ヘルパーを使う（過去残高の再計算はしない）。
  */
@@ -10,15 +10,15 @@ export const PENALTY_TICKET_MINUTES = 60;
 
 /**
  * 合算負債（分）を算出する
- * @param {number} balanceMinutes - ご褒美残高（負可）
+ * @param {number} switchMinutes - ご褒美残高（負可）
  * @param {number} penaltyMinutes - タイマー超過分（0以上想定）
  * @returns {number} debtMinutes（0以上）
  */
 export function calcDebtMinutes(
-  balanceMinutes: number,
+  switchMinutes: number,
   penaltyMinutes: number,
 ): number {
-  const negativeBalance = Math.max(0, -balanceMinutes);
+  const negativeBalance = Math.max(0, -switchMinutes);
   const overrun = Math.max(0, penaltyMinutes);
   return negativeBalance + overrun;
 }
@@ -42,6 +42,15 @@ export function canIssuePenaltyTicket(debtMinutes: number): boolean {
 }
 
 /**
+ * 在庫チケットを消費できるか（1枚以上か）
+ * @param {number} penaltyTicketCount - 未消費のペナルティチケット枚数
+ * @returns {boolean} 1枚以上なら true
+ */
+export function canConsumePenaltyTicket(penaltyTicketCount: number): boolean {
+  return penaltyTicketCount >= 1;
+}
+
+/**
  * 発行後の残り負債（分）をプレビューする
  * @param {number} debtMinutes - 現在の合算負債
  * @param {number} count - 発行枚数
@@ -57,11 +66,11 @@ export function previewDebtAfterIssue(
 
 /**
  * タイマー開始可否（負債・残高）の理由を返す
- * @param {{ balanceMinutes: number; debtMinutes: number; blockedByUnacked?: boolean }} opts - 判定材料
+ * @param {{ switchMinutes: number; debtMinutes: number; blockedByUnacked?: boolean }} opts - 判定材料
  * @returns {string | null} 不可理由。開始可なら null
  */
 export function resolveTimerStartBlockReason(opts: {
-  balanceMinutes: number;
+  switchMinutes: number;
   debtMinutes: number;
   blockedByUnacked?: boolean;
 }): string | null {
@@ -71,7 +80,7 @@ export function resolveTimerStartBlockReason(opts: {
   if (opts.debtMinutes > 0) {
     return "負債があるのでスタートできません（保護者にペナルティチケットで精算してもらってね）";
   }
-  if (opts.balanceMinutes <= 0) {
+  if (opts.switchMinutes <= 0) {
     return "残高がないので スタートできません";
   }
   return null;

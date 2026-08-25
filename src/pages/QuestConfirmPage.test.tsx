@@ -10,6 +10,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { queryKeys } from "@/api/queries";
 import { setQuestDraft } from "@/lib/sessionStorage";
 import { todayLocal } from "@/lib/date";
+import { zeroRewardVouchers } from "@/lib/rewardVouchers";
 import { QuestConfirmPage } from "@/pages/QuestConfirmPage";
 import type { DailyQuests, HomeData, QuestDefinition, QuestDraft } from "@/types/api";
 import dailyJson from "../../quests/daily.json";
@@ -51,10 +52,13 @@ function buildCompleteDraft(): QuestDraft {
 function buildHome(overrides: Partial<HomeData> = {}): HomeData {
   return {
     displayBalance: 60,
-    balanceMinutes: 60,
+    balancePoints: 0,
+    switchMinutes: 60,
     penaltyMinutes: 0,
     debtMinutes: 0,
     issuablePenaltyTicketCount: 0,
+    penaltyTicketCount: 0,
+    rewardVouchers: zeroRewardVouchers(),
     today: todayLocal(),
     todayStatus: "unanswered",
     questAction: "start",
@@ -62,6 +66,7 @@ function buildHome(overrides: Partial<HomeData> = {}): HomeData {
     canStartTimer: true,
     timerBlockCount: 0,
     isLongVacation: false,
+    isVacationTransition: false,
     isExemptToday: false,
     isWeekendEve: false,
     registrationReopen: null,

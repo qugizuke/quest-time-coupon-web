@@ -16,6 +16,7 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { queryKeys } from "@/api/queries";
+import { zeroRewardVouchers } from "@/lib/rewardVouchers";
 import { ResultsPage } from "@/pages/ResultsPage";
 import { TimerPage } from "@/pages/TimerPage";
 import type { HomeData, ResultItem } from "@/types/api";
@@ -63,10 +64,13 @@ afterEach(() => {
 function buildHome(): HomeData {
   return {
     displayBalance: 0,
-    balanceMinutes: 0,
+    balancePoints: 0,
+    switchMinutes: 0,
     penaltyMinutes: 0,
     debtMinutes: 0,
     issuablePenaltyTicketCount: 0,
+    penaltyTicketCount: 0,
+    rewardVouchers: zeroRewardVouchers(),
     today: "2026-07-30",
     todayStatus: "pending_ack",
     questAction: "none",
@@ -74,6 +78,7 @@ function buildHome(): HomeData {
     canStartTimer: false,
     timerBlockCount: 1,
     isLongVacation: false,
+    isVacationTransition: false,
     isExemptToday: false,
     isWeekendEve: false,
     registrationReopen: null,
@@ -320,7 +325,8 @@ describe("ResultsPage week UI (#17)", () => {
     apiMocks.postResultsAck.mockResolvedValue({
       appliedDelta: 45,
       penaltyOffset: 0,
-      balanceMinutes: 45,
+      balancePoints: 45,
+      switchMinutes: 45,
       displayBalance: 45,
       penaltyMinutes: 0,
       debtMinutes: 0,
@@ -362,7 +368,8 @@ describe("ResultsPage week UI (#17)", () => {
     apiMocks.postResultsAck.mockResolvedValue({
       appliedDelta: 20,
       penaltyOffset: 0,
-      balanceMinutes: 20,
+      balancePoints: 20,
+      switchMinutes: 20,
       displayBalance: 20,
       penaltyMinutes: 0,
       debtMinutes: 0,

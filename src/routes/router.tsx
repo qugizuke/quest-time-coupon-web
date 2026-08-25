@@ -9,10 +9,12 @@ import { GradeDatePage } from "@/pages/GradeDatePage";
 import { GradeListPage } from "@/pages/GradeListPage";
 import { HomePage } from "@/pages/HomePage";
 import { ParentHomePage } from "@/pages/ParentHomePage";
+import { ParentRewardsPage } from "@/pages/ParentRewardsPage";
 import { ParentSettingsPage } from "@/pages/ParentSettingsPage";
 import { QuestConfirmPage } from "@/pages/QuestConfirmPage";
 import { QuestPage } from "@/pages/QuestPage";
 import { ResultsPage } from "@/pages/ResultsPage";
+import { RewardsPage } from "@/pages/RewardsPage";
 import { TimerPage } from "@/pages/TimerPage";
 import { GradeDateRedirect } from "@/routes/GradeDateRedirect";
 
@@ -25,6 +27,7 @@ export const router = createBrowserRouter(
     { path: "/quest", element: <QuestPage /> },
     { path: "/quest/confirm", element: <QuestConfirmPage /> },
     { path: "/results", element: <ResultsPage /> },
+    { path: "/rewards", element: <RewardsPage /> },
     { path: "/timer", element: <TimerPage /> },
     {
       path: "/parent",
@@ -33,6 +36,7 @@ export const router = createBrowserRouter(
         { index: true, element: <ParentHomePage /> },
         { path: "grades", element: <GradeListPage /> },
         { path: "grades/:date", element: <GradeDatePage /> },
+        { path: "rewards", element: <ParentRewardsPage /> },
         { path: "settings", element: <ParentSettingsPage /> },
       ],
     },

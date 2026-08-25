@@ -24,17 +24,18 @@ import { childAnswerLabel, isUnknownChildAnswer } from "@/lib/labels";
 import { isSkipAnswerQuest, resolveQuestTitle } from "@/lib/questLabels";
 import type { AdjustmentDefinition, DailyQuests, GradeAdjustment } from "@/types/api";
 
-const BONUS_MINUTE_OPTIONS = [10, 20, 30, 40, 50, 60];
-const PENALTY_MINUTE_OPTIONS = [-10, -20, -30, -40, -50, -60];
+/** 任意加減点の選択肢（ADR-005: 10pt刻み・上限100pt） */
+const BONUS_POINT_OPTIONS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+const PENALTY_POINT_OPTIONS = [-10, -20, -30, -40, -50, -60, -70, -80, -90, -100];
 
 /** 採点拒否ダイアログ本文（仕様正・一字一句） */
 const REJECT_DIALOG_BODY =
-  "今日のクエストは採点せず、-60分にします。\nこの操作は取り消せません。";
+  "今日のクエストは採点せず、-100ptにします。\nこの操作は取り消せません。";
 
 interface AdjustmentRow {
   id: string;
   code: string;
-  minutes: number;
+  points: number;
 }
 
 /**
@@ -53,7 +54,7 @@ function buildAdjustmentRows(
     .map((adj, index) => ({
       id: `${adj.kind}-${adj.code}-${index}`,
       code: adj.code,
-      minutes: adj.kind === "bonus" ? adj.minutes : -adj.minutes,
+      points: adj.kind === "bonus" ? adj.points : -adj.points,
     }));
 }
 
@@ -86,20 +87,20 @@ function firstAvailableDefinition(
 }
 
 /**
- * 分数の表示ラベルを返す
- * @param {number} minutes - 分数
+ * ポイントの表示ラベルを返す
+ * @param {number} points - ポイント
  * @returns {string} 表示ラベル
  */
-function formatMinuteOption(minutes: number): string {
-  return `${minutes > 0 ? "+" : ""}${minutes}分`;
+function formatPointOption(points: number): string {
+  return `${points > 0 ? "+" : ""}${points}pt`;
 }
 
 /**
- * 定義に応じた初期分数を返す
+ * 定義に応じた初期ポイントを返す
  * @param {AdjustmentDefinition} def - 加減点定義
- * @returns {number} 初期分数
+ * @returns {number} 初期ポイント
  */
-function defaultMinutesFor(def: AdjustmentDefinition): number {
+function defaultPointsFor(def: AdjustmentDefinition): number {
   return def.kind === "bonus" ? 10 : -10;
 }
 
@@ -211,7 +212,7 @@ export function GradeDatePage() {
             return {
               kind: def.kind,
               code: row.code,
-              minutes: Math.abs(row.minutes),
+              points: Math.abs(row.points),
             };
           })
         : [];
@@ -248,7 +249,7 @@ export function GradeDatePage() {
           {
             id: `${first.code}-${Date.now()}`,
             code: first.code,
-            minutes: defaultMinutesFor(first),
+            points: defaultPointsFor(first),
           },
         ]);
       }
@@ -263,7 +264,7 @@ export function GradeDatePage() {
       {
         id: `${next.code}-${Date.now()}`,
         code: next.code,
-        minutes: defaultMinutesFor(next),
+        points: defaultPointsFor(next),
       },
     ]);
   }
@@ -322,7 +323,7 @@ export function GradeDatePage() {
       </p>
       {gradeData.isRejected && (
         <p className="mb-4 rounded-default bg-danger-soft px-3 py-2 text-sm text-danger">
-          この日は採点拒否（-60分）済みです。
+          この日は採点拒否（-100pt）済みです。
         </p>
       )}
 
@@ -365,8 +366,8 @@ export function GradeDatePage() {
                   </p>
                   <p className="mt-1 text-sm text-muted">
                     {gradeData.withinBonusDeadline
-                      ? "⭕️なら定時登録ボーナス +15分の対象です。❌の場合、虚偽として -30分になります。"
-                      : "ボーナスタイム外の登録のため、定時ボーナスは付きません。❌の場合、虚偽として -30分になります。"}
+                      ? "⭕️なら定時登録ボーナス +5ptの対象です。❌の場合、虚偽として -30ptになります。"
+                      : "ボーナスタイム外の登録のため、定時ボーナスは付きません。❌の場合、虚偽として -30ptになります。"}
                   </p>
                 </>
               )}
@@ -414,7 +415,7 @@ export function GradeDatePage() {
               )}
               {appliesFalseClaimPenalty && (
                 <p className="mt-3 rounded-default bg-danger/10 px-3 py-2 text-sm text-danger">
-                  虚偽ペナルティ -30分 が付きます。
+                  虚偽ペナルティ -30pt が付きます。
                 </p>
               )}
             </li>
@@ -463,10 +464,10 @@ export function GradeDatePage() {
                   adjustmentRows.filter((r) => r.id !== row.id).map((r) => r.code),
                 );
                 const currentDef = adjustmentItems.find((def) => def.code === row.code);
-                const minuteOptions =
+                const pointOptions =
                   currentDef?.kind === "penalty"
-                    ? PENALTY_MINUTE_OPTIONS
-                    : BONUS_MINUTE_OPTIONS;
+                    ? PENALTY_POINT_OPTIONS
+                    : BONUS_POINT_OPTIONS;
                 return (
                   <div
                     key={row.id}
@@ -482,7 +483,7 @@ export function GradeDatePage() {
                         );
                         updateAdjustmentRow(row.id, {
                           code: e.target.value,
-                          minutes: nextDef ? defaultMinutesFor(nextDef) : row.minutes,
+                          points: nextDef ? defaultPointsFor(nextDef) : row.points,
                         });
                       }}
                     >
@@ -499,15 +500,15 @@ export function GradeDatePage() {
                     <div className="flex gap-2">
                       <select
                         className="min-w-0 flex-1 rounded-default border border-border-soft px-3 py-2"
-                        value={row.minutes}
+                        value={row.points}
                         disabled={readOnly}
                         onChange={(e) =>
-                          updateAdjustmentRow(row.id, { minutes: Number(e.target.value) })
+                          updateAdjustmentRow(row.id, { points: Number(e.target.value) })
                         }
                       >
-                        {minuteOptions.map((m) => (
-                          <option key={m} value={m}>
-                            {formatMinuteOption(m)}
+                        {pointOptions.map((p) => (
+                          <option key={p} value={p}>
+                            {formatPointOption(p)}
                           </option>
                         ))}
                       </select>
@@ -602,7 +603,7 @@ export function GradeDatePage() {
                 disabled={rejectMutation.isPending}
                 onClick={() => rejectMutation.mutate()}
               >
-                -60分にする
+                -100ptにする
               </Button>
             </div>
           </div>

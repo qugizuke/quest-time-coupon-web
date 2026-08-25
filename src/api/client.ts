@@ -15,14 +15,32 @@ import type {
   HomeData,
   LongVacationData,
   ParentHomeData,
+  PenaltyTicketConsumeResult,
   PenaltyTicketIssueResult,
+  PointDebtOffsetItemInput,
+  PointDebtOffsetResult,
+  PointExchangeCreateResult,
+  PointExchangeDecision,
+  PointExchangeDecisionResult,
+  PointExchangeRequestItemInput,
+  PointExchangeRequestsData,
+  PointExchangeStatus,
   QuestExemptionsData,
   RegistrationActor,
   ResultItem,
+  RewardVoucherRefundCreateResult,
+  RewardVoucherRefundDecision,
+  RewardVoucherRefundDecisionResult,
+  RewardVoucherRefundItemInput,
+  RewardVoucherRefundRequestsData,
+  RewardVoucherRefundStatus,
+  SwitchTicketCatalogItemId,
+  SwitchTicketRedeemResult,
   WakeTime,
 } from "@/types/api";
 import { mockApi } from "@/api/mock";
 import { normalizeBalanceDebtFields } from "@/lib/balanceDebt";
+import { normalizeRewardVouchers } from "@/lib/rewardVouchers";
 import { todayLocal } from "@/lib/date";
 
 /**
@@ -63,9 +81,11 @@ function withHomeAliases(data: HomeData): HomeData {
   return {
     ...data,
     ...balance,
+    rewardVouchers: normalizeRewardVouchers(data.rewardVouchers),
     isExemptDay: data.isExemptToday,
     isVacationMode: data.isLongVacation,
     isWeekendEve: data.isWeekendEve ?? false,
+    isVacationTransition: data.isVacationTransition ?? false,
     timerBlockCount: data.timerBlockCount ?? 0,
     registrationReopen: data.registrationReopen ?? null,
     wakePromiseYesterday: data.wakePromiseYesterday ?? null,
@@ -84,6 +104,7 @@ function withParentHomeBalance(data: ParentHomeData): ParentHomeData {
   return {
     ...data,
     ...normalizeBalanceDebtFields(data),
+    isVacationTransition: data.isVacationTransition ?? false,
   };
 }
 
@@ -248,11 +269,12 @@ export function fetchResults(opts?: {
   return request("results", { method: "GET" }, dateRangeQuery(opts?.from, opts?.to));
 }
 
-/** POST resultsAck */
+/** POST resultsAck（ADR-005: ポイントだけを更新する） */
 export function postResultsAck(date: string): Promise<{
   appliedDelta: number;
   penaltyOffset: number;
-  balanceMinutes: number;
+  balancePoints: number;
+  switchMinutes: number;
   displayBalance: number;
   penaltyMinutes: number;
   debtMinutes: number;
@@ -363,7 +385,7 @@ export function postQuestExemptions(
   });
 }
 
-/** POST timerStop */
+/** POST timerStop（ADR-005: Switch時間とタイマー負債だけを更新する） */
 export function postTimerStop(payload: {
   sessionId: string;
   startedAt: string;
@@ -371,7 +393,8 @@ export function postTimerStop(payload: {
   usedMinutes: number;
   overrunMinutes: number;
 }): Promise<{
-  balanceMinutes: number;
+  balancePoints: number;
+  switchMinutes: number;
   displayBalance: number;
   penaltyMinutes: number;
   debtMinutes: number;
@@ -396,5 +419,143 @@ export function postPenaltyTicketIssue(payload: {
     method: "POST",
     headers: JSON_POST_HEADERS,
     body: JSON.stringify({ actor: "parent", count: payload.count }),
+  });
+}
+
+/**
+ * POST penaltyTicketConsume（保護者のみ・在庫1枚ずつ消費・残高・負債は変えない）
+ * @returns {Promise<PenaltyTicketConsumeResult>} 消費結果（消費後の在庫枚数）
+ */
+export function postPenaltyTicketConsume(): Promise<PenaltyTicketConsumeResult> {
+  return request("penaltyTicketConsume", {
+    method: "POST",
+    headers: JSON_POST_HEADERS,
+    body: JSON.stringify({ actor: "parent" }),
+  });
+}
+
+/**
+ * GET pointExchangeRequests（契約 §3.11.1・子ども `/rewards` と保護者 `/parent/rewards` で共用）
+ * @param {{ month: string; status?: PointExchangeStatus }} opts - 対象月（`YYYY-MM`）と状態フィルタ
+ * @returns {Promise<PointExchangeRequestsData>} 月次の申請一覧
+ */
+export function fetchPointExchangeRequests(opts: {
+  month: string;
+  status?: PointExchangeStatus;
+}): Promise<PointExchangeRequestsData> {
+  const query: Record<string, string> = { month: opts.month };
+  if (opts.status) {
+    query.status = opts.status;
+  }
+  return request("pointExchangeRequests", { method: "GET" }, query);
+}
+
+/**
+ * POST pointExchangeRequests（子ども申請・pending 作成のみ・残高は変えない）
+ * @param {{ items: PointExchangeRequestItemInput[] }} payload - 交換内訳（複数種・複数枚可）
+ * @returns {Promise<PointExchangeCreateResult>} 作成結果
+ */
+export function postPointExchangeRequest(payload: {
+  items: PointExchangeRequestItemInput[];
+}): Promise<PointExchangeCreateResult> {
+  return request("pointExchangeRequests", {
+    method: "POST",
+    headers: JSON_POST_HEADERS,
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * POST pointExchangeDecision（保護者の承認／却下）
+ * @param {{ id: string; decision: PointExchangeDecision; rejectReason?: string }} payload - 決定内容
+ * @returns {Promise<PointExchangeDecisionResult>} 決定結果
+ */
+export function postPointExchangeDecision(payload: {
+  id: string;
+  decision: PointExchangeDecision;
+  rejectReason?: string;
+}): Promise<PointExchangeDecisionResult> {
+  return request("pointExchangeDecision", {
+    method: "POST",
+    headers: JSON_POST_HEADERS,
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * POST switchTicketRedeem（子ども・Switch券消費・契約 §3.11.2・Issue #45）
+ * @param {{ catalogItemId: SwitchTicketCatalogItemId }} payload - 消費する券
+ * @returns {Promise<SwitchTicketRedeemResult>} 消費結果
+ */
+export function postSwitchTicketRedeem(payload: {
+  catalogItemId: SwitchTicketCatalogItemId;
+}): Promise<SwitchTicketRedeemResult> {
+  return request("switchTicketRedeem", {
+    method: "POST",
+    headers: JSON_POST_HEADERS,
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * GET rewardVoucherRefundRequests（契約 §3.11.3・子ども `/rewards` と保護者 `/parent/rewards` で共用）
+ * @param {{ month: string; status?: RewardVoucherRefundStatus }} opts - 対象月（`YYYY-MM`）と状態フィルタ
+ * @returns {Promise<RewardVoucherRefundRequestsData>} 月次の申請一覧
+ */
+export function fetchRewardVoucherRefundRequests(opts: {
+  month: string;
+  status?: RewardVoucherRefundStatus;
+}): Promise<RewardVoucherRefundRequestsData> {
+  const query: Record<string, string> = { month: opts.month };
+  if (opts.status) {
+    query.status = opts.status;
+  }
+  return request("rewardVoucherRefundRequests", { method: "GET" }, query);
+}
+
+/**
+ * POST rewardVoucherRefundRequests（子ども申請・pending 作成のみ・在庫は変えない・Issue #46）
+ * @param {{ items: RewardVoucherRefundItemInput[] }} payload - 戻し内訳
+ * @returns {Promise<RewardVoucherRefundCreateResult>} 作成結果
+ */
+export function postRewardVoucherRefundRequest(payload: {
+  items: RewardVoucherRefundItemInput[];
+}): Promise<RewardVoucherRefundCreateResult> {
+  return request("rewardVoucherRefundRequests", {
+    method: "POST",
+    headers: JSON_POST_HEADERS,
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * POST rewardVoucherRefundDecision（保護者の承認／却下・Issue #46）
+ * @param {{ id: string; decision: RewardVoucherRefundDecision; rejectReason?: string }} payload - 決定内容
+ * @returns {Promise<RewardVoucherRefundDecisionResult>} 決定結果
+ */
+export function postRewardVoucherRefundDecision(payload: {
+  id: string;
+  decision: RewardVoucherRefundDecision;
+  rejectReason?: string;
+}): Promise<RewardVoucherRefundDecisionResult> {
+  return request("rewardVoucherRefundDecision", {
+    method: "POST",
+    headers: JSON_POST_HEADERS,
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * POST pointDebtOffset（子ども・負債の即時穴埋め・保護者承認不要・Issue #47）
+ * @param {{ items: PointDebtOffsetItemInput[] }} payload - 穴埋めに使う券の内訳
+ * @returns {Promise<PointDebtOffsetResult>} 穴埋め結果
+ */
+export function postPointDebtOffset(payload: {
+  items: PointDebtOffsetItemInput[];
+}): Promise<PointDebtOffsetResult> {
+  return request("pointDebtOffset", {
+    method: "POST",
+    headers: JSON_POST_HEADERS,
+    body: JSON.stringify(payload),
   });
 }

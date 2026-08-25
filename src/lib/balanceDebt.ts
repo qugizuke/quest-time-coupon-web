@@ -8,13 +8,17 @@ import {
   calcIssuableTicketCount,
 } from "@/lib/debt";
 
-/** 残高・負債まわりの共通フィールド（Functions 契約） */
+/** 残高・負債まわりの共通フィールド（Functions 契約・ADR-005 二財布 / ADR-006 負ポイント許容） */
 export interface BalanceDebtFields {
-  balanceMinutes: number;
+  /** クエスト結果で増減するポイント残高（pt）。ADR-006 以降は負を許容し、0止めしない */
+  balancePoints: number;
+  switchMinutes: number;
   displayBalance: number;
   penaltyMinutes: number;
   debtMinutes: number;
   issuablePenaltyTicketCount: number;
+  /** 未消費のペナルティチケット枚数（≥ 0） */
+  penaltyTicketCount: number;
 }
 
 /**
@@ -25,19 +29,24 @@ export interface BalanceDebtFields {
 export function normalizeBalanceDebtFields(
   raw: Partial<BalanceDebtFields>,
 ): BalanceDebtFields {
+  // ADR-006: balancePoints は負を許容するため丸めない（switchMinutes/penaltyMinutes とは別扱い）。
+  const balancePoints = raw.balancePoints ?? 0;
   const penaltyMinutes = Math.max(0, raw.penaltyMinutes ?? 0);
-  const balanceMinutes = raw.balanceMinutes ?? raw.displayBalance ?? 0;
-  const displayBalance = raw.displayBalance ?? balanceMinutes;
+  const switchMinutes = raw.switchMinutes ?? raw.displayBalance ?? 0;
+  const displayBalance = raw.displayBalance ?? switchMinutes;
   const debtMinutes =
-    raw.debtMinutes ?? calcDebtMinutes(balanceMinutes, penaltyMinutes);
+    raw.debtMinutes ?? calcDebtMinutes(switchMinutes, penaltyMinutes);
   const issuablePenaltyTicketCount =
     raw.issuablePenaltyTicketCount ?? calcIssuableTicketCount(debtMinutes);
+  const penaltyTicketCount = Math.max(0, raw.penaltyTicketCount ?? 0);
 
   return {
-    balanceMinutes,
+    balancePoints,
+    switchMinutes,
     displayBalance,
     penaltyMinutes,
     debtMinutes,
     issuablePenaltyTicketCount,
+    penaltyTicketCount,
   };
 }

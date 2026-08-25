@@ -34,7 +34,8 @@ export type ParentBedtimeBlockReason =
   | "has_result"
   | "has_answers"
   | "before_child_deadline"
-  | "past_parent_deadline";
+  | "past_parent_deadline"
+  | "vacation_transition";
 
 /** 長期休み期間（両端含む YYYY-MM-DD） */
 export interface LongVacationPeriod {
@@ -53,8 +54,26 @@ export const WAKE_UP_OPTIONS: SelectableWakeTime[] = [
   "09:00",
 ];
 
+/** 移行期間中の起床候補（3値に縮小・Issue #36） */
+export const TRANSITION_WAKE_UP_OPTIONS: SelectableWakeTime[] = [
+  "07:00",
+  "07:30",
+  "08:00",
+];
+
 /** 起床の既定値（UI 省略時） */
 export const DEFAULT_WAKE_UP: SelectableWakeTime = "08:00";
+
+/**
+ * 起床候補を返す（移行期間中は3値に縮小）
+ * @param {boolean} isTransitionPeriod - 長期休み終了1週間前の移行期間中か
+ * @returns {SelectableWakeTime[]} 選択可能な起床候補
+ */
+export function resolveWakeUpOptions(
+  isTransitionPeriod: boolean,
+): SelectableWakeTime[] {
+  return isTransitionPeriod ? TRANSITION_WAKE_UP_OPTIONS : WAKE_UP_OPTIONS;
+}
 
 /** Functions が長期休み最終日（翌日平日）に自動書き込みする起床時刻 */
 export const AUTO_WAKE_TIME_VACATION_LAST_DAY = "07:15" as const;
@@ -187,6 +206,8 @@ export function evaluateParentBedtimeChange(opts: {
   hasResult: boolean;
   bedtimeHour?: number;
   now?: Date;
+  /** @type {boolean | undefined} 長期休み終了1週間前の移行期間中か（Issue #36） */
+  isTransitionPeriod?: boolean;
 }): {
   allowed: boolean;
   reason: ParentBedtimeBlockReason | null;
@@ -205,6 +226,13 @@ export function evaluateParentBedtimeChange(opts: {
       allowed: false,
       reason: "exempt",
       message: "免除日は就寝時刻を変更できません",
+    };
+  }
+  if (opts.isTransitionPeriod) {
+    return {
+      allowed: false,
+      reason: "vacation_transition",
+      message: "移行期間中は就寝時刻を21時に固定しています",
     };
   }
   if (!opts.isVacationMode && !opts.isWeekendEveDay) {
@@ -252,6 +280,29 @@ export function isDateInLongVacation(
 ): boolean {
   if (!period?.startDate || !period?.endDate) return false;
   return date >= period.startDate && date <= period.endDate;
+}
+
+/** 移行期間の日数（終了日を含む直近日数・Issue #36） */
+export const VACATION_TRANSITION_DAYS = 7;
+
+/**
+ * 長期休みモード終了の移行期間（直近7日）か
+ * @description `endDate` の6日前〜終了日（両端含む）。長期休み期間が7日未満なら
+ *   その全日程が移行期間になる。長期休み非対象日は常に false。
+ * @param {string} date - YYYY-MM-DD
+ * @param {LongVacationPeriod | null | undefined} period - 長期休み期間
+ * @returns {boolean} 移行期間なら true
+ */
+export function isVacationTransitionPeriod(
+  date: string,
+  period: LongVacationPeriod | null | undefined,
+): boolean {
+  if (!isDateInLongVacation(date, period)) return false;
+  const p = period as LongVacationPeriod;
+  const transitionStart = addDays(p.endDate, -(VACATION_TRANSITION_DAYS - 1));
+  const effectiveStart =
+    transitionStart > p.startDate ? transitionStart : p.startDate;
+  return date >= effectiveStart;
 }
 
 /**
@@ -306,6 +357,7 @@ export function shouldShowWakeUpSetting(
  * @param {TodayStatus} opts.todayStatus - 今日の状態
  * @param {string} opts.date - YYYY-MM-DD
  * @param {Date} [opts.now] - 判定時刻
+ * @param {boolean} [opts.isTransitionPeriod] - 長期休み終了1週間前の移行期間中か（Issue #36）
  * @returns {BedtimeUiMode} 表示モード
  */
 export function resolveBedtimeUiMode(opts: {
@@ -316,6 +368,7 @@ export function resolveBedtimeUiMode(opts: {
   todayStatus: TodayStatus;
   date: string;
   now?: Date;
+  isTransitionPeriod?: boolean;
 }): BedtimeUiMode {
   const {
     isExemptDay,
@@ -325,6 +378,7 @@ export function resolveBedtimeUiMode(opts: {
     todayStatus,
     date,
     now = new Date(),
+    isTransitionPeriod = false,
   } = opts;
 
   if (isExemptDay) {
@@ -333,6 +387,11 @@ export function resolveBedtimeUiMode(opts: {
 
   if (!isVacationMode && !isWeekendEveDay) {
     return "hidden";
+  }
+
+  // 移行期間中は就寝選択不可・21時固定（子ども・保護者とも・Issue #36）
+  if (isTransitionPeriod) {
+    return "locked21";
   }
 
   const beforeCutoff = isBeforeChildBedtimeSettingCutoff(date, now);
@@ -364,6 +423,7 @@ export function resolveBedtimeUiMode(opts: {
  * @param {boolean} opts.isWeekendEveDay - 休日前日
  * @param {string} opts.date - YYYY-MM-DD
  * @param {Date} [opts.now] - 判定時刻
+ * @param {boolean} [opts.isTransitionPeriod] - 長期休み終了1週間前の移行期間中か（Issue #36）
  * @returns {boolean} 保存可なら true
  */
 export function canChildSaveBedtime(opts: {
@@ -372,8 +432,10 @@ export function canChildSaveBedtime(opts: {
   isWeekendEveDay: boolean;
   date: string;
   now?: Date;
+  isTransitionPeriod?: boolean;
 }): boolean {
   if (opts.isExemptDay) return false;
+  if (opts.isTransitionPeriod) return false;
   if (!opts.isVacationMode && !opts.isWeekendEveDay) return false;
   return isBeforeChildBedtimeSettingCutoff(opts.date, opts.now);
 }

@@ -9,16 +9,19 @@ import {
 } from "./pointExchangeCatalog";
 
 describe("POINT_EXCHANGE_CATALOG", () => {
-  it("固定5種を契約 §3.11.1 どおりに定義する", () => {
+  it("固定6種を契約 §3.11.1 / ADR-006 どおりに定義する", () => {
     expect(POINT_EXCHANGE_CATALOG.map((i) => i.catalogItemId)).toEqual([
       "snack-10",
       "switch-30",
       "switch-60",
       "cash-100",
+      "dining-1000",
       "penalty-ticket-100",
     ]);
     expect(findCatalogItem("switch-60")?.pointCost).toBe(100);
-    expect(findCatalogItem("switch-60")?.effects.addedSwitchMinutes).toBe(60);
+    expect(findCatalogItem("switch-60")?.effects.issuedVoucherId).toBe("switch-60");
+    expect(findCatalogItem("dining-1000")?.pointCost).toBe(1000);
+    expect(findCatalogItem("dining-1000")?.effects.issuedVoucherId).toBe("dining-1000");
     expect(findCatalogItem("penalty-ticket-100")?.effects.consumedPenaltyTickets).toBe(1);
   });
 
@@ -34,7 +37,7 @@ describe("calcExchangeTotals", () => {
       { catalogItemId: "switch-30", quantity: 1 },
     ]);
     expect(result.totalPoints).toBe(550);
-    expect(result.addedSwitchMinutes).toBe(30);
+    expect(result.issuedRewardVouchers).toEqual({ "cash-100": 5, "switch-30": 1 });
     expect(result.consumedPenaltyTickets).toBe(0);
     expect(result.lineItems).toEqual([
       { catalogItemId: "cash-100", label: "100円", quantity: 5, pointCost: 100, subtotalPoints: 500 },
@@ -49,6 +52,14 @@ describe("calcExchangeTotals", () => {
     ]);
     expect(result.lineItems).toHaveLength(1);
     expect(result.totalPoints).toBe(20);
+  });
+
+  it("dining-1000 は外食券を issuedRewardVouchers へ加算する", () => {
+    const result = calcExchangeTotals([
+      { catalogItemId: "dining-1000", quantity: 2 },
+    ]);
+    expect(result.totalPoints).toBe(2000);
+    expect(result.issuedRewardVouchers).toEqual({ "dining-1000": 2 });
   });
 
   it("penalty-ticket-100 は consumedPenaltyTickets を加算する", () => {

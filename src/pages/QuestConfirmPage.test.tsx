@@ -10,6 +10,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { queryKeys } from "@/api/queries";
 import { setQuestDraft } from "@/lib/sessionStorage";
 import { todayLocal } from "@/lib/date";
+import { zeroRewardVouchers } from "@/lib/rewardVouchers";
 import { QuestConfirmPage } from "@/pages/QuestConfirmPage";
 import type { DailyQuests, HomeData, QuestDefinition, QuestDraft } from "@/types/api";
 import dailyJson from "../../quests/daily.json";
@@ -57,6 +58,7 @@ function buildHome(overrides: Partial<HomeData> = {}): HomeData {
     debtMinutes: 0,
     issuablePenaltyTicketCount: 0,
     penaltyTicketCount: 0,
+    rewardVouchers: zeroRewardVouchers(),
     today: todayLocal(),
     todayStatus: "unanswered",
     questAction: "start",

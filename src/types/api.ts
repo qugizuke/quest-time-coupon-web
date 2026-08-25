@@ -75,7 +75,10 @@ export interface WakePromiseView {
 
 /** GET home（契約 §3.4・ADR-005） */
 export interface HomeData {
-  /** クエスト結果で増減するポイント残高（pt）。0未満にはならない（契約 §3.11） */
+  /**
+   * クエスト結果で増減するポイント残高（pt）。
+   * ADR-006 以降は負を許容し、0止めしない（交換承認・負債穴埋めで負・正どちらにも動く）。
+   */
   balancePoints: number;
   /**
    * Switch / YouTube 共通時間の残高（分）。交換承認（#38）でのみ増え、タイマー使用で減る。
@@ -109,6 +112,10 @@ export interface HomeData {
   isLongVacation: boolean;
   /** 長期休みモード終了1週間前の移行期間中か（Issue #36） */
   isVacationTransition: boolean;
+  /**
+   * 報酬チケット在庫（契約 §3.3・§3.4・ADR-006）。5キーを必ず返す。欠落は0扱い。
+   */
+  rewardVouchers: RewardVouchers;
   isExemptToday: boolean;
   registrationReopen: HomeRegistrationReopen | null;
   wakePromiseYesterday: WakePromiseView | null;
@@ -408,14 +415,27 @@ export interface GradeAdjustmentDefinitions {
 
 /**
  * ポイント交換の固定カタログ ID（契約 §3.11.1）。
- * カタログは変更不可（Issue #38 スコープ・任意カタログ・YouTube 単品交換は非対応）。
+ * カタログは変更不可（Issue #38 / #43 スコープ・任意カタログ・YouTube 単品交換は非対応）。
  */
 export type PointExchangeCatalogItemId =
   | "snack-10"
   | "switch-30"
   | "switch-60"
   | "cash-100"
+  | "dining-1000"
   | "penalty-ticket-100";
+
+/**
+ * 報酬チケット在庫（`rewardVouchers`）の対象カタログ ID（契約 ADR-006）。
+ * `penalty-ticket-100` は在庫化・戻し・負債穴埋めの対象外（従来どおりの消費のみ）。
+ */
+export type RewardVoucherCatalogItemId = Exclude<
+  PointExchangeCatalogItemId,
+  "penalty-ticket-100"
+>;
+
+/** 報酬チケット在庫（5キーを必ず持つ。欠落は0扱い・契約 §3.3） */
+export type RewardVouchers = Record<RewardVoucherCatalogItemId, number>;
 
 /** ポイント交換申請ステータス */
 export type PointExchangeStatus = "pending" | "approved" | "rejected";
@@ -436,10 +456,15 @@ export interface PointExchangeLineItem {
   subtotalPoints: number;
 }
 
-/** 承認時（または承認予定）の副作用 */
+/**
+ * 承認時（または承認予定）の副作用（契約 §3.11.1・ADR-006）。
+ * `switch-30` / `switch-60` は承認時に `switchMinutes` へ直接加算せず、
+ * `rewardVouchers` の在庫として発行する（消費は `switchTicketRedeem`）。
+ */
 export interface PointExchangeEffects {
   spentPoints: number;
-  addedSwitchMinutes: number;
+  /** カタログ ID → 発行数量（`penalty-ticket-100` は含まない） */
+  issuedRewardVouchers: Partial<Record<RewardVoucherCatalogItemId, number>>;
   consumedPenaltyTickets: number;
 }
 
@@ -475,15 +500,107 @@ export interface PointExchangeCreateResult {
 /** POST pointExchangeDecision の decision */
 export type PointExchangeDecision = "approve" | "reject";
 
-/** POST pointExchangeDecision レスポンス（承認／却下共用） */
+/** POST pointExchangeDecision レスポンス（承認／却下共用・契約 §3.11.1・ADR-006） */
 export interface PointExchangeDecisionResult {
   id: string;
   status: PointExchangeStatus;
   /** 承認時のみ */
   spentPoints?: number;
   balancePoints: number;
-  /** 承認時のみ */
-  switchMinutes?: number;
+  /** 承認時のみ（発行後の在庫スナップショット） */
+  rewardVouchers?: RewardVouchers;
   /** 承認時のみ */
   penaltyTicketCount?: number;
+}
+
+/**
+ * POST switchTicketRedeem の対象カタログ ID（契約 §3.11.2・Issue #45）。
+ * 子どもが `/timer` で券を消費し `switchMinutes` を加算する。
+ */
+export type SwitchTicketCatalogItemId = "switch-30" | "switch-60";
+
+/** POST switchTicketRedeem レスポンス（契約 §3.11.2） */
+export interface SwitchTicketRedeemResult {
+  catalogItemId: SwitchTicketCatalogItemId;
+  /** 加算された分数（30 または 60） */
+  redeemedMinutes: number;
+  switchMinutes: number;
+  rewardVouchers: RewardVouchers;
+}
+
+/** 戻し申請ステータス（契約 §3.11.3・Issue #46） */
+export type RewardVoucherRefundStatus = "pending" | "approved" | "rejected";
+
+/** POST rewardVoucherRefundRequests 送信 1件 */
+export interface RewardVoucherRefundItemInput {
+  catalogItemId: RewardVoucherCatalogItemId;
+  /** 1以上の整数 */
+  quantity: number;
+}
+
+/** GET rewardVoucherRefundRequests の申請内訳 1件 */
+export interface RewardVoucherRefundLineItem {
+  catalogItemId: RewardVoucherCatalogItemId;
+  label: string;
+  quantity: number;
+  /** 券1枚あたりの戻しポイント（カタログ単価と同値） */
+  pointValue: number;
+  subtotalPoints: number;
+}
+
+/** GET rewardVoucherRefundRequests 1件（契約 §3.11.3） */
+export interface RewardVoucherRefundRequest {
+  id: string;
+  status: RewardVoucherRefundStatus;
+  requestedAt: string;
+  /** 未決定は空文字 */
+  decidedAt: string;
+  items: RewardVoucherRefundLineItem[];
+  totalPoints: number;
+  /** 却下理由（任意）。未指定は空文字 */
+  rejectReason: string;
+}
+
+/** GET rewardVoucherRefundRequests（契約 §3.11.3・子ども `/rewards`／保護者 `/parent/rewards` 共用） */
+export interface RewardVoucherRefundRequestsData {
+  month: string;
+  items: RewardVoucherRefundRequest[];
+}
+
+/** POST rewardVoucherRefundRequests レスポンス（子ども申請・pending 作成のみ） */
+export interface RewardVoucherRefundCreateResult {
+  id: string;
+  status: "pending";
+  totalPoints: number;
+}
+
+/** POST rewardVoucherRefundDecision の decision */
+export type RewardVoucherRefundDecision = "approve" | "reject";
+
+/** POST rewardVoucherRefundDecision レスポンス（承認／却下共用・契約 §3.11.3） */
+export interface RewardVoucherRefundDecisionResult {
+  id: string;
+  status: RewardVoucherRefundStatus;
+  /** 承認時のみ */
+  restoredPoints?: number;
+  balancePoints: number;
+  /** 承認時のみ（券消費後の在庫スナップショット） */
+  rewardVouchers?: RewardVouchers;
+}
+
+/** POST pointDebtOffset 送信 1件（契約 §3.11.4・Issue #47） */
+export interface PointDebtOffsetItemInput {
+  catalogItemId: RewardVoucherCatalogItemId;
+  /** 1以上の整数 */
+  quantity: number;
+}
+
+/** POST pointDebtOffset レスポンス（契約 §3.11.4） */
+export interface PointDebtOffsetResult {
+  /** 選んだ券の合計穴埋めポイント */
+  offsetPoints: number;
+  balancePoints: number;
+  /** 埋めきれなかった負債（`max(0, -balancePoints)`） */
+  remainingDebtPoints: number;
+  rewardVouchers: RewardVouchers;
 }

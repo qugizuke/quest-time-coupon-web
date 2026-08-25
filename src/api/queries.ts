@@ -12,8 +12,9 @@ import {
   fetchPointExchangeRequests,
   fetchQuestExemptions,
   fetchResults,
+  fetchRewardVoucherRefundRequests,
 } from "@/api/client";
-import type { PointExchangeStatus } from "@/types/api";
+import type { PointExchangeStatus, RewardVoucherRefundStatus } from "@/types/api";
 
 /** Query キー定数 */
 export const queryKeys = {
@@ -27,6 +28,10 @@ export const queryKeys = {
   dailyQuests: (date: string) => ["dailyQuests", date] as const,
   pointExchangeRequests: (month: string, status?: PointExchangeStatus) =>
     ["pointExchangeRequests", month, status ?? "all"] as const,
+  rewardVoucherRefundRequests: (
+    month: string,
+    status?: RewardVoucherRefundStatus,
+  ) => ["rewardVoucherRefundRequests", month, status ?? "all"] as const,
 };
 
 export const homeQuery = {
@@ -94,5 +99,20 @@ export function pointExchangeRequestsQuery(
   return {
     queryKey: queryKeys.pointExchangeRequests(month, status),
     queryFn: () => fetchPointExchangeRequests({ month, status }),
+  };
+}
+
+/**
+ * 報酬チケット戻し申請の月次クエリ（契約 §3.11.3・子ども `/rewards` と保護者 `/parent/rewards` 共用）
+ * @param {string} month - YYYY-MM
+ * @param {RewardVoucherRefundStatus} [status] - 状態フィルタ（未指定は全状態）
+ */
+export function rewardVoucherRefundRequestsQuery(
+  month: string,
+  status?: RewardVoucherRefundStatus,
+) {
+  return {
+    queryKey: queryKeys.rewardVoucherRefundRequests(month, status),
+    queryFn: () => fetchRewardVoucherRefundRequests({ month, status }),
   };
 }

@@ -4,6 +4,7 @@
  */
 import type { HomeData, ParentHomeData } from "@/types/api";
 import { normalizeBalanceDebtFields } from "@/lib/balanceDebt";
+import { zeroRewardVouchers } from "@/lib/rewardVouchers";
 
 /**
  * テスト用 HomeData を組み立てる
@@ -21,6 +22,7 @@ export function buildHomeData(overrides: Partial<HomeData> = {}): HomeData {
 
   return {
     ...balance,
+    rewardVouchers: zeroRewardVouchers(),
     today: "2026-08-24",
     todayStatus: "completed",
     questAction: "none",

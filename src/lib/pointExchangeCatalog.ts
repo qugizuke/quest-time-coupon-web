@@ -1,17 +1,20 @@
 /**
- * @file ポイント交換の固定カタログ（Issue #38）
+ * @file ポイント交換の固定カタログ（Issue #38 / #43）
  * @description 正本: docs `api-tobe-f-contract.md` §3.11.1 / `firestore-data-model.md` §14。
- *   固定5種のみ（任意カタログ・YouTube 単品交換は非対応）。Web と mock API の両方から参照する。
+ *   固定6種のみ（任意カタログ・YouTube 単品交換は非対応）。Web と mock API の両方から参照する。
+ *   ADR-006 以降、`snack-10` / `cash-100` / `dining-1000` / `switch-30` / `switch-60` は
+ *   承認時に `switchMinutes` へ直接加算せず、`rewardVouchers` の在庫として発行する。
  */
 import type {
   PointExchangeCatalogItemId,
   PointExchangeLineItem,
+  RewardVoucherCatalogItemId,
 } from "@/types/api";
 
 /** カタログ1件あたりの承認時副作用（単価） */
 export interface PointExchangeCatalogEffects {
-  /** 承認時に加算される switchMinutes（1個あたり） */
-  addedSwitchMinutes: number;
+  /** 承認時に発行される rewardVouchers のキー（対象外は undefined） */
+  issuedVoucherId?: RewardVoucherCatalogItemId;
   /** 承認時に消費される penaltyTicketCount（1個あたり） */
   consumedPenaltyTickets: number;
 }
@@ -30,31 +33,37 @@ export const POINT_EXCHANGE_CATALOG: readonly PointExchangeCatalogItem[] = [
     catalogItemId: "snack-10",
     label: "おやつ",
     pointCost: 10,
-    effects: { addedSwitchMinutes: 0, consumedPenaltyTickets: 0 },
+    effects: { issuedVoucherId: "snack-10", consumedPenaltyTickets: 0 },
   },
   {
     catalogItemId: "switch-30",
     label: "Switch 30分",
     pointCost: 50,
-    effects: { addedSwitchMinutes: 30, consumedPenaltyTickets: 0 },
+    effects: { issuedVoucherId: "switch-30", consumedPenaltyTickets: 0 },
   },
   {
     catalogItemId: "switch-60",
     label: "Switch 60分",
     pointCost: 100,
-    effects: { addedSwitchMinutes: 60, consumedPenaltyTickets: 0 },
+    effects: { issuedVoucherId: "switch-60", consumedPenaltyTickets: 0 },
   },
   {
     catalogItemId: "cash-100",
     label: "100円",
     pointCost: 100,
-    effects: { addedSwitchMinutes: 0, consumedPenaltyTickets: 0 },
+    effects: { issuedVoucherId: "cash-100", consumedPenaltyTickets: 0 },
+  },
+  {
+    catalogItemId: "dining-1000",
+    label: "外食",
+    pointCost: 1000,
+    effects: { issuedVoucherId: "dining-1000", consumedPenaltyTickets: 0 },
   },
   {
     catalogItemId: "penalty-ticket-100",
     label: "ペナルティチケット1枚消費",
     pointCost: 100,
-    effects: { addedSwitchMinutes: 0, consumedPenaltyTickets: 1 },
+    effects: { consumedPenaltyTickets: 1 },
   },
 ] as const;
 
@@ -75,7 +84,8 @@ export function findCatalogItem(
 export interface PointExchangeTotals {
   lineItems: PointExchangeLineItem[];
   totalPoints: number;
-  addedSwitchMinutes: number;
+  /** カタログ ID → 承認時に発行される数量（`penalty-ticket-100` は含まない） */
+  issuedRewardVouchers: Partial<Record<RewardVoucherCatalogItemId, number>>;
   consumedPenaltyTickets: number;
 }
 
@@ -91,7 +101,7 @@ export function calcExchangeTotals(
 ): PointExchangeTotals {
   const lineItems: PointExchangeLineItem[] = [];
   let totalPoints = 0;
-  let addedSwitchMinutes = 0;
+  const issuedRewardVouchers: Partial<Record<RewardVoucherCatalogItemId, number>> = {};
   let consumedPenaltyTickets = 0;
 
   for (const { catalogItemId, quantity } of items) {
@@ -109,9 +119,13 @@ export function calcExchangeTotals(
     }
     const subtotalPoints = catalogItem.pointCost * quantity;
     totalPoints += subtotalPoints;
-    addedSwitchMinutes += catalogItem.effects.addedSwitchMinutes * quantity;
-    consumedPenaltyTickets +=
-      catalogItem.effects.consumedPenaltyTickets * quantity;
+    const { issuedVoucherId, consumedPenaltyTickets: unitConsumed } =
+      catalogItem.effects;
+    if (issuedVoucherId) {
+      issuedRewardVouchers[issuedVoucherId] =
+        (issuedRewardVouchers[issuedVoucherId] ?? 0) + quantity;
+    }
+    consumedPenaltyTickets += unitConsumed * quantity;
     lineItems.push({
       catalogItemId: catalogItem.catalogItemId,
       label: catalogItem.label,
@@ -121,5 +135,5 @@ export function calcExchangeTotals(
     });
   }
 
-  return { lineItems, totalPoints, addedSwitchMinutes, consumedPenaltyTickets };
+  return { lineItems, totalPoints, issuedRewardVouchers, consumedPenaltyTickets };
 }

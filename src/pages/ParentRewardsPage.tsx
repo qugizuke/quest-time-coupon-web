@@ -6,8 +6,15 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { postPointExchangeDecision } from "@/api/client";
-import { pointExchangeRequestsQuery, queryKeys } from "@/api/queries";
+import {
+  postPointExchangeDecision,
+  postRewardVoucherRefundDecision,
+} from "@/api/client";
+import {
+  pointExchangeRequestsQuery,
+  queryKeys,
+  rewardVoucherRefundRequestsQuery,
+} from "@/api/queries";
 import { ParentPageFrame } from "@/components/layout/ParentPageFrame";
 import { LoadingScreen } from "@/components/layout/LoadingScreen";
 import { Button } from "@/components/ui/Button";
@@ -19,9 +26,10 @@ import {
   formatDateTimeJstLabel,
   formatEffectsSummary,
   formatLineItemLabel,
+  formatRefundLineItemLabel,
   pointExchangeStatusTone,
 } from "@/lib/pointExchangeUi";
-import type { PointExchangeRequest } from "@/types/api";
+import type { PointExchangeRequest, RewardVoucherRefundRequest } from "@/types/api";
 
 /**
  * @typedef {object} PointExchangeRequestCardProps
@@ -186,12 +194,180 @@ function PointExchangeRequestCard({ request }: PointExchangeRequestCardProps) {
 }
 
 /**
+ * @typedef {object} RewardVoucherRefundRequestCardProps
+ * @property {RewardVoucherRefundRequest} request - 申請1件
+ */
+interface RewardVoucherRefundRequestCardProps {
+  /** @type {RewardVoucherRefundRequest} 申請1件 */
+  request: RewardVoucherRefundRequest;
+}
+
+/**
+ * 戻し申請1件のカード（pending は承認／却下操作を持つ）
+ * @param {RewardVoucherRefundRequestCardProps} props - props
+ * @returns {JSX.Element} カード
+ */
+function RewardVoucherRefundRequestCard({
+  request,
+}: RewardVoucherRefundRequestCardProps) {
+  const queryClient = useQueryClient();
+  const [panel, setPanel] = useState<"idle" | "approve" | "reject">("idle");
+  const [rejectReason, setRejectReason] = useState("");
+
+  /**
+   * 承認／却下を完了した後の後処理（キャッシュ再取得）
+   * @returns {void}
+   */
+  function invalidateAfterDecision(): void {
+    setPanel("idle");
+    setRejectReason("");
+    void queryClient.invalidateQueries({
+      queryKey: ["rewardVoucherRefundRequests"],
+    });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.parentHome });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.home });
+  }
+
+  const decisionMutation = useMutation({
+    mutationFn: (payload: { decision: "approve" | "reject"; rejectReason?: string }) =>
+      postRewardVoucherRefundDecision({ id: request.id, ...payload }),
+    onSuccess: invalidateAfterDecision,
+  });
+
+  const isPending = request.status === "pending";
+
+  return (
+    <li
+      className="rounded-default border-[3px] border-border-soft bg-surface px-4 py-3"
+      data-testid={`parent-refund-item-${request.id}`}
+    >
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="text-sm text-muted">
+          {formatDateTimeJstLabel(request.requestedAt)}
+        </span>
+        <StatusBadge tone={pointExchangeStatusTone(request.status)}>
+          {POINT_EXCHANGE_STATUS_LABEL[request.status]}
+        </StatusBadge>
+      </div>
+      <ul className="mb-1 flex flex-col gap-0.5 text-sm text-ink">
+        {request.items.map((line) => (
+          <li key={line.catalogItemId}>{formatRefundLineItemLabel(line)}</li>
+        ))}
+      </ul>
+      <p className="text-sm font-bold text-ink">戻る合計 {request.totalPoints}pt</p>
+      {request.status === "rejected" && request.rejectReason && (
+        <p className="text-sm text-muted">理由: {request.rejectReason}</p>
+      )}
+
+      {isPending && panel === "idle" && (
+        <div className="mt-3 flex gap-2">
+          <Button
+            className="flex-1"
+            onClick={() => setPanel("approve")}
+            data-testid={`parent-refund-approve-open-${request.id}`}
+          >
+            承認する
+          </Button>
+          <Button
+            className="flex-1"
+            variant="danger"
+            onClick={() => setPanel("reject")}
+            data-testid={`parent-refund-reject-open-${request.id}`}
+          >
+            却下する
+          </Button>
+        </div>
+      )}
+
+      {isPending && panel === "approve" && (
+        <div className="mt-3 flex flex-col gap-2" data-testid={`parent-refund-approve-panel-${request.id}`}>
+          <p className="text-sm text-ink">
+            券を減らして {request.totalPoints}pt を戻します。よろしいですか？
+          </p>
+          {decisionMutation.error && (
+            <p className="text-sm text-danger" role="alert">
+              {decisionMutation.error instanceof Error
+                ? decisionMutation.error.message
+                : "承認に失敗しました"}
+            </p>
+          )}
+          <div className="flex gap-2">
+            <Button
+              className="flex-1"
+              disabled={decisionMutation.isPending}
+              onClick={() => decisionMutation.mutate({ decision: "approve" })}
+              data-testid={`parent-refund-approve-submit-${request.id}`}
+            >
+              {decisionMutation.isPending ? "承認中…" : "確認して承認"}
+            </Button>
+            <Button
+              className="flex-1"
+              variant="secondary"
+              disabled={decisionMutation.isPending}
+              onClick={() => setPanel("idle")}
+            >
+              キャンセル
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {isPending && panel === "reject" && (
+        <div className="mt-3 flex flex-col gap-2" data-testid={`parent-refund-reject-panel-${request.id}`}>
+          <label className="flex flex-col gap-1 text-sm">
+            <span>却下理由（任意）</span>
+            <input
+              type="text"
+              className="rounded-default border-[3px] border-border bg-surface px-3 py-2 text-ink"
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              data-testid={`parent-refund-reject-reason-${request.id}`}
+            />
+          </label>
+          {decisionMutation.error && (
+            <p className="text-sm text-danger" role="alert">
+              {decisionMutation.error instanceof Error
+                ? decisionMutation.error.message
+                : "却下に失敗しました"}
+            </p>
+          )}
+          <div className="flex gap-2">
+            <Button
+              className="flex-1"
+              variant="danger"
+              disabled={decisionMutation.isPending}
+              onClick={() => decisionMutation.mutate({ decision: "reject", rejectReason })}
+              data-testid={`parent-refund-reject-submit-${request.id}`}
+            >
+              {decisionMutation.isPending ? "処理中…" : "却下する"}
+            </Button>
+            <Button
+              className="flex-1"
+              variant="secondary"
+              disabled={decisionMutation.isPending}
+              onClick={() => setPanel("idle")}
+            >
+              キャンセル
+            </Button>
+          </div>
+        </div>
+      )}
+    </li>
+  );
+}
+
+/**
  * ポイント交換承認画面（保護者）
  * @returns {JSX.Element} ページ
  */
 export function ParentRewardsPage() {
   const [month, setMonth] = useState(currentMonth());
   const { data, isLoading, error } = useQuery(pointExchangeRequestsQuery(month));
+  const {
+    data: refundData,
+    isLoading: refundLoading,
+    error: refundError,
+  } = useQuery(rewardVoucherRefundRequestsQuery(month));
 
   if (isLoading) {
     return <LoadingScreen />;
@@ -210,6 +386,10 @@ export function ParentRewardsPage() {
   const items = data?.items ?? [];
   const pendingItems = items.filter((item) => item.status === "pending");
   const decidedItems = items.filter((item) => item.status !== "pending");
+
+  const refundItems = refundData?.items ?? [];
+  const refundPendingItems = refundItems.filter((item) => item.status === "pending");
+  const refundDecidedItems = refundItems.filter((item) => item.status !== "pending");
 
   return (
     <ParentPageFrame>
@@ -236,7 +416,31 @@ export function ParentRewardsPage() {
         )}
       </Card>
 
-      <Card data-testid="parent-rewards-history-card">
+      <Card className="mb-4" data-testid="parent-refund-pending-card">
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <h2 className="font-bold text-ink">戻し申請の承認待ち</h2>
+          <StatusBadge tone={refundPendingItems.length > 0 ? "warning" : "muted"}>
+            {refundPendingItems.length}件
+          </StatusBadge>
+        </div>
+        {refundLoading && <p className="text-sm text-muted">読み込み中…</p>}
+        {refundError && (
+          <p className="text-sm text-danger">
+            {refundError instanceof Error ? refundError.message : "読み込みに失敗しました"}
+          </p>
+        )}
+        {!refundLoading && refundPendingItems.length === 0 ? (
+          <p className="text-sm text-muted">戻し申請の承認待ちはありません</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {refundPendingItems.map((request) => (
+              <RewardVoucherRefundRequestCard key={request.id} request={request} />
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <Card className="mb-4" data-testid="parent-rewards-history-card">
         <div className="mb-3 flex items-center justify-between gap-2">
           <Button
             variant="secondary"
@@ -259,6 +463,7 @@ export function ParentRewardsPage() {
           </Button>
         </div>
 
+        <h3 className="mb-2 text-sm font-bold text-ink">交換の履歴</h3>
         {decidedItems.length === 0 ? (
           <p className="text-sm text-muted" data-testid="parent-rewards-history-empty">
             この月に承認／却下済みの申請はありません
@@ -267,6 +472,21 @@ export function ParentRewardsPage() {
           <ul className="flex flex-col gap-2">
             {decidedItems.map((request) => (
               <PointExchangeRequestCard key={request.id} request={request} />
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <Card data-testid="parent-refund-history-card">
+        <h3 className="mb-2 text-sm font-bold text-ink">戻し申請の履歴</h3>
+        {refundDecidedItems.length === 0 ? (
+          <p className="text-sm text-muted" data-testid="parent-refund-history-empty">
+            この月に承認／却下済みの戻し申請はありません
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {refundDecidedItems.map((request) => (
+              <RewardVoucherRefundRequestCard key={request.id} request={request} />
             ))}
           </ul>
         )}

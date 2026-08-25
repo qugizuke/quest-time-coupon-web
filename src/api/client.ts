@@ -17,6 +17,8 @@ import type {
   ParentHomeData,
   PenaltyTicketConsumeResult,
   PenaltyTicketIssueResult,
+  PointDebtOffsetItemInput,
+  PointDebtOffsetResult,
   PointExchangeCreateResult,
   PointExchangeDecision,
   PointExchangeDecisionResult,
@@ -26,10 +28,19 @@ import type {
   QuestExemptionsData,
   RegistrationActor,
   ResultItem,
+  RewardVoucherRefundCreateResult,
+  RewardVoucherRefundDecision,
+  RewardVoucherRefundDecisionResult,
+  RewardVoucherRefundItemInput,
+  RewardVoucherRefundRequestsData,
+  RewardVoucherRefundStatus,
+  SwitchTicketCatalogItemId,
+  SwitchTicketRedeemResult,
   WakeTime,
 } from "@/types/api";
 import { mockApi } from "@/api/mock";
 import { normalizeBalanceDebtFields } from "@/lib/balanceDebt";
+import { normalizeRewardVouchers } from "@/lib/rewardVouchers";
 import { todayLocal } from "@/lib/date";
 
 /**
@@ -70,6 +81,7 @@ function withHomeAliases(data: HomeData): HomeData {
   return {
     ...data,
     ...balance,
+    rewardVouchers: normalizeRewardVouchers(data.rewardVouchers),
     isExemptDay: data.isExemptToday,
     isVacationMode: data.isLongVacation,
     isWeekendEve: data.isWeekendEve ?? false,
@@ -464,6 +476,84 @@ export function postPointExchangeDecision(payload: {
   rejectReason?: string;
 }): Promise<PointExchangeDecisionResult> {
   return request("pointExchangeDecision", {
+    method: "POST",
+    headers: JSON_POST_HEADERS,
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * POST switchTicketRedeem（子ども・Switch券消費・契約 §3.11.2・Issue #45）
+ * @param {{ catalogItemId: SwitchTicketCatalogItemId }} payload - 消費する券
+ * @returns {Promise<SwitchTicketRedeemResult>} 消費結果
+ */
+export function postSwitchTicketRedeem(payload: {
+  catalogItemId: SwitchTicketCatalogItemId;
+}): Promise<SwitchTicketRedeemResult> {
+  return request("switchTicketRedeem", {
+    method: "POST",
+    headers: JSON_POST_HEADERS,
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * GET rewardVoucherRefundRequests（契約 §3.11.3・子ども `/rewards` と保護者 `/parent/rewards` で共用）
+ * @param {{ month: string; status?: RewardVoucherRefundStatus }} opts - 対象月（`YYYY-MM`）と状態フィルタ
+ * @returns {Promise<RewardVoucherRefundRequestsData>} 月次の申請一覧
+ */
+export function fetchRewardVoucherRefundRequests(opts: {
+  month: string;
+  status?: RewardVoucherRefundStatus;
+}): Promise<RewardVoucherRefundRequestsData> {
+  const query: Record<string, string> = { month: opts.month };
+  if (opts.status) {
+    query.status = opts.status;
+  }
+  return request("rewardVoucherRefundRequests", { method: "GET" }, query);
+}
+
+/**
+ * POST rewardVoucherRefundRequests（子ども申請・pending 作成のみ・在庫は変えない・Issue #46）
+ * @param {{ items: RewardVoucherRefundItemInput[] }} payload - 戻し内訳
+ * @returns {Promise<RewardVoucherRefundCreateResult>} 作成結果
+ */
+export function postRewardVoucherRefundRequest(payload: {
+  items: RewardVoucherRefundItemInput[];
+}): Promise<RewardVoucherRefundCreateResult> {
+  return request("rewardVoucherRefundRequests", {
+    method: "POST",
+    headers: JSON_POST_HEADERS,
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * POST rewardVoucherRefundDecision（保護者の承認／却下・Issue #46）
+ * @param {{ id: string; decision: RewardVoucherRefundDecision; rejectReason?: string }} payload - 決定内容
+ * @returns {Promise<RewardVoucherRefundDecisionResult>} 決定結果
+ */
+export function postRewardVoucherRefundDecision(payload: {
+  id: string;
+  decision: RewardVoucherRefundDecision;
+  rejectReason?: string;
+}): Promise<RewardVoucherRefundDecisionResult> {
+  return request("rewardVoucherRefundDecision", {
+    method: "POST",
+    headers: JSON_POST_HEADERS,
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * POST pointDebtOffset（子ども・負債の即時穴埋め・保護者承認不要・Issue #47）
+ * @param {{ items: PointDebtOffsetItemInput[] }} payload - 穴埋めに使う券の内訳
+ * @returns {Promise<PointDebtOffsetResult>} 穴埋め結果
+ */
+export function postPointDebtOffset(payload: {
+  items: PointDebtOffsetItemInput[];
+}): Promise<PointDebtOffsetResult> {
+  return request("pointDebtOffset", {
     method: "POST",
     headers: JSON_POST_HEADERS,
     body: JSON.stringify(payload),

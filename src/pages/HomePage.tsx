@@ -217,10 +217,21 @@ export function HomePage() {
             penaltyMinutes={data.penaltyMinutes}
             debtMinutes={data.debtMinutes}
             penaltyTicketCount={data.penaltyTicketCount}
+            rewardVouchers={data.rewardVouchers}
             audience="child"
             compact
           />
         </Card>
+
+        {data.balancePoints < 0 && (
+          <Banner
+            tone="danger"
+            onClick={() => navigate("/rewards")}
+            data-testid="point-debt-banner"
+          >
+            ポイントがマイナスです。チケットで穴埋めできます
+          </Banner>
+        )}
 
         {data.unacknowledgedCount > 0 && (
           <Banner onClick={() => navigate("/results?unacked=1")}>

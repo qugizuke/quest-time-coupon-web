@@ -7,14 +7,20 @@ import {
   calcDebtMinutes,
   calcIssuableTicketCount,
 } from "@/lib/debt";
+import { REWARD_VOUCHER_LABELS } from "@/lib/rewardVouchers";
+import type { RewardVouchers } from "@/types/api";
+
+/** ホーム hero に常時出す券種（Issue #44・おやつ・100円・外食のみ。Switch券は /timer で扱う） */
+const HERO_VOUCHER_KEYS = ["snack-10", "cash-100", "dining-1000"] as const;
 
 /**
  * @typedef {object} BalanceDisplayProps
- * @property {number} [balancePoints] - ポイント残高（クエスト確認・未登録・採点拒否・交換消費で増減。0未満にならない）
+ * @property {number} [balancePoints] - ポイント残高（ADR-006 以降は負を許容し0止めしない）
  * @property {number} switchMinutes - Switch/YouTube 時間残高（負可）
  * @property {number} [penaltyMinutes] - タイマー超過分
  * @property {number} [debtMinutes] - 合算負債（未指定時は算出）
  * @property {number} [penaltyTicketCount] - 未消費のペナルティチケット枚数（常時表示・0枚含む）
+ * @property {RewardVouchers} [rewardVouchers] - 報酬チケット在庫（未指定時は非表示）
  * @property {"child" | "parent"} [audience] - 子ども向け案内の有無
  * @property {boolean} [compact] - ホーム hero 向けの大きめ表示
  */
@@ -29,6 +35,8 @@ export interface BalanceDisplayProps {
   debtMinutes?: number;
   /** @type {number} 未消費のペナルティチケット枚数 */
   penaltyTicketCount?: number;
+  /** @type {RewardVouchers} 報酬チケット在庫 */
+  rewardVouchers?: RewardVouchers;
   /** @type {"child" | "parent"} 表示対象 */
   audience?: "child" | "parent";
   /** @type {boolean} hero 向け */
@@ -46,6 +54,7 @@ export function BalanceDisplay({
   penaltyMinutes = 0,
   debtMinutes: debtMinutesProp,
   penaltyTicketCount = 0,
+  rewardVouchers,
   audience = "child",
   compact = false,
 }: BalanceDisplayProps) {
@@ -116,6 +125,22 @@ export function BalanceDisplay({
       >
         ペナルティチケット: {penaltyTicketCount}枚
       </p>
+
+      {rewardVouchers && (
+        <ul
+          className={[
+            "flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted",
+            compact ? "justify-center" : "",
+          ].join(" ")}
+          data-testid="balance-reward-vouchers"
+        >
+          {HERO_VOUCHER_KEYS.map((key) => (
+            <li key={key} data-testid={`balance-reward-voucher-${key}`}>
+              {REWARD_VOUCHER_LABELS[key]} {rewardVouchers[key]}枚
+            </li>
+          ))}
+        </ul>
+      )}
 
       {hasDebt && (
         <div

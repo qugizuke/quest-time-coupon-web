@@ -125,12 +125,43 @@ describe("RewardsPage", () => {
     expect(screen.getByTestId("rewards-submit").hasAttribute("disabled")).toBe(false);
   });
 
-  it("残高を超える申請は disabled のまま警告を出す", () => {
+  it("残高を超えても契約どおり申請でき、承認後負残高の注意を出す", () => {
     renderRewards({ balancePoints: 50 });
     const increment = screen.getByLabelText("100円を1個増やす");
     fireEvent.click(increment);
     expect(screen.getByTestId("rewards-insufficient-balance")).toBeTruthy();
-    expect(screen.getByTestId("rewards-submit").hasAttribute("disabled")).toBe(true);
+    expect(screen.getByTestId("rewards-submit").hasAttribute("disabled")).toBe(false);
+    expect(screen.getByTestId("rewards-insufficient-balance").textContent).toContain(
+      "承認されると残高がマイナス",
+    );
+  });
+
+  it("負残高でも未選択なら不足警告を表示しない", () => {
+    renderRewards({ balancePoints: -100 });
+    expect(screen.queryByTestId("rewards-insufficient-balance")).toBeNull();
+  });
+
+  it("タブを矢印/Home/Endキーで移動し、tabpanelと関連付ける", () => {
+    renderRewards({ balancePoints: 1000 });
+    const exchange = screen.getByRole("tab", { name: /交換する/ });
+    exchange.focus();
+    fireEvent.keyDown(exchange, { key: "ArrowRight" });
+
+    const refund = screen.getByRole("tab", { name: /ポイントへ戻す/ });
+    expect(document.activeElement).toBe(refund);
+    expect(refund.getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tabpanel").getAttribute("aria-labelledby")).toBe(
+      refund.id,
+    );
+
+    fireEvent.keyDown(refund, { key: "End" });
+    const history = screen.getByRole("tab", { name: /履歴/ });
+    expect(document.activeElement).toBe(history);
+    expect(history.tabIndex).toBe(0);
+
+    fireEvent.keyDown(history, { key: "Home" });
+    expect(document.activeElement).toBe(exchange);
+    expect(exchange.tabIndex).toBe(0);
   });
 
   it("交換を申請すると API を呼び、数量をリセットする", async () => {
@@ -186,6 +217,7 @@ describe("RewardsPage", () => {
         ],
       },
     });
+    fireEvent.click(screen.getByTestId("rewards-tab-history"));
     expect(screen.getByTestId("rewards-history-item-pex_1").textContent).toContain(
       "承認待ち",
     );
@@ -205,6 +237,7 @@ describe("RewardsPage", () => {
       "2枚",
     );
 
+    fireEvent.click(screen.getByTestId("rewards-tab-refund"));
     fireEvent.click(screen.getByLabelText("戻す100円を1個増やす"));
     expect(screen.getByTestId("refund-total-points").textContent).toBe("100pt");
     fireEvent.click(screen.getByTestId("refund-submit"));
@@ -218,6 +251,7 @@ describe("RewardsPage", () => {
 
   it("戻し申請の数量は保有枚数を超えて選べない", () => {
     renderRewards({ balancePoints: 1000, rewardVouchers: { "cash-100": 1 } });
+    fireEvent.click(screen.getByTestId("rewards-tab-refund"));
     const increment = screen.getByLabelText("戻す100円を1個増やす");
     fireEvent.click(increment);
     fireEvent.click(increment);

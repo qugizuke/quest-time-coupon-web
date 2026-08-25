@@ -86,6 +86,13 @@ function withHomeAliases(data: HomeData): HomeData {
     isVacationMode: data.isLongVacation,
     isWeekendEve: data.isWeekendEve ?? false,
     isVacationTransition: data.isVacationTransition ?? false,
+    vacationPhase:
+      data.vacationPhase ??
+      (data.isVacationTransition
+        ? "transition"
+        : data.isLongVacation
+          ? "active"
+          : "none"),
     timerBlockCount: data.timerBlockCount ?? 0,
     registrationReopen: data.registrationReopen ?? null,
     wakePromiseYesterday: data.wakePromiseYesterday ?? null,
@@ -104,7 +111,15 @@ function withParentHomeBalance(data: ParentHomeData): ParentHomeData {
   return {
     ...data,
     ...normalizeBalanceDebtFields(data),
+    rewardVouchers: normalizeRewardVouchers(data.rewardVouchers),
     isVacationTransition: data.isVacationTransition ?? false,
+    vacationPhase:
+      data.vacationPhase ??
+      (data.isVacationTransition
+        ? "transition"
+        : data.isLongVacation
+          ? "active"
+          : "none"),
   };
 }
 

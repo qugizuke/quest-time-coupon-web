@@ -112,6 +112,8 @@ export interface HomeData {
   isLongVacation: boolean;
   /** 長期休みモード終了1週間前の移行期間中か（Issue #36） */
   isVacationTransition: boolean;
+  /** 長期休みフェーズ。旧Functionsではbooleanから補完する */
+  vacationPhase?: "none" | "active" | "transition";
   /**
    * 報酬チケット在庫（契約 §3.3・§3.4・ADR-006）。5キーを必ず返す。欠落は0扱い。
    */
@@ -163,6 +165,8 @@ export interface ParentHomeData {
   isLongVacation: boolean;
   /** 長期休みモード終了1週間前の移行期間中か（Issue #36） */
   isVacationTransition: boolean;
+  /** 長期休みフェーズ。旧Functionsではbooleanから補完する */
+  vacationPhase?: "none" | "active" | "transition";
   longVacation: {
     startDate: string;
     endDate: string;
@@ -185,6 +189,8 @@ export interface ParentHomeData {
   issuablePenaltyTicketCount: number;
   /** 未消費のペナルティチケット枚数（≥ 0） */
   penaltyTicketCount: number;
+  /** 報酬チケット在庫（5キー必須、欠落は0補完） */
+  rewardVouchers?: RewardVouchers;
 }
 
 /**
@@ -216,11 +222,14 @@ export interface PenaltyTicketConsumeResult {
 }
 
 /** GET/POST longVacation */
+export type VacationPhase = "none" | "active" | "transition";
+
 export interface LongVacationData {
   startDate: string;
   endDate: string;
   updatedAt: string;
   active: boolean;
+  vacationPhase: VacationPhase;
 }
 
 /** 免除期間（id なし） */

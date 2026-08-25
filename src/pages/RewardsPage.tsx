@@ -6,7 +6,7 @@
  *   正本: docs `screen-design.md` §6.7 / `api-tobe-f-contract.md` §3.11.1〜§3.11.4。
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type KeyboardEvent } from "react";
 import {
   homeQuery,
   pointExchangeRequestsQuery,
@@ -50,6 +50,52 @@ type QuantityState = Record<PointExchangeCatalogItemId, number>;
 
 /** 報酬チケット ID → 選択数量 */
 type VoucherQuantityState = Record<RewardVoucherCatalogItemId, number>;
+
+/** 交換画面内のタブ */
+type RewardsTab = "exchange" | "refund" | "history";
+
+/** ARIA tabs の表示順とラベル */
+const REWARDS_TABS: ReadonlyArray<readonly [RewardsTab, string]> = [
+  ["exchange", "🛒 交換する"],
+  ["refund", "🔄 ポイントへ戻す"],
+  ["history", "📋 履歴"],
+];
+
+/** Figmaから書き出したカタログアイコン */
+const CATALOG_ICON: Record<PointExchangeCatalogItemId, string> = {
+  "snack-10": "/assets/rewards/cookie.svg",
+  "cash-100": "/assets/rewards/coins.svg",
+  "dining-1000": "/assets/rewards/utensils.svg",
+  "switch-30": "/assets/rewards/gamepad.svg",
+  "switch-60": "/assets/rewards/gamepad.svg",
+  "penalty-ticket-100": "/assets/rewards/ticket.svg",
+};
+
+/** 子ども向けの商品説明 */
+const CATALOG_DESCRIPTION: Record<PointExchangeCatalogItemId, string> = {
+  "snack-10": "がんばったごほうびにおやつ1つ！",
+  "cash-100": "おこづかい100円ゲット！",
+  "dining-1000": "みんなで外食に行こう！",
+  "switch-30": "Switchで30分あそべるよ！",
+  "switch-60": "Switchで60分あそべるよ！",
+  "penalty-ticket-100": "ペナルティチケットを1枚消す",
+};
+
+/** Figmaの2列グリッドに合わせた表示順 */
+const POINT_EXCHANGE_DISPLAY_CATALOG = [
+  "snack-10",
+  "cash-100",
+  "dining-1000",
+  "switch-30",
+  "switch-60",
+  "penalty-ticket-100",
+].map((catalogItemId) => {
+  const item = POINT_EXCHANGE_CATALOG.find(
+    (candidate) => candidate.catalogItemId === catalogItemId,
+  );
+  if (!item) throw new Error(`表示カタログが未定義です: ${catalogItemId}`);
+  return item;
+});
 
 /**
  * 全カタログを数量0で初期化する
@@ -159,6 +205,26 @@ export function RewardsPage() {
     initialVoucherQuantities,
   );
   const [month, setMonth] = useState(currentMonth());
+  const [activeTab, setActiveTab] = useState<RewardsTab>("exchange");
+
+  /** 矢印/Home/Endでタブを移動し、移動先を自動選択する。 */
+  function handleTabKeyDown(
+    event: KeyboardEvent<HTMLButtonElement>,
+    currentTab: RewardsTab,
+  ): void {
+    const currentIndex = REWARDS_TABS.findIndex(([tab]) => tab === currentTab);
+    let nextIndex: number | null = null;
+    if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % REWARDS_TABS.length;
+    if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + REWARDS_TABS.length) % REWARDS_TABS.length;
+    if (event.key === "Home") nextIndex = 0;
+    if (event.key === "End") nextIndex = REWARDS_TABS.length - 1;
+    if (nextIndex === null) return;
+
+    event.preventDefault();
+    const nextTab = REWARDS_TABS[nextIndex][0];
+    setActiveTab(nextTab);
+    document.getElementById(`rewards-tab-${nextTab}`)?.focus();
+  }
 
   const {
     data: history,
@@ -183,7 +249,9 @@ export function RewardsPage() {
   const balancePoints = home?.balancePoints ?? 0;
   const rewardVouchers: RewardVouchers | undefined = home?.rewardVouchers;
   const isInDebt = balancePoints < 0;
-  const canSubmit = totals.totalPoints > 0 && totals.totalPoints <= balancePoints;
+  // 申請時点ではポイントを予約・減算しない。残高不足でも契約上は申請でき、
+  // 保護者の承認トランザクションで最終残高が確定する。
+  const canSubmit = totals.totalPoints > 0;
 
   const submitMutation = useMutation({
     mutationFn: () =>
@@ -325,22 +393,25 @@ export function RewardsPage() {
 
   return (
     <ChildPageFrame>
-      <div className="mb-6">
-        <p className="text-sm text-muted">🎁 ポイント交換</p>
-        <h1 className="text-app-lg font-bold text-ink">ポイントを交換する</h1>
+      <div className="-mx-4 mb-4 bg-surface-warm px-4 py-6 sm:-mx-8 sm:px-8">
+        <p className="text-sm text-muted">ごほうびショップ</p>
+        <h1 className="mt-2 text-app-lg font-bold text-ink">今日のごほうびを選ぼう！</h1>
       </div>
 
-      <Card className="mb-4 flex flex-col gap-1" data-testid="rewards-balance-card">
-        <p className="text-sm text-muted">いまのポイント</p>
-        <p
-          className={`font-display text-app-xl leading-none ${isInDebt ? "text-danger" : "text-ink"}`}
-          data-testid="rewards-balance-points"
-        >
-          {balancePoints}pt
-        </p>
-        <p className="mt-2 text-sm text-muted">
-          使える時間: {home?.switchMinutes ?? 0}分
-        </p>
+      <Card className="mb-4 grid gap-4 sm:grid-cols-2" data-testid="rewards-balance-card">
+        <div>
+          <p className="text-sm text-muted">いまのポイント</p>
+          <p
+            className={`font-display text-app-xl leading-none ${isInDebt ? "text-danger" : "text-ink"}`}
+            data-testid="rewards-balance-points"
+          >
+            {balancePoints}pt
+          </p>
+        </div>
+        <div>
+          <p className="text-sm text-muted">使える時間</p>
+          <p className="font-display text-3xl text-ink">{home?.switchMinutes ?? 0}分</p>
+        </div>
       </Card>
 
       {isInDebt && (
@@ -396,38 +467,90 @@ export function RewardsPage() {
 
       {rewardVouchers && (
         <Card className="mb-4 flex flex-col gap-3" data-testid="rewards-vouchers-card">
-          <h2 className="font-bold text-ink">保有券</h2>
-          <ul className="flex flex-col gap-1">
+          <h2 className="font-bold text-ink">保有券サマリー</h2>
+          <ul className="flex flex-wrap gap-2">
             {REWARD_VOUCHER_KEYS.map((catalogItemId) => (
               <li
                 key={catalogItemId}
-                className="flex items-center justify-between text-sm text-ink"
+                className="rounded-pill border border-border-soft bg-chip px-3 py-1 text-sm text-ink"
                 data-testid={`rewards-voucher-stock-${catalogItemId}`}
               >
-                <span>{REWARD_VOUCHER_LABELS[catalogItemId]}</span>
-                <span className="font-bold">{rewardVouchers[catalogItemId]}枚</span>
+                {REWARD_VOUCHER_LABELS[catalogItemId]} {rewardVouchers[catalogItemId]}枚
               </li>
             ))}
           </ul>
         </Card>
       )}
 
+      <div
+        className="mb-4 grid grid-cols-3 gap-2 rounded-default bg-white p-2"
+        role="tablist"
+        aria-label="ごほうびショップ"
+      >
+        {REWARDS_TABS.map(([tab, label]) => (
+          <button
+            key={tab}
+            type="button"
+            role="tab"
+            id={`rewards-tab-${tab}`}
+            aria-controls={`rewards-panel-${tab}`}
+            aria-selected={activeTab === tab}
+            tabIndex={activeTab === tab ? 0 : -1}
+            className={`min-h-16 rounded-default px-2 py-3 font-bold transition-colors ${
+              activeTab === tab
+                ? "bg-primary text-white"
+                : "bg-chip text-ink hover:bg-surface-warm"
+            }`}
+            onClick={() => setActiveTab(tab)}
+            onKeyDown={(event) => handleTabKeyDown(event, tab)}
+            data-testid={`rewards-tab-${tab}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "exchange" && (
+      <div id="rewards-panel-exchange" role="tabpanel" aria-labelledby="rewards-tab-exchange">
       <Card className="mb-4 flex flex-col gap-4" data-testid="rewards-catalog-card">
         <h2 className="font-bold text-ink">交換カタログ</h2>
-        <ul className="flex flex-col gap-3">
-          {POINT_EXCHANGE_CATALOG.map((item) => {
+        <ul className="grid gap-3 md:grid-cols-2">
+          {POINT_EXCHANGE_DISPLAY_CATALOG.map((item) => {
             const quantity = quantities[item.catalogItemId];
+            const voucherId = item.effects.issuedVoucherId;
+            const owned = voucherId
+              ? rewardVouchers?.[voucherId] ?? 0
+              : home?.penaltyTicketCount ?? 0;
+            const shortfall = Math.max(0, item.pointCost - balancePoints);
             return (
               <li
                 key={item.catalogItemId}
-                className="flex items-center justify-between gap-3 rounded-default border-[3px] border-border-soft bg-surface-soft px-4 py-3"
+                className={`flex min-h-56 flex-col gap-3 rounded-default border-[3px] bg-surface px-4 py-4 shadow-[var(--shadow-card)] ${
+                  shortfall > 0 ? "border-dashed border-danger" : "border-border-soft"
+                }`}
                 data-testid={`catalog-item-${item.catalogItemId}`}
               >
-                <div className="min-w-0 flex-1">
+                <div className="flex size-12 items-center justify-center rounded-default bg-surface-warm">
+                  <img
+                    src={CATALOG_ICON[item.catalogItemId]}
+                    alt=""
+                    className="size-8"
+                    width="32"
+                    height="32"
+                  />
+                </div>
+                <div className="min-w-0">
                   <p className="font-medium text-ink">{item.label}</p>
                   <p className="text-sm text-muted">{item.pointCost}pt</p>
                 </div>
-                <div className="flex items-center gap-2">
+                <p className="min-h-10 text-sm text-ink">
+                  {CATALOG_DESCRIPTION[item.catalogItemId]}
+                </p>
+                <div className="mt-auto flex items-center justify-between gap-2">
+                  <span className="rounded-pill bg-chip px-3 py-1 text-xs text-ink">
+                    所持 {owned}枚
+                  </span>
+                  <div className="flex items-center gap-2">
                   <button
                     type="button"
                     className="flex size-9 items-center justify-center rounded-default border-[3px] border-border bg-surface text-lg font-bold text-ink disabled:opacity-40"
@@ -452,7 +575,11 @@ export function RewardsPage() {
                   >
                     ＋
                   </button>
+                  </div>
                 </div>
+                {shortfall > 0 && (
+                  <p className="text-sm font-bold text-danger">あと{shortfall}pt</p>
+                )}
               </li>
             );
           })}
@@ -465,9 +592,9 @@ export function RewardsPage() {
           </span>
         </div>
 
-        {totals.totalPoints > balancePoints && (
+        {totals.totalPoints > 0 && totals.totalPoints > balancePoints && (
           <p className="text-sm text-danger" data-testid="rewards-insufficient-balance">
-            残高が足りません（いまのポイント: {balancePoints}pt）
+            承認されると残高がマイナスになります。申請後に保護者が確認します。
           </p>
         )}
 
@@ -488,8 +615,11 @@ export function RewardsPage() {
           {submitMutation.isPending ? "申請中…" : "交換を申請する"}
         </Button>
       </Card>
+      </div>
+      )}
 
-      {rewardVouchers && (
+      {activeTab === "refund" && rewardVouchers && (
+        <div id="rewards-panel-refund" role="tabpanel" aria-labelledby="rewards-tab-refund">
         <Card className="mb-4 flex flex-col gap-4" data-testid="rewards-refund-card">
           <div>
             <h2 className="font-bold text-ink">チケットをポイントに戻す</h2>
@@ -532,8 +662,11 @@ export function RewardsPage() {
             {refundMutation.isPending ? "申請中…" : "ポイントに戻す申請をする"}
           </Button>
         </Card>
+        </div>
       )}
 
+      {activeTab === "history" && (
+      <div id="rewards-panel-history" role="tabpanel" aria-labelledby="rewards-tab-history">
       <Card className="mb-4" data-testid="rewards-history-card">
         <div className="mb-3 flex items-center justify-between gap-2">
           <Button
@@ -648,6 +781,8 @@ export function RewardsPage() {
           ))}
         </ul>
       </Card>
+      </div>
+      )}
     </ChildPageFrame>
   );
 }

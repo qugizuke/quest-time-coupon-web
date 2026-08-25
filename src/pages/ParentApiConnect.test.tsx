@@ -216,6 +216,7 @@ describe("ParentSettingsPage API 接続", () => {
         endDate: "2026-08-10",
         updatedAt: "2026-07-19T10:00:00+09:00",
         active: true,
+        vacationPhase: "active",
       },
       exemptions: {
         periods: [

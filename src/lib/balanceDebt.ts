@@ -8,9 +8,9 @@ import {
   calcIssuableTicketCount,
 } from "@/lib/debt";
 
-/** 残高・負債まわりの共通フィールド（Functions 契約・ADR-005 二財布） */
+/** 残高・負債まわりの共通フィールド（Functions 契約・ADR-005 二財布 / ADR-006 負ポイント許容） */
 export interface BalanceDebtFields {
-  /** クエスト結果で増減するポイント残高（pt）。0未満にはならない */
+  /** クエスト結果で増減するポイント残高（pt）。ADR-006 以降は負を許容し、0止めしない */
   balancePoints: number;
   switchMinutes: number;
   displayBalance: number;
@@ -29,7 +29,8 @@ export interface BalanceDebtFields {
 export function normalizeBalanceDebtFields(
   raw: Partial<BalanceDebtFields>,
 ): BalanceDebtFields {
-  const balancePoints = Math.max(0, raw.balancePoints ?? 0);
+  // ADR-006: balancePoints は負を許容するため丸めない（switchMinutes/penaltyMinutes とは別扱い）。
+  const balancePoints = raw.balancePoints ?? 0;
   const penaltyMinutes = Math.max(0, raw.penaltyMinutes ?? 0);
   const switchMinutes = raw.switchMinutes ?? raw.displayBalance ?? 0;
   const displayBalance = raw.displayBalance ?? switchMinutes;

@@ -9,8 +9,13 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { queryKeys } from "@/api/queries";
 import { buildHomeData } from "@/test/fixtures";
 import { currentMonth } from "@/lib/month";
+import { zeroRewardVouchers } from "@/lib/rewardVouchers";
 import { RewardsPage } from "@/pages/RewardsPage";
-import type { PointExchangeRequestsData } from "@/types/api";
+import type {
+  PointExchangeRequestsData,
+  RewardVoucherRefundRequestsData,
+  RewardVouchers,
+} from "@/types/api";
 
 vi.mock("@/api/client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/api/client")>();
@@ -22,11 +27,33 @@ vi.mock("@/api/client", async (importOriginal) => {
       totalPoints: payload.items.reduce((sum) => sum + 1, 0) > 0 ? 500 : 0,
       balancePoints: 1000,
     })),
+    postRewardVoucherRefundRequest: vi.fn(async () => ({
+      id: "rvr_test_1",
+      status: "pending" as const,
+      totalPoints: 100,
+    })),
+    postPointDebtOffset: vi.fn(async () => ({
+      offsetPoints: 100,
+      balancePoints: -20,
+      remainingDebtPoints: 20,
+      rewardVouchers: {
+        "snack-10": 0,
+        "cash-100": 0,
+        "dining-1000": 0,
+        "switch-30": 0,
+        "switch-60": 0,
+      },
+    })),
   };
 });
 
 /** 空の月次履歴 */
 function emptyHistory(): PointExchangeRequestsData {
+  return { month: currentMonth(), items: [] };
+}
+
+/** 空の戻し申請月次履歴 */
+function emptyRefundHistory(): RewardVoucherRefundRequestsData {
   return { month: currentMonth(), items: [] };
 }
 
@@ -39,6 +66,8 @@ function renderRewards(opts: {
   balancePoints?: number;
   switchMinutes?: number;
   history?: PointExchangeRequestsData;
+  refundHistory?: RewardVoucherRefundRequestsData;
+  rewardVouchers?: Partial<RewardVouchers>;
 }) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -48,11 +77,16 @@ function renderRewards(opts: {
     buildHomeData({
       balancePoints: opts.balancePoints ?? 1000,
       switchMinutes: opts.switchMinutes ?? 10,
+      rewardVouchers: { ...zeroRewardVouchers(), ...opts.rewardVouchers },
     }),
   );
   queryClient.setQueryData(
     queryKeys.pointExchangeRequests(currentMonth()),
     opts.history ?? emptyHistory(),
+  );
+  queryClient.setQueryData(
+    queryKeys.rewardVoucherRefundRequests(currentMonth()),
+    opts.refundHistory ?? emptyRefundHistory(),
   );
   render(
     <QueryClientProvider client={queryClient}>
@@ -130,7 +164,7 @@ describe("RewardsPage", () => {
               { catalogItemId: "cash-100", label: "100円", quantity: 5, pointCost: 100, subtotalPoints: 500 },
             ],
             totalPoints: 500,
-            effects: { spentPoints: 500, addedSwitchMinutes: 0, consumedPenaltyTickets: 0 },
+            effects: { spentPoints: 500, issuedRewardVouchers: {}, consumedPenaltyTickets: 0 },
             rejectReason: "",
           },
           {
@@ -142,7 +176,11 @@ describe("RewardsPage", () => {
               { catalogItemId: "switch-30", label: "Switch 30分", quantity: 1, pointCost: 50, subtotalPoints: 50 },
             ],
             totalPoints: 50,
-            effects: { spentPoints: 50, addedSwitchMinutes: 30, consumedPenaltyTickets: 0 },
+            effects: {
+              spentPoints: 50,
+              issuedRewardVouchers: { "switch-30": 1 },
+              consumedPenaltyTickets: 0,
+            },
             rejectReason: "",
           },
         ],
@@ -155,7 +193,54 @@ describe("RewardsPage", () => {
       "承認済み",
     );
     expect(screen.getByTestId("rewards-history-item-pex_2").textContent).toContain(
-      "+30分",
+      "Switch 30分券+1",
     );
+  });
+
+  it("保有券を表示し、戻し申請ができる", async () => {
+    const { postRewardVoucherRefundRequest } = await import("@/api/client");
+    renderRewards({ balancePoints: 1000, rewardVouchers: { "cash-100": 2 } });
+
+    expect(screen.getByTestId("rewards-voucher-stock-cash-100").textContent).toContain(
+      "2枚",
+    );
+
+    fireEvent.click(screen.getByLabelText("戻す100円を1個増やす"));
+    expect(screen.getByTestId("refund-total-points").textContent).toBe("100pt");
+    fireEvent.click(screen.getByTestId("refund-submit"));
+
+    await waitFor(() => {
+      expect(postRewardVoucherRefundRequest).toHaveBeenCalledWith({
+        items: [{ catalogItemId: "cash-100", quantity: 1 }],
+      });
+    });
+  });
+
+  it("戻し申請の数量は保有枚数を超えて選べない", () => {
+    renderRewards({ balancePoints: 1000, rewardVouchers: { "cash-100": 1 } });
+    const increment = screen.getByLabelText("戻す100円を1個増やす");
+    fireEvent.click(increment);
+    fireEvent.click(increment);
+    expect(screen.getByTestId("refund-voucher-quantity-cash-100").textContent).toBe("1");
+  });
+
+  it("balancePoints が負のときだけ負債穴埋めカードを表示し、穴埋めできる", async () => {
+    const { postPointDebtOffset } = await import("@/api/client");
+    renderRewards({ balancePoints: -100, rewardVouchers: { "cash-100": 1 } });
+
+    expect(screen.getByTestId("rewards-debt-offset-card")).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("穴埋めに使う100円を1個増やす"));
+    fireEvent.click(screen.getByTestId("offset-submit"));
+
+    await waitFor(() => {
+      expect(postPointDebtOffset).toHaveBeenCalledWith({
+        items: [{ catalogItemId: "cash-100", quantity: 1 }],
+      });
+    });
+  });
+
+  it("balancePoints が0以上なら負債穴埋めカードを表示しない", () => {
+    renderRewards({ balancePoints: 0 });
+    expect(screen.queryByTestId("rewards-debt-offset-card")).toBeNull();
   });
 });

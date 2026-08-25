@@ -8,6 +8,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { queryKeys } from "@/api/queries";
+import { zeroRewardVouchers } from "@/lib/rewardVouchers";
 import { HomePage } from "@/pages/HomePage";
 import type { HomeData } from "@/types/api";
 
@@ -25,6 +26,7 @@ function buildHome(overrides: Partial<HomeData> = {}): HomeData {
     debtMinutes: 0,
     issuablePenaltyTicketCount: 0,
     penaltyTicketCount: 0,
+    rewardVouchers: zeroRewardVouchers(),
     today: "2026-07-30",
     todayStatus: "unanswered",
     questAction: "start",

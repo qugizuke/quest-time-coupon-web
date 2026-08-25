@@ -9,6 +9,7 @@ import type { ReactNode } from "react";
  * @property {ReactNode} children - 内容
  * @property {() => void} [onClick] - クリック時
  * @property {"info" | "warning" | "danger"} [tone] - 状態色
+ * @property {string} ["data-testid"] - テスト用識別子
  */
 interface BannerProps {
   /** @type {ReactNode} 内容 */
@@ -17,6 +18,8 @@ interface BannerProps {
   onClick?: () => void;
   /** @type {"info" | "warning" | "danger"} 状態色 */
   tone?: "info" | "warning" | "danger";
+  /** @type {string} テスト用識別子 */
+  "data-testid"?: string;
 }
 
 const toneClass = {
@@ -30,11 +33,17 @@ const toneClass = {
  * @param {BannerProps} props - props
  * @returns {JSX.Element} バナー
  */
-export function Banner({ children, onClick, tone = "info" }: BannerProps) {
+export function Banner({
+  children,
+  onClick,
+  tone = "info",
+  "data-testid": dataTestId,
+}: BannerProps) {
   return (
     <button
       type="button"
       onClick={onClick}
+      data-testid={dataTestId}
       className={[
         "flex w-full items-center gap-3 rounded-default border-[3px] px-4 py-4 text-left text-[15px] font-medium transition-transform duration-200 hover:scale-[1.01]",
         toneClass[tone],

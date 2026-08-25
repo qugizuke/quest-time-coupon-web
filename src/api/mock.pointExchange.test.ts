@@ -1,6 +1,7 @@
 /**
- * @file モック API ポイント交換の単体テスト（Issue #38）
- * @description 契約 §3.11.1 の T10a（申請＝pending 作成のみ）／T10b（承認／却下）を検証する。
+ * @file モック API ポイント交換・報酬チケットの単体テスト（Issue #38 / #43）
+ * @description 契約 §3.11 の T10a（申請＝pending 作成のみ）／T10b（承認／却下）を検証する。
+ *   ADR-006 以降、balancePoints は負を許容するため申請時点・承認時点の残高不足では拒否しない。
  * @vitest-environment jsdom
  */
 import { beforeEach, describe, expect, it } from "vitest";
@@ -80,7 +81,7 @@ describe("mockApi pointExchangeRequests POST（T10a）", () => {
     ]);
     expect(items[0].effects).toEqual({
       spentPoints: 500,
-      addedSwitchMinutes: 0,
+      issuedRewardVouchers: { "cash-100": 5 },
       consumedPenaltyTickets: 0,
     });
   });
@@ -113,11 +114,11 @@ describe("mockApi pointExchangeRequests POST（T10a）", () => {
     ).rejects.toThrow("BAD_REQUEST");
   });
 
-  it("残高不足は FORBIDDEN_STATE", async () => {
+  it("ADR-006: 残高不足でも申請時点では拒否しない", async () => {
     setMockBalanceDebt({ balancePoints: 10 });
-    await expect(
-      postRequest([{ catalogItemId: "cash-100", quantity: 1 }]),
-    ).rejects.toThrow("FORBIDDEN_STATE");
+    const result = await postRequest([{ catalogItemId: "cash-100", quantity: 1 }]);
+    expect(result.status).toBe("pending");
+    expect(result.balancePoints).toBe(10);
   });
 });
 
@@ -150,19 +151,19 @@ describe("mockApi pointExchangeRequests GET（月次履歴）", () => {
   });
 });
 
-describe("mockApi pointExchangeDecision（T10b）", () => {
+describe("mockApi pointExchangeDecision（T10b・ADR-006）", () => {
   beforeEach(() => {
     resetMockStore();
   });
 
-  it("approve で balancePoints / switchMinutes を更新する", async () => {
+  it("approve で balancePoints を消費し、switchMinutes ではなく rewardVouchers へ発行する", async () => {
     setMockBalanceDebt({ balancePoints: 200, switchMinutes: 10 });
     const created = await postRequest([{ catalogItemId: "switch-30", quantity: 1 }]);
     const decided = await postDecision({ id: created.id, decision: "approve" });
     expect(decided.status).toBe("approved");
     expect(decided.spentPoints).toBe(50);
     expect(decided.balancePoints).toBe(150);
-    expect(decided.switchMinutes).toBe(40);
+    expect(decided.rewardVouchers?.["switch-30"]).toBe(1);
   });
 
   it("approve で penalty-ticket-100 は penaltyTicketCount を消費する", async () => {
@@ -193,18 +194,14 @@ describe("mockApi pointExchangeDecision（T10b）", () => {
     expect(items[0].rejectReason).toBe("今日はやめておこう");
   });
 
-  it("承認時点で残高不足なら FORBIDDEN_STATE のまま pending を維持する", async () => {
+  it("ADR-006: 承認時点で残高不足でもポイント不足だけでは拒否せず、承認後は負残高になる", async () => {
     setMockBalanceDebt({ balancePoints: 200 });
     const created = await postRequest([{ catalogItemId: "cash-100", quantity: 2 }]);
     // 別操作で残高が減ったことを模擬
     setMockBalanceDebt({ balancePoints: 50 });
-    await expect(
-      postDecision({ id: created.id, decision: "approve" }),
-    ).rejects.toThrow("FORBIDDEN_STATE");
-
-    const month = new Date().toISOString().slice(0, 7);
-    const { items } = await getRequests(month, "pending");
-    expect(items).toHaveLength(1);
+    const decided = await postDecision({ id: created.id, decision: "approve" });
+    expect(decided.status).toBe("approved");
+    expect(decided.balancePoints).toBe(-150);
   });
 
   it("penaltyTicketCount 不足なら FORBIDDEN_STATE のまま pending を維持する", async () => {

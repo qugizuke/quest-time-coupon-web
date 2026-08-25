@@ -16,6 +16,7 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { queryKeys } from "@/api/queries";
+import { zeroRewardVouchers } from "@/lib/rewardVouchers";
 import { ResultsPage } from "@/pages/ResultsPage";
 import { TimerPage } from "@/pages/TimerPage";
 import type { HomeData, ResultItem } from "@/types/api";
@@ -69,6 +70,7 @@ function buildHome(): HomeData {
     debtMinutes: 0,
     issuablePenaltyTicketCount: 0,
     penaltyTicketCount: 0,
+    rewardVouchers: zeroRewardVouchers(),
     today: "2026-07-30",
     todayStatus: "pending_ack",
     questAction: "none",

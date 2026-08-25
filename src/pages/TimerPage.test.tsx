@@ -4,13 +4,32 @@
  * @vitest-environment jsdom
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { queryKeys } from "@/api/queries";
 import { TimerPage } from "@/pages/TimerPage";
 import { buildHomeData } from "@/test/fixtures";
 import type { HomeData } from "@/types/api";
+
+vi.mock("@/api/client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/api/client")>();
+  return {
+    ...actual,
+    postSwitchTicketRedeem: vi.fn(async () => ({
+      catalogItemId: "switch-30" as const,
+      redeemedMinutes: 30,
+      switchMinutes: 60,
+      rewardVouchers: {
+        "snack-10": 0,
+        "cash-100": 0,
+        "dining-1000": 0,
+        "switch-30": 0,
+        "switch-60": 0,
+      },
+    })),
+  };
+});
 
 /**
  * TimerPage を描画する
@@ -39,6 +58,7 @@ function renderTimer(home: HomeData): void {
 describe("TimerPage", () => {
   beforeEach(() => {
     sessionStorage.clear();
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
@@ -153,5 +173,37 @@ describe("TimerPage", () => {
 
     const start = screen.getByRole("button", { name: /スタート/ });
     expect(start.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("Switch券の保有枚数を表示し、消費すると switchTicketRedeem を呼ぶ", async () => {
+    const { postSwitchTicketRedeem } = await import("@/api/client");
+    renderTimer(
+      buildHomeData({
+        displayBalance: 30,
+        switchMinutes: 30,
+        rewardVouchers: {
+          "snack-10": 0,
+          "cash-100": 0,
+          "dining-1000": 0,
+          "switch-30": 2,
+          "switch-60": 0,
+        },
+      }),
+    );
+
+    expect(screen.getByTestId("switch-ticket-row-switch-30").textContent).toContain(
+      "2枚",
+    );
+    expect(
+      screen.getByTestId("switch-ticket-redeem-switch-60").hasAttribute("disabled"),
+    ).toBe(true);
+
+    fireEvent.click(screen.getByTestId("switch-ticket-redeem-switch-30"));
+
+    await waitFor(() => {
+      expect(postSwitchTicketRedeem).toHaveBeenCalledWith({
+        catalogItemId: "switch-30",
+      });
+    });
   });
 });

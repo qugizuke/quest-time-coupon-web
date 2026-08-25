@@ -23,11 +23,11 @@ export function TimerPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: home } = useQuery(homeQuery);
-  const balanceMinutes = home?.balanceMinutes ?? home?.displayBalance ?? 0;
-  const displayBalance = Math.max(0, balanceMinutes);
+  const switchMinutes = home?.switchMinutes ?? home?.displayBalance ?? 0;
+  const displayBalance = Math.max(0, switchMinutes);
   const penaltyMinutes = home?.penaltyMinutes ?? 0;
   const debtMinutes =
-    home?.debtMinutes ?? calcDebtMinutes(balanceMinutes, penaltyMinutes);
+    home?.debtMinutes ?? calcDebtMinutes(switchMinutes, penaltyMinutes);
   const timerBlockCount = home?.timerBlockCount ?? 0;
   const blockedByUnacked = timerBlockCount > 0;
   const { display, start, stop, canStart, isRunning, state } =
@@ -41,7 +41,7 @@ export function TimerPage() {
   const showsPenalty = display.isPenalty || showsStoredDebt;
   const timerSeconds = showsStoredDebt ? penaltyMinutes * 60 : display.seconds;
   const startBlockReason = resolveTimerStartBlockReason({
-    balanceMinutes,
+    switchMinutes,
     debtMinutes,
     blockedByUnacked,
   });
@@ -110,7 +110,7 @@ export function TimerPage() {
             <p className="text-sm text-muted">
               {showsStoredDebt
                 ? `次のごほうび時間から ${penaltyMinutes} 分を相殺します`
-                : `残高 ${balanceMinutes} 分`}
+                : `残高 ${switchMinutes} 分`}
             </p>
           </Card>
 

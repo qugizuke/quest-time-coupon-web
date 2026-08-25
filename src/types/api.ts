@@ -73,24 +73,31 @@ export interface WakePromiseView {
   setAt: string;
 }
 
-/** GET home（契約 §3.4） */
+/** GET home（契約 §3.4・ADR-005） */
 export interface HomeData {
-  /** ご褒美残高（分）。2026-08-24〜は負可。表示は丸めない */
-  balanceMinutes: number;
+  /** クエスト結果で増減するポイント残高（pt）。0未満にはならない（契約 §3.11） */
+  balancePoints: number;
   /**
-   * 表示用残高（分）。負あり（例: -30）。
-   * サーバ未対応時は balanceMinutes と同値に正規化する。
+   * Switch / YouTube 共通時間の残高（分）。交換承認（#38）でのみ増え、タイマー使用で減る。
+   * 0未満にはならない（超過分は penaltyMinutes へ）。
+   */
+  switchMinutes: number;
+  /**
+   * 表示用残高（分）。タイマーで使える分数として switchMinutes を返す（契約 §3.3）。
+   * サーバ未対応時は switchMinutes と同値に正規化する。
    */
   displayBalance: number;
   /** タイマー超過分（分）。ペナルティチケットとは別概念 */
   penaltyMinutes: number;
   /**
-   * 合算負債（分）= max(0, -balanceMinutes) + penaltyMinutes。
+   * 合算負債（分）= max(0, -switchMinutes) + penaltyMinutes。
    * サーバ未返却時は UI 側で算出する。
    */
   debtMinutes: number;
-  /** 発行可能枚数 = floor(debtMinutes / 60)。発行＝即精算（在庫なし） */
+  /** 発行可能枚数 = floor(debtMinutes / 60) */
   issuablePenaltyTicketCount: number;
+  /** 未消費のペナルティチケット枚数（≥ 0）。欠落時は 0 として読む（契約 §3.3 / §3.4） */
+  penaltyTicketCount: number;
   today: string;
   todayStatus: TodayStatus;
   questAction: QuestAction;
@@ -100,6 +107,8 @@ export interface HomeData {
   bedtimeHour?: BedtimeHour;
   isWeekendEve: boolean;
   isLongVacation: boolean;
+  /** 長期休みモード終了1週間前の移行期間中か（Issue #36） */
+  isVacationTransition: boolean;
   isExemptToday: boolean;
   registrationReopen: HomeRegistrationReopen | null;
   wakePromiseYesterday: WakePromiseView | null;
@@ -145,6 +154,8 @@ export interface ParentHomeData {
   registrationReopen: ParentRegistrationReopen;
   isExemptToday: boolean;
   isLongVacation: boolean;
+  /** 長期休みモード終了1週間前の移行期間中か（Issue #36） */
+  isVacationTransition: boolean;
   longVacation: {
     startDate: string;
     endDate: string;
@@ -153,9 +164,11 @@ export interface ParentHomeData {
   bedtimeHour: BedtimeHour;
   canEditBedtimeAsParent: boolean;
   questDeadlineAt: string | null;
-  /** ご褒美残高（分・負可） */
-  balanceMinutes: number;
-  /** 表示用残高（負あり） */
+  /** クエスト結果で増減するポイント残高（pt）。0未満にはならない */
+  balancePoints: number;
+  /** Switch / YouTube 共通時間の残高（分）。0未満にはならない */
+  switchMinutes: number;
+  /** 表示用残高（タイマーで使える分数。switchMinutes と同値） */
   displayBalance: number;
   /** タイマー超過分（分） */
   penaltyMinutes: number;
@@ -163,11 +176,13 @@ export interface ParentHomeData {
   debtMinutes: number;
   /** 発行可能枚数 = floor(debtMinutes / 60) */
   issuablePenaltyTicketCount: number;
+  /** 未消費のペナルティチケット枚数（≥ 0） */
+  penaltyTicketCount: number;
 }
 
 /**
  * POST penaltyTicketIssue レスポンス
- * @description 発行＝即精算。在庫チケットは持たない。
+ * @description 発行＝負債精算 + 在庫加算（`penaltyTicketCount += count`）。
  */
 export interface PenaltyTicketIssueResult {
   ticketId: string;
@@ -176,9 +191,21 @@ export interface PenaltyTicketIssueResult {
   debtBefore: number;
   debtAfter: number;
   displayBalance: number;
-  balanceMinutes: number;
+  switchMinutes: number;
   penaltyMinutes: number;
   issuablePenaltyTicketCount: number;
+  /** 発行後の在庫枚数 */
+  penaltyTicketCount: number;
+}
+
+/**
+ * POST penaltyTicketConsume レスポンス
+ * @description 保護者が在庫チケットを1枚消費する。残高・負債は変えない。
+ */
+export interface PenaltyTicketConsumeResult {
+  ticketId: string;
+  /** 消費後の在庫枚数 */
+  penaltyTicketCount: number;
 }
 
 /** GET/POST longVacation */
@@ -267,7 +294,7 @@ export interface ResultItem {
     kind: "bonus" | "penalty";
     code: string;
     label: string;
-    minutes: number;
+    points: number;
   }>;
   details: Array<{
     questId: string;
@@ -362,7 +389,8 @@ export type AdjustmentCode = string;
 export interface GradeAdjustment {
   kind: AdjustmentKind;
   code: AdjustmentCode;
-  minutes: number;
+  /** 加減点（pt）。ADR-005 でポイント通貨化に伴い分からポイントへ変更 */
+  points: number;
 }
 
 /** 定義済み調整項目 */
@@ -376,4 +404,86 @@ export interface AdjustmentDefinition {
 export interface GradeAdjustmentDefinitions {
   version: number;
   items: AdjustmentDefinition[];
+}
+
+/**
+ * ポイント交換の固定カタログ ID（契約 §3.11.1）。
+ * カタログは変更不可（Issue #38 スコープ・任意カタログ・YouTube 単品交換は非対応）。
+ */
+export type PointExchangeCatalogItemId =
+  | "snack-10"
+  | "switch-30"
+  | "switch-60"
+  | "cash-100"
+  | "penalty-ticket-100";
+
+/** ポイント交換申請ステータス */
+export type PointExchangeStatus = "pending" | "approved" | "rejected";
+
+/** POST pointExchangeRequests 送信 1件 */
+export interface PointExchangeRequestItemInput {
+  catalogItemId: PointExchangeCatalogItemId;
+  /** 1以上の整数 */
+  quantity: number;
+}
+
+/** GET pointExchangeRequests の申請内訳 1件 */
+export interface PointExchangeLineItem {
+  catalogItemId: PointExchangeCatalogItemId;
+  label: string;
+  quantity: number;
+  pointCost: number;
+  subtotalPoints: number;
+}
+
+/** 承認時（または承認予定）の副作用 */
+export interface PointExchangeEffects {
+  spentPoints: number;
+  addedSwitchMinutes: number;
+  consumedPenaltyTickets: number;
+}
+
+/** GET pointExchangeRequests 1件（契約 §3.11.1） */
+export interface PointExchangeRequest {
+  id: string;
+  status: PointExchangeStatus;
+  requestedAt: string;
+  /** 未決定は空文字 */
+  decidedAt: string;
+  items: PointExchangeLineItem[];
+  totalPoints: number;
+  effects: PointExchangeEffects;
+  /** 却下理由（任意）。未指定は空文字 */
+  rejectReason: string;
+}
+
+/** GET pointExchangeRequests（契約 §3.11.1・子ども `/rewards`／保護者 `/parent/rewards` 共用） */
+export interface PointExchangeRequestsData {
+  month: string;
+  items: PointExchangeRequest[];
+}
+
+/** POST pointExchangeRequests レスポンス（子ども申請・pending 作成のみ） */
+export interface PointExchangeCreateResult {
+  id: string;
+  status: "pending";
+  totalPoints: number;
+  /** 申請時点の残高（このリクエストでは減らない） */
+  balancePoints: number;
+}
+
+/** POST pointExchangeDecision の decision */
+export type PointExchangeDecision = "approve" | "reject";
+
+/** POST pointExchangeDecision レスポンス（承認／却下共用） */
+export interface PointExchangeDecisionResult {
+  id: string;
+  status: PointExchangeStatus;
+  /** 承認時のみ */
+  spentPoints?: number;
+  balancePoints: number;
+  /** 承認時のみ */
+  switchMinutes?: number;
+  /** 承認時のみ */
+  penaltyTicketCount?: number;
 }

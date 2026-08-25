@@ -1,8 +1,8 @@
 /**
  * @file PenaltyTicketIssueSection
  * @description 保護者向けペナルティチケット発行 UI。
- *   1枚 = 60分即精算。issuablePenaltyTicketCount === 0 のとき disabled。
- *   子ども画面には置かない。actor は常に parent。
+ *   1枚 = 60分精算 + 在庫加算（penaltyTicketCount += count）。issuablePenaltyTicketCount === 0 のとき disabled。
+ *   発行した在庫の消費は PenaltyTicketConsumeSection の担当。子ども画面には置かない。actor は常に parent。
  */
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -19,14 +19,14 @@ import {
 
 /**
  * @typedef {object} PenaltyTicketIssueSectionProps
- * @property {number} balanceMinutes - ご褒美残高
+ * @property {number} switchMinutes - ご褒美残高
  * @property {number} penaltyMinutes - タイマー超過分
  * @property {number} debtMinutes - 合算負債
  * @property {number} [issuablePenaltyTicketCount] - 発行可能枚数（未指定時は算出）
  */
 export interface PenaltyTicketIssueSectionProps {
   /** @type {number} ご褒美残高 */
-  balanceMinutes: number;
+  switchMinutes: number;
   /** @type {number} タイマー超過分 */
   penaltyMinutes: number;
   /** @type {number} 合算負債 */
@@ -41,7 +41,7 @@ export interface PenaltyTicketIssueSectionProps {
  * @returns {JSX.Element} 発行 UI
  */
 export function PenaltyTicketIssueSection({
-  balanceMinutes,
+  switchMinutes,
   penaltyMinutes,
   debtMinutes,
   issuablePenaltyTicketCount: issuableProp,
@@ -86,10 +86,10 @@ export function PenaltyTicketIssueSection({
       <dl className="mb-4 grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
         <dt className="text-muted">ご褒美残高</dt>
         <dd
-          className={balanceMinutes < 0 ? "font-semibold text-danger" : "text-ink"}
+          className={switchMinutes < 0 ? "font-semibold text-danger" : "text-ink"}
           data-testid="issue-balance-minutes"
         >
-          {balanceMinutes}分
+          {switchMinutes}分
         </dd>
         <dt className="text-muted">タイマー超過</dt>
         <dd data-testid="issue-penalty-minutes">{penaltyMinutes}分</dd>

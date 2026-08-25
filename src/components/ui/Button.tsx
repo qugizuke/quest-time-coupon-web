@@ -13,6 +13,7 @@ export type ButtonVariant =
   | "danger"
   | "ghost"
   | "navResults"
+  | "navRewards"
   | "navTimer";
 
 /**
@@ -45,6 +46,8 @@ const variantClass: Record<ButtonVariant, string> = {
   /** Figma ホーム「採点結果をみる」 */
   navResults:
     "border-0 bg-nav-results text-success-deep hover:brightness-95",
+  /** ホーム「ポイントを交換する」（Issue #38） */
+  navRewards: "border-0 bg-nav-rewards text-ink-brand hover:brightness-95",
   /** Figma ホーム「タイマーをスタート」 */
   navTimer: "border-0 bg-nav-timer text-timer-ink hover:brightness-95",
 };

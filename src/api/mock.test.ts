@@ -692,7 +692,7 @@ describe("mockApi questExemptions 後付け救済・未来日除外", () => {
     resetMockStore();
   });
 
-  it("後付け免除で未 ack の未登録 -60 を exempt に置換し確認できない", async () => {
+  it("後付け免除で未 ack の未登録 -100 を exempt に置換し確認できない", async () => {
     const date = "2026-07-01";
     vi.setSystemTime(new Date(2026, 6, 1, 21, 30, 0));
 
@@ -708,7 +708,7 @@ describe("mockApi questExemptions 後付け救済・未来日除外", () => {
     }>("results");
     const missed = before.items.find((i) => i.date === date);
     expect(missed?.reasonCode).toBe("unregistered");
-    expect(missed?.totalPoints).toBe(-60);
+    expect(missed?.totalPoints).toBe(-100);
     expect(missed?.requiresAck).toBe(true);
 
     const homeBefore = await mockApi<HomeData>("home", undefined, { date });
@@ -752,23 +752,26 @@ describe("mockApi questExemptions 後付け救済・未来日除外", () => {
     expect(homeAfter.displayBalance).toBe(balanceBefore);
   });
 
-  it("後付け免除で ack 済み未登録の -60 を残高へ冪等復元する", async () => {
+  it("後付け免除で ack 済み未登録の -100 を残高へ冪等復元する", async () => {
     const date = "2026-07-02";
     vi.setSystemTime(new Date(2026, 6, 2, 21, 30, 0));
 
     await mockApi<HomeData>("home", undefined, { date });
     const homeBeforeAck = await mockApi<HomeData>("home", undefined, { date });
-    const balanceBeforeAck = homeBeforeAck.displayBalance;
+    const pointsBeforeAck = homeBeforeAck.balancePoints;
 
-    const ack = await mockApi<{ appliedDelta: number; displayBalance: number }>(
+    // ADR-005: resultsAck はポイントだけを更新する（Switch時間残高は不変）。
+    // ポイントは 0 未満に落ちないため、初期残高 0 に -100 を適用しても差分は 0 になる。
+    const ack = await mockApi<{ appliedDelta: number; balancePoints: number }>(
       "resultsAck",
       {
         method: "POST",
         body: JSON.stringify({ date }),
       },
     );
-    expect(ack.appliedDelta).toBe(-60);
-    expect(ack.displayBalance).toBe(Math.max(0, balanceBeforeAck - 60));
+    const expectedDelta = Math.max(0, pointsBeforeAck - 100) - pointsBeforeAck;
+    expect(ack.appliedDelta).toBe(expectedDelta);
+    expect(ack.balancePoints).toBe(Math.max(0, pointsBeforeAck - 100));
 
     const exemption = await mockApi<{ changedDates: string[] }>("questExemptions", {
       method: "POST",
@@ -777,7 +780,7 @@ describe("mockApi questExemptions 後付け救済・未来日除外", () => {
     expect(exemption.changedDates).toContain(date);
 
     const homeAfter = await mockApi<HomeData>("home", undefined, { date });
-    expect(homeAfter.displayBalance).toBe(balanceBeforeAck);
+    expect(homeAfter.balancePoints).toBe(pointsBeforeAck);
 
     const results = await mockApi<{
       items: Array<{ date: string; reasonCode: string; totalPoints: number }>;
@@ -790,7 +793,7 @@ describe("mockApi questExemptions 後付け救済・未来日除外", () => {
       body: JSON.stringify({ op: "add", startDate: date, endDate: date }),
     });
     const homeIdempotent = await mockApi<HomeData>("home", undefined, { date });
-    expect(homeIdempotent.displayBalance).toBe(balanceBeforeAck);
+    expect(homeIdempotent.balancePoints).toBe(pointsBeforeAck);
   });
 
   it("未来の免除日は results に載せない", async () => {
@@ -846,11 +849,12 @@ describe("mockApi questExemptions 後付け救済・未来日除外", () => {
     expect(past?.requiresAck).toBe(true);
     expect(past?.acknowledged).toBe(false);
 
+    // ポイントは 0 未満に落ちないため、初期残高 0 に -100 を適用しても差分は 0 になる。
     const ack = await mockApi<{ appliedDelta: number }>("resultsAck", {
       method: "POST",
       body: JSON.stringify({ date: pastDate }),
     });
-    expect(ack.appliedDelta).toBe(-60);
+    expect(ack.appliedDelta).toBe(0);
 
     // 当日（免除）自体の ack は引き続き拒否
     await expect(

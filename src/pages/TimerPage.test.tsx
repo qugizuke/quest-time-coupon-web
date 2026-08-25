@@ -53,7 +53,7 @@ describe("TimerPage", () => {
         timerBlockCount: 1,
         canStartTimer: false,
         displayBalance: 60,
-        balanceMinutes: 60,
+        switchMinutes: 60,
       }),
     );
 
@@ -74,7 +74,7 @@ describe("TimerPage", () => {
     renderTimer(
       buildHomeData({
         displayBalance: 0,
-        balanceMinutes: 0,
+        switchMinutes: 0,
         debtMinutes: 0,
         unacknowledgedCount: 0,
         canStartTimer: false,
@@ -90,7 +90,7 @@ describe("TimerPage", () => {
     renderTimer(
       buildHomeData({
         displayBalance: 0,
-        balanceMinutes: 0,
+        switchMinutes: 0,
         penaltyMinutes: 15,
         debtMinutes: 15,
         canStartTimer: false,
@@ -109,7 +109,7 @@ describe("TimerPage", () => {
     renderTimer(
       buildHomeData({
         displayBalance: 10,
-        balanceMinutes: 10,
+        switchMinutes: 10,
         penaltyMinutes: 5,
         debtMinutes: 5,
         canStartTimer: true,
@@ -126,7 +126,7 @@ describe("TimerPage", () => {
     renderTimer(
       buildHomeData({
         displayBalance: -30,
-        balanceMinutes: -30,
+        switchMinutes: -30,
         penaltyMinutes: 0,
         debtMinutes: 30,
         canStartTimer: false,
@@ -145,7 +145,7 @@ describe("TimerPage", () => {
     renderTimer(
       buildHomeData({
         displayBalance: 30,
-        balanceMinutes: 30,
+        switchMinutes: 30,
         unacknowledgedCount: 0,
         canStartTimer: true,
       }),

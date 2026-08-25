@@ -51,10 +51,12 @@ function buildCompleteDraft(): QuestDraft {
 function buildHome(overrides: Partial<HomeData> = {}): HomeData {
   return {
     displayBalance: 60,
-    balanceMinutes: 60,
+    balancePoints: 0,
+    switchMinutes: 60,
     penaltyMinutes: 0,
     debtMinutes: 0,
     issuablePenaltyTicketCount: 0,
+    penaltyTicketCount: 0,
     today: todayLocal(),
     todayStatus: "unanswered",
     questAction: "start",
@@ -62,6 +64,7 @@ function buildHome(overrides: Partial<HomeData> = {}): HomeData {
     canStartTimer: true,
     timerBlockCount: 0,
     isLongVacation: false,
+    isVacationTransition: false,
     isExemptToday: false,
     isWeekendEve: false,
     registrationReopen: null,

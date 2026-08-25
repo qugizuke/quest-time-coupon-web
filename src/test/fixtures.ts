@@ -12,7 +12,7 @@ import { normalizeBalanceDebtFields } from "@/lib/balanceDebt";
  */
 export function buildHomeData(overrides: Partial<HomeData> = {}): HomeData {
   const balance = normalizeBalanceDebtFields({
-    balanceMinutes: overrides.balanceMinutes ?? overrides.displayBalance ?? 60,
+    switchMinutes: overrides.switchMinutes ?? overrides.displayBalance ?? 60,
     displayBalance: overrides.displayBalance,
     penaltyMinutes: overrides.penaltyMinutes ?? 0,
     debtMinutes: overrides.debtMinutes,
@@ -29,6 +29,7 @@ export function buildHomeData(overrides: Partial<HomeData> = {}): HomeData {
       balance.displayBalance > 0 && balance.penaltyMinutes === 0,
     timerBlockCount: 0,
     isLongVacation: false,
+    isVacationTransition: false,
     isExemptToday: false,
     isWeekendEve: false,
     registrationReopen: null,
@@ -55,7 +56,7 @@ export function buildParentHomeData(
   overrides: Partial<ParentHomeData> = {},
 ): ParentHomeData {
   const balance = normalizeBalanceDebtFields({
-    balanceMinutes: overrides.balanceMinutes ?? overrides.displayBalance ?? 60,
+    switchMinutes: overrides.switchMinutes ?? overrides.displayBalance ?? 60,
     displayBalance: overrides.displayBalance,
     penaltyMinutes: overrides.penaltyMinutes ?? 0,
     debtMinutes: overrides.debtMinutes,
@@ -75,6 +76,7 @@ export function buildParentHomeData(
     },
     isExemptToday: false,
     isLongVacation: false,
+    isVacationTransition: false,
     longVacation: { startDate: "", endDate: "", active: false },
     bedtimeHour: 21,
     canEditBedtimeAsParent: false,

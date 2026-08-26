@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
  * @property {boolean} open - 表示中か
  * @property {() => void} onClose - 閉じる
  * @property {string} title - タイトル
+ * @property {ReactNode} [titleIcon] - タイトル先頭のアイコン
  * @property {ReactNode} children - 本文
  */
 interface DialogProps {
@@ -19,6 +20,8 @@ interface DialogProps {
   onClose: () => void;
   /** @type {string} タイトル */
   title: string;
+  /** @type {ReactNode} タイトル先頭のアイコン */
+  titleIcon?: ReactNode;
   /** @type {ReactNode} 本文 */
   children: ReactNode;
 }
@@ -28,7 +31,13 @@ interface DialogProps {
  * @param {DialogProps} props - props
  * @returns {JSX.Element | null} ダイアログ
  */
-export function Dialog({ open, onClose, title, children }: DialogProps) {
+export function Dialog({
+  open,
+  onClose,
+  title,
+  titleIcon,
+  children,
+}: DialogProps) {
   useEffect(() => {
     if (!open) return;
 
@@ -63,9 +72,15 @@ export function Dialog({ open, onClose, title, children }: DialogProps) {
         className="relative z-10 flex max-h-[85vh] w-full max-w-lg flex-col rounded-card border-4 border-border-soft bg-surface shadow-[var(--shadow-card)]"
       >
         <div className="border-b border-border-soft px-4 py-3">
-          <h2 id="dialog-title" className="text-app-lg font-bold text-ink">
-            {title}
-          </h2>
+          <div className="flex items-center gap-2">
+            {titleIcon}
+            <h2
+              id="dialog-title"
+              className={`text-app-lg text-ink ${titleIcon ? "" : "font-bold"}`}
+            >
+              {title}
+            </h2>
+          </div>
         </div>
         <div className="overflow-y-auto px-4 py-4 text-ink">{children}</div>
         <div className="border-t border-border-soft px-4 py-3">

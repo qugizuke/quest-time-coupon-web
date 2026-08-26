@@ -2,7 +2,7 @@
  * @file QuestConfirmPage
  * @description 回答一覧の最終確認と登録。条件付きで翌日起床時刻を設定する（Issue #16）。
  *   長期休み最終日（翌日平日）は起床 UI 非表示・wakePromise 未送信（Functions が 07:15 を書く）。
- *   Figma kid-quest-confirm の横向き2カラム（左回答／右 CTA）に寄せる（Issue #19）。
+ *   Figma kid-quest-confirm の番号付き回答一覧／起床カード／下部 CTA に寄せる（Issue #68）。
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -11,7 +11,7 @@ import { postAnswers } from "@/api/client";
 import { homeQuery, longVacationQuery, queryKeys } from "@/api/queries";
 import { ChildPageFrame } from "@/components/layout/ChildPageFrame";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import { StatusBadge, type StatusBadgeTone } from "@/components/ui/StatusBadge";
 import { useDailyQuests } from "@/hooks/useDailyQuests";
 import { todayLocal } from "@/lib/date";
 import {
@@ -111,6 +111,17 @@ function buildConfirmationItems(
 function wakeUpLabel(time: SelectableWakeTime): string {
   const [h, m] = time.split(":");
   return `${Number(h)}:${m}`;
+}
+
+/**
+ * 回答値に対応するステータスピルの色を返す
+ * @param {ChildAnswer} childAnswer - 子ども回答
+ * @returns {StatusBadgeTone} ステータス色
+ */
+function answerBadgeTone(childAnswer: ChildAnswer): StatusBadgeTone {
+  if (childAnswer === 1) return "success";
+  if (childAnswer === 0) return "warning";
+  return "muted";
 }
 
 /**
@@ -256,86 +267,105 @@ export function QuestConfirmPage() {
 
   return (
     <ChildPageFrame vacationMode={vacationMode}>
-      <h1 className="mb-4 text-app-lg font-bold">最後の確認</h1>
+      <div className="flex flex-1 flex-col gap-4">
+        <header className="flex flex-col gap-2 py-4">
+          <h1 className="text-2xl leading-8 text-ink">回答のまとめ</h1>
+          <p className="text-base text-ink-brand-sub">
+            登録する前にかくにんしよう
+          </p>
+        </header>
 
-      {/*
-        Figma kid-quest-confirm: 左に回答一覧、右に起床＋登録／修正 CTA。
-        縦・狭幅のみ1列。登録 CTA は緑（success）。
-      */}
-      <div className="grid gap-4 md:grid-cols-[minmax(0,1.5fr)_minmax(240px,0.9fr)] md:items-start">
-        <Card className="border-4 p-4">
-          <ul className="flex flex-col gap-2">
-            {confirmationItems.map((item) => (
-              <li
-                key={item.questId}
-                className="flex justify-between gap-3 rounded-default border border-border-soft bg-surface-soft px-4 py-3"
+        <ol className="flex flex-col gap-3">
+          {confirmationItems.map((item, index) => (
+            <li
+              key={item.questId}
+              className="flex items-center gap-4 rounded-card bg-surface p-4 shadow-[var(--shadow-card)]"
+            >
+              <span className="font-display shrink-0 text-base text-muted">
+                {index + 1}
+              </span>
+              <span className="min-w-0 flex-1 text-sm leading-5 text-ink">
+                {item.title}
+              </span>
+              <StatusBadge tone={answerBadgeTone(item.childAnswer)}>
+                {childAnswerLabel(
+                  item.childAnswer,
+                  "default",
+                  item.questId,
+                  liveGradingModeForLabel(item.questId, item.childAnswer),
+                )}
+              </StatusBadge>
+            </li>
+          ))}
+        </ol>
+
+        {showWakeUp && (
+          <section
+            className="mt-2 flex flex-col gap-4 rounded-card bg-surface-warm p-6 shadow-[var(--shadow-card)]"
+            data-testid="wake-up-section"
+          >
+            <div className="flex items-center gap-3">
+              <span
+                className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-white"
+                aria-hidden="true"
               >
-                <span className="min-w-0">{item.title}</span>
-                <span className="shrink-0 font-medium text-ink">
-                  {childAnswerLabel(
-                    item.childAnswer,
-                    "default",
-                    item.questId,
-                    liveGradingModeForLabel(item.questId, item.childAnswer),
-                  )}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Card>
-
-        <div className="flex flex-col gap-4">
-          {showWakeUp && (
-            <Card data-testid="wake-up-section">
-              <h2 className="mb-3 text-base font-bold">明日の起きる時間</h2>
-              <div className="flex flex-wrap gap-2">
-                {wakeUpOptions.map((option) => {
-                  const selected = wakeUpTime === option;
-                  return (
-                    <button
-                      key={option}
-                      type="button"
-                      onClick={() => setWakeUpTime(option)}
-                      className={[
-                        "min-h-touch rounded-default px-4 text-base",
-                        selected
-                          ? "border-[3px] border-info bg-info-soft text-info"
-                          : "border-2 border-border bg-surface text-ink",
-                      ].join(" ")}
-                    >
-                      {wakeUpLabel(option)}
-                    </button>
-                  );
-                })}
-              </div>
-            </Card>
-          )}
-
-          {mutation.error && (
-            <p className="text-danger">
-              {mutation.error instanceof Error ? mutation.error.message : "登録失敗"}
+                ★
+              </span>
+              <h2 className="text-2xl leading-8 text-ink">
+                明日の起きる時間
+              </h2>
+            </div>
+            <p className="text-sm leading-5 text-ink-brand-sub">
+              明日は学校があるので、起きる時間をえらんでね
             </p>
-          )}
-          <div className="flex flex-col gap-3">
-            <Button
-              fullWidth
-              variant="success"
-              onClick={() => mutation.mutate()}
-              disabled={mutation.isPending}
-            >
-              登録する
-            </Button>
-            <Button
-              fullWidth
-              variant="secondary"
-              onClick={() => navigate("/quest")}
-            >
-              修正する
-            </Button>
-          </div>
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(72px,1fr))] gap-3">
+              {wakeUpOptions.map((option) => {
+                const selected = wakeUpTime === option;
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => setWakeUpTime(option)}
+                    className={[
+                      "min-h-touch rounded-[12px] px-3 text-sm transition-colors",
+                      selected
+                        ? "bg-primary text-white"
+                        : "bg-surface text-ink",
+                    ].join(" ")}
+                  >
+                    {wakeUpLabel(option)}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {mutation.error && (
+          <p className="text-danger">
+            {mutation.error instanceof Error ? mutation.error.message : "登録失敗"}
+          </p>
+        )}
+
+        <div className="mt-4 flex gap-4 pb-2">
+          <Button
+            className="flex-1"
+            variant="secondary"
+            onClick={() => navigate("/quest")}
+          >
+            修正する
+          </Button>
+          <Button
+            className="flex-1"
+            variant="success"
+            onClick={() => mutation.mutate()}
+            disabled={mutation.isPending}
+          >
+            登録する
+          </Button>
         </div>
       </div>
     </ChildPageFrame>
   );
 }
-

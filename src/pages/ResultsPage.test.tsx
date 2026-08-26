@@ -36,7 +36,8 @@ const apiMocks = vi.hoisted(() => ({
 vi.mock("@/api/client", () => apiMocks);
 
 vi.mock("@/lib/date", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/date")>("@/lib/date");
+  const actual =
+    await vi.importActual<typeof import("@/lib/date")>("@/lib/date");
   return {
     ...actual,
     todayLocal: () => "2026-07-30",
@@ -161,7 +162,10 @@ describe("ResultsPage reasonCode", () => {
     const msg = screen.getByTestId("reason-code-message");
     expect(msg.getAttribute("data-reason-code")).toBe("unregistered");
     expect(msg.textContent).toContain("クエストが登録されませんでした");
-    expect(msg.textContent).not.toContain("採点を拒否");
+    expect(msg.textContent).toContain("ポイントが引かれています");
+    expect(screen.getByTestId("results-detail-badge").textContent).toBe(
+      "未登録",
+    );
   });
 
   it("grade_rejected は拒否理由文を表示する", () => {
@@ -175,8 +179,77 @@ describe("ResultsPage reasonCode", () => {
     fireEvent.click(screen.getByTestId("results-day-2026-07-29"));
     const msg = screen.getByTestId("reason-code-message");
     expect(msg.getAttribute("data-reason-code")).toBe("grade_rejected");
-    expect(msg.textContent).toContain("ママが採点を拒否しました");
+    expect(msg.textContent).toContain("おうちの人が採点をキャンセルしました");
     expect(msg.textContent).not.toContain("登録されませんでした");
+    expect(screen.getByTestId("results-detail-badge").textContent).toBe(
+      "採点キャンセル",
+    );
+  });
+
+  it("normal はごほうび獲得と3行の内訳を表示する", () => {
+    renderResults([
+      buildResult({
+        date: "2026-07-30",
+        reasonCode: "normal",
+        totalPoints: 70,
+        acknowledged: true,
+        breakdown: {
+          questPoints: 15,
+          onTimeBonus: 5,
+          perfectBonus: 50,
+          adjustmentsSum: 0,
+          bedtimePrepPenalty: 0,
+        },
+      }),
+    ]);
+    fireEvent.click(screen.getByTestId("results-day-2026-07-30"));
+
+    expect(
+      screen.getByRole("heading", { name: "2026年7月30日（木）" }),
+    ).toBeTruthy();
+    expect(screen.getByTestId("results-detail-badge").textContent).toBe(
+      "ごほうび獲得",
+    );
+    expect(screen.getByTestId("reason-code-message").textContent).toContain(
+      "ごほうびポイントを獲得しました",
+    );
+    const breakdown = screen.getByTestId("results-breakdown");
+    expect(within(breakdown).getByText("通常点（設問合算）")).toBeTruthy();
+    expect(within(breakdown).getByText("定時登録ボーナス")).toBeTruthy();
+    expect(within(breakdown).getByText("全達成ボーナス")).toBeTruthy();
+    expect(within(breakdown).getAllByRole("listitem")).toHaveLength(3);
+    expect(screen.getByTestId("results-back-to-week")).toBeTruthy();
+  });
+
+  it("breakdown 集計値をフォールバック表示し合計と整合する", () => {
+    renderResults([
+      buildResult({
+        date: "2026-07-30",
+        reasonCode: "normal",
+        totalPoints: 60,
+        acknowledged: true,
+        breakdown: {
+          questPoints: 15,
+          onTimeBonus: 5,
+          perfectBonus: 50,
+          adjustmentsSum: 5,
+          bedtimePrepPenalty: -15,
+        },
+      }),
+    ]);
+    fireEvent.click(screen.getByTestId("results-day-2026-07-30"));
+
+    const breakdown = screen.getByTestId("results-breakdown");
+    const items = within(breakdown).getAllByRole("listitem");
+    expect(items).toHaveLength(5);
+    expect(within(breakdown).getByText("寝る準備の虚偽ペナルティ")).toBeTruthy();
+    expect(within(breakdown).getByText("加減点調整")).toBeTruthy();
+
+    const rowSum = items.reduce((sum, li) => {
+      const match = li.textContent?.match(/([+-]?\d+)\s*(?:pt|分（旧）)/);
+      return sum + (match ? Number(match[1]) : 0);
+    }, 0);
+    expect(rowSum).toBe(60);
   });
 });
 
@@ -187,11 +260,15 @@ describe("ResultsPage week UI (#17)", () => {
     expect(screen.getByTestId("results-today-banner").textContent).toBe(
       "2026年7月30日（木）・今日",
     );
-    expect(screen.getByTestId("results-week-label").textContent).toContain("7月27日の週");
+    expect(screen.getByTestId("results-week-label").textContent).toContain(
+      "7月27日の週",
+    );
     expect(screen.getByTestId("results-day-2026-07-27")).toBeTruthy();
     expect(screen.getByTestId("results-day-2026-08-02")).toBeTruthy();
     expect(screen.getAllByText("— 結果なし")).toHaveLength(7);
-    expect(screen.getByTestId("results-weekly-total").textContent).toBe("+0分（旧）");
+    expect(screen.getByTestId("results-weekly-total").textContent).toBe(
+      "+0分（旧）",
+    );
   });
 
   it("未確認日はオレンジ枠と確認 CTA で強調する", () => {
@@ -244,7 +321,9 @@ describe("ResultsPage week UI (#17)", () => {
       }),
     ]);
     expect(screen.getByTestId("results-weekly-summary")).toBeTruthy();
-    expect(screen.getByTestId("results-weekly-total").textContent).toBe("+20分（旧）");
+    expect(screen.getByTestId("results-weekly-total").textContent).toBe(
+      "+20分（旧）",
+    );
   });
 
   it("免除日は閲覧でき、確認した CTA を出さない", () => {
@@ -288,9 +367,11 @@ describe("ResultsPage week UI (#17)", () => {
     expect(screen.getByTestId("results-day-detail")).toBeTruthy();
     fireEvent.click(screen.getByTestId("results-back-to-week"));
     fireEvent.click(screen.getByTestId("results-day-2026-07-28"));
-    expect(screen.getByTestId("reason-code-message").getAttribute("data-reason-code")).toBe(
-      "unregistered",
-    );
+    expect(
+      screen
+        .getByTestId("reason-code-message")
+        .getAttribute("data-reason-code"),
+    ).toBe("unregistered");
     expect(screen.getByTestId("results-ack-button")).toBeTruthy();
   });
 
@@ -311,7 +392,9 @@ describe("ResultsPage week UI (#17)", () => {
         requiresAck: true,
       }),
     ]);
-    expect(screen.getByTestId("results-week-label").textContent).toContain("7月27日の週");
+    expect(screen.getByTestId("results-week-label").textContent).toContain(
+      "7月27日の週",
+    );
     expect(screen.getByTestId("results-day-2026-07-29")).toBeTruthy();
   });
 
@@ -335,7 +418,9 @@ describe("ResultsPage week UI (#17)", () => {
       ],
       { initialPath: "/results?unacked=1" },
     );
-    expect(screen.getByTestId("results-week-label").textContent).toContain("7月20日の週");
+    expect(screen.getByTestId("results-week-label").textContent).toContain(
+      "7月20日の週",
+    );
     expect(screen.getByTestId("results-day-2026-07-21")).toBeTruthy();
   });
 
@@ -351,7 +436,9 @@ describe("ResultsPage week UI (#17)", () => {
     ]);
     // 未確認が無いので今週（7/27）から開始 → 前週へ
     fireEvent.click(screen.getByTestId("results-prev-week"));
-    expect(screen.getByTestId("results-week-label").textContent).toContain("7月20日の週");
+    expect(screen.getByTestId("results-week-label").textContent).toContain(
+      "7月20日の週",
+    );
     const day = screen.getByTestId("results-day-2026-07-21");
     expect(within(day).getByText(/免除/)).toBeTruthy();
   });
@@ -404,7 +491,9 @@ describe("ResultsPage week UI (#17)", () => {
       issuablePenaltyTicketCount: 0,
     });
     apiMocks.fetchHome.mockRejectedValue(new Error("home refetch failed"));
-    apiMocks.fetchResults.mockRejectedValue(new Error("results refetch failed"));
+    apiMocks.fetchResults.mockRejectedValue(
+      new Error("results refetch failed"),
+    );
 
     renderResults([pending], { homeElement: <TimerPage /> });
     fireEvent.click(screen.getByTestId("results-day-2026-07-30"));
@@ -447,7 +536,9 @@ describe("ResultsPage week UI (#17)", () => {
       issuablePenaltyTicketCount: 0,
     });
     apiMocks.fetchHome.mockRejectedValue(new Error("home refetch failed"));
-    apiMocks.fetchResults.mockRejectedValue(new Error("results refetch failed"));
+    apiMocks.fetchResults.mockRejectedValue(
+      new Error("results refetch failed"),
+    );
 
     const queryClient = renderResults([first, second], {
       homeOverrides: {

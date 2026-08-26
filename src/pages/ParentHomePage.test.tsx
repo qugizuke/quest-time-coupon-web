@@ -3,32 +3,48 @@
  * @vitest-environment jsdom
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { queryKeys } from "@/api/queries";
 import { currentMonth } from "@/lib/month";
 import { ParentHomePage } from "@/pages/ParentHomePage";
 import { buildParentHomeData } from "@/test/fixtures";
-import type { ParentHomeData } from "@/types/api";
+import type {
+  ParentHomeData,
+  PointExchangeRequestsData,
+  RewardVoucherRefundRequestsData,
+} from "@/types/api";
 
 /**
  * 保護者ホームを描画する
  * @param {ParentHomeData} data - parentHome
+ * @param {PointExchangeRequestsData} [pendingExchange] - 交換承認待ち
+ * @param {RewardVoucherRefundRequestsData} [pendingRefund] - 戻し承認待ち
  * @returns {void}
  */
-function renderParentHome(data: ParentHomeData): void {
+function renderParentHome(
+  data: ParentHomeData,
+  pendingExchange: PointExchangeRequestsData = {
+    month: currentMonth(),
+    items: [],
+  },
+  pendingRefund: RewardVoucherRefundRequestsData = {
+    month: currentMonth(),
+    items: [],
+  },
+): void {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
   queryClient.setQueryData(queryKeys.parentHome, data);
   queryClient.setQueryData(
     queryKeys.pointExchangeRequests(currentMonth(), "pending"),
-    { month: currentMonth(), items: [] },
+    pendingExchange,
   );
   queryClient.setQueryData(
     queryKeys.rewardVoucherRefundRequests(currentMonth(), "pending"),
-    { month: currentMonth(), items: [] },
+    pendingRefund,
   );
   render(
     <QueryClientProvider client={queryClient}>
@@ -91,6 +107,93 @@ describe("ParentHomePage penalty ticket", () => {
     expect(screen.getByTestId("consume-ticket-count").textContent).toBe("2枚");
     expect(
       screen.getByTestId("consume-open-confirm").hasAttribute("disabled"),
+    ).toBe(false);
+  });
+
+  it("交換・戻し承認待ちが 0 件のとき確認 CTA は disabled", () => {
+    renderParentHome(buildParentHomeData());
+
+    const exchangeCard = screen.getByTestId("point-exchange-pending-card");
+    const refundCard = screen.getByTestId("return-pending-card");
+
+    expect(
+      within(exchangeCard)
+        .getByRole("button", { name: "確認 →" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    expect(
+      within(refundCard)
+        .getByRole("button", { name: "確認 →" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
+  it("交換・戻し承認待ちがあるとき確認 CTA は有効", () => {
+    renderParentHome(
+      buildParentHomeData(),
+      {
+        month: currentMonth(),
+        items: [
+          {
+            id: "pex_pending_1",
+            status: "pending",
+            requestedAt: "2026-08-25T10:00:00+09:00",
+            decidedAt: "",
+            items: [
+              {
+                catalogItemId: "cash-100",
+                label: "100円",
+                quantity: 1,
+                pointCost: 100,
+                subtotalPoints: 100,
+              },
+            ],
+            totalPoints: 100,
+            effects: {
+              spentPoints: 100,
+              issuedRewardVouchers: { "cash-100": 1 },
+              consumedPenaltyTickets: 0,
+            },
+            rejectReason: "",
+          },
+        ],
+      },
+      {
+        month: currentMonth(),
+        items: [
+          {
+            id: "rvr_pending_1",
+            status: "pending",
+            requestedAt: "2026-08-25T10:00:00+09:00",
+            decidedAt: "",
+            items: [
+              {
+                catalogItemId: "cash-100",
+                label: "100円",
+                quantity: 1,
+                pointValue: 100,
+                subtotalPoints: 100,
+              },
+            ],
+            totalPoints: 100,
+            rejectReason: "",
+          },
+        ],
+      },
+    );
+
+    const exchangeCard = screen.getByTestId("point-exchange-pending-card");
+    const refundCard = screen.getByTestId("return-pending-card");
+
+    expect(
+      within(exchangeCard)
+        .getByRole("button", { name: "確認 →" })
+        .hasAttribute("disabled"),
+    ).toBe(false);
+    expect(
+      within(refundCard)
+        .getByRole("button", { name: "確認 →" })
+        .hasAttribute("disabled"),
     ).toBe(false);
   });
 

@@ -184,12 +184,17 @@ describe("ResultsPage week UI (#17)", () => {
   it("月曜始まりの週ナビと7日行を表示する", () => {
     renderResults([]);
     expect(screen.getByTestId("results-week-list")).toBeTruthy();
+    expect(screen.getByTestId("results-today-banner").textContent).toBe(
+      "2026年7月30日（木）・今日",
+    );
     expect(screen.getByTestId("results-week-label").textContent).toContain("7月27日の週");
     expect(screen.getByTestId("results-day-2026-07-27")).toBeTruthy();
     expect(screen.getByTestId("results-day-2026-08-02")).toBeTruthy();
+    expect(screen.getAllByText("— 結果なし")).toHaveLength(7);
+    expect(screen.getByTestId("results-weekly-total").textContent).toBe("+0分（旧）");
   });
 
-  it("未確認日は赤枠強調する", () => {
+  it("未確認日はオレンジ枠と確認 CTA で強調する", () => {
     renderResults([
       buildResult({
         date: "2026-07-28",
@@ -201,7 +206,45 @@ describe("ResultsPage week UI (#17)", () => {
     ]);
     const row = screen.getByTestId("results-day-2026-07-28");
     expect(row.getAttribute("data-unacked")).toBe("true");
-    expect(row.className).toContain("border-danger");
+    expect(row.className).toContain("border-primary");
+    expect(within(row).getByText("🔔 未確認")).toBeTruthy();
+    expect(within(row).getByText("確認する →")).toBeTruthy();
+  });
+
+  it("今日をピル・オレンジ枠・オレンジ曜日で強調する", () => {
+    renderResults([]);
+    const today = screen.getByTestId("results-day-2026-07-30");
+    expect(today.className).toContain("border-primary");
+    expect(within(today).getByText("今日")).toBeTruthy();
+    expect(within(today).getByText("木").className).toContain("bg-primary");
+  });
+
+  it("週間合計は確認済み結果のみを集計する", () => {
+    renderResults([
+      buildResult({
+        date: "2026-07-27",
+        reasonCode: "normal",
+        totalPoints: 30,
+        acknowledged: true,
+        requiresAck: true,
+      }),
+      buildResult({
+        date: "2026-07-28",
+        reasonCode: "normal",
+        totalPoints: 50,
+        acknowledged: false,
+        requiresAck: true,
+      }),
+      buildResult({
+        date: "2026-07-29",
+        reasonCode: "normal",
+        totalPoints: -10,
+        acknowledged: true,
+        requiresAck: true,
+      }),
+    ]);
+    expect(screen.getByTestId("results-weekly-summary")).toBeTruthy();
+    expect(screen.getByTestId("results-weekly-total").textContent).toBe("+20分（旧）");
   });
 
   it("免除日は閲覧でき、確認した CTA を出さない", () => {

@@ -190,6 +190,7 @@ describe("ParentRewardsPage", () => {
     renderParentRewards({ month: currentMonth(), items: [request] });
 
     fireEvent.click(screen.getByTestId(`parent-rewards-approve-open-${request.id}`));
+    fireEvent.click(screen.getByTestId(`parent-rewards-approve-submit-${request.id}`));
 
     await waitFor(() => {
       expect(postPointExchangeDecision).toHaveBeenCalledWith({
@@ -244,6 +245,9 @@ describe("ParentRewardsPage", () => {
       undefined,
       { penaltyTicketCount: 2 },
     );
+
+    fireEvent.click(screen.getByTestId(`parent-rewards-approve-open-${request.id}`));
+
     act(() => {
       queryClient.setQueryData(
         queryKeys.parentHome,
@@ -253,7 +257,7 @@ describe("ParentRewardsPage", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByTestId(`parent-rewards-approve-open-${request.id}`).hasAttribute("disabled"),
+        screen.getByTestId(`parent-rewards-approve-submit-${request.id}`).hasAttribute("disabled"),
       ).toBe(true);
     });
   });
@@ -305,6 +309,7 @@ describe("ParentRewardsPage", () => {
     expect(card.textContent).toContain("承認後の100円");
 
     fireEvent.click(screen.getByTestId(`parent-refund-approve-open-${request.id}`));
+    fireEvent.click(screen.getByTestId(`parent-refund-approve-submit-${request.id}`));
 
     await waitFor(() => {
       expect(postRewardVoucherRefundDecision).toHaveBeenCalledWith({
@@ -367,6 +372,9 @@ describe("ParentRewardsPage", () => {
       { month: currentMonth(), items: [] },
       { month: currentMonth(), items: [request] },
     );
+
+    fireEvent.click(screen.getByTestId(`parent-refund-approve-open-${request.id}`));
+
     act(() => {
       queryClient.setQueryData(
         queryKeys.parentHome,
@@ -384,7 +392,7 @@ describe("ParentRewardsPage", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByTestId(`parent-refund-approve-open-${request.id}`).hasAttribute("disabled"),
+        screen.getByTestId(`parent-refund-approve-submit-${request.id}`).hasAttribute("disabled"),
       ).toBe(true);
     });
   });
@@ -482,6 +490,17 @@ describe("ParentRewardsPage", () => {
     ).toBeTruthy();
   });
 
+
+  it("却下済み履歴に rejectReason を表示する", () => {
+    const rejected = buildPendingRequest({
+      id: "pex_rejected_reason",
+      status: "rejected",
+      decidedAt: "2026-08-26T10:00:00+09:00",
+      rejectReason: "今日はやめておこう",
+    });
+    renderParentRewards({ month: currentMonth(), items: [rejected] });
+    expect(screen.getByText("理由: 今日はやめておこう")).toBeTruthy();
+  });
   it("月選択を変えると物理券使用履歴も同じ月へ切り替える", async () => {
     const queryClient = renderParentRewards({ month: currentMonth(), items: [] });
     const previousMonth = shiftMonth(currentMonth(), -1);

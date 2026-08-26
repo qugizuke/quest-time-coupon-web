@@ -238,7 +238,10 @@ function RejectDecisionDialog({
         type="button"
         className="absolute inset-0 bg-overlay backdrop-blur-sm"
         aria-label="ダイアログを閉じる"
-        onClick={onCancel}
+        disabled={isPending}
+        onClick={() => {
+          if (!isPending) onCancel();
+        }}
       />
       <div
         role="dialog"
@@ -390,10 +393,18 @@ interface PendingCardBaseProps {
   shortageAlert?: ReactNode;
   processingSummary?: string | null;
   isProcessing: boolean;
+  approveOpen: boolean;
   approveDisabled: boolean;
-  onApprove: () => void;
+  approveSubmitDisabled: boolean;
+  approveConfirmMessage: string;
+  approveErrorMessage: string | null;
+  onApproveOpen: () => void;
+  onApproveCancel: () => void;
+  onApproveConfirm: () => void;
   onRejectOpen: () => void;
-  approveTestId: string;
+  approveOpenTestId: string;
+  approveSubmitTestId: string;
+  approvePanelTestId: string;
   rejectOpenTestId: string;
   cardClassName: string;
   itemTestId: string;
@@ -412,10 +423,18 @@ function PendingRequestCard({
   shortageAlert,
   processingSummary,
   isProcessing,
+  approveOpen,
   approveDisabled,
-  onApprove,
+  approveSubmitDisabled,
+  approveConfirmMessage,
+  approveErrorMessage,
+  onApproveOpen,
+  onApproveCancel,
+  onApproveConfirm,
   onRejectOpen,
-  approveTestId,
+  approveOpenTestId,
+  approveSubmitTestId,
+  approvePanelTestId,
   rejectOpenTestId,
   cardClassName,
   itemTestId,
@@ -442,24 +461,56 @@ function PendingRequestCard({
       <p className="text-base text-ink">{title}</p>
       <div className="flex flex-col gap-1">{details}</div>
       {shortageAlert}
-      <div className="flex justify-end gap-2">
-        <Button
-          className="min-w-[144px]"
-          disabled={approveDisabled}
-          onClick={onApprove}
-          data-testid={approveTestId}
+      {!approveOpen ? (
+        <div className="flex justify-end gap-2">
+          <Button
+            className="min-w-[144px]"
+            disabled={approveDisabled}
+            onClick={onApproveOpen}
+            data-testid={approveOpenTestId}
+          >
+            ✓ 承認する
+          </Button>
+          <button
+            type="button"
+            className="inline-flex min-h-touch min-w-[144px] items-center justify-center rounded-default border-[3px] border-border-parent-soft bg-surface px-6 py-3 text-lg font-semibold text-danger transition-colors hover:bg-surface-soft disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={onRejectOpen}
+            data-testid={rejectOpenTestId}
+          >
+            ✕ 却下
+          </button>
+        </div>
+      ) : (
+        <div
+          className="flex flex-col gap-3 rounded-default border border-border-soft bg-surface-warm p-4"
+          data-testid={approvePanelTestId}
         >
-          ✓ 承認する
-        </Button>
-        <button
-          type="button"
-          className="inline-flex min-h-touch min-w-[144px] items-center justify-center rounded-default border-[3px] border-border-parent-soft bg-surface px-6 py-3 text-lg font-semibold text-danger transition-colors hover:bg-surface-soft disabled:cursor-not-allowed disabled:opacity-40"
-          onClick={onRejectOpen}
-          data-testid={rejectOpenTestId}
-        >
-          ✕ 却下
-        </button>
-      </div>
+          <p className="text-sm text-ink">{approveConfirmMessage}</p>
+          {approveErrorMessage && (
+            <p className="text-sm text-danger" role="alert">
+              {approveErrorMessage}
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button
+              className="min-w-[144px]"
+              disabled={approveSubmitDisabled}
+              onClick={onApproveConfirm}
+              data-testid={approveSubmitTestId}
+            >
+              確認して承認
+            </Button>
+            <Button
+              className="min-w-[144px]"
+              variant="secondary"
+              disabled={isProcessing}
+              onClick={onApproveCancel}
+            >
+              キャンセル
+            </Button>
+          </div>
+        </div>
+      )}
     </li>
   );
 }
@@ -485,10 +536,12 @@ function PointExchangeRequestCard({
   onFeedback,
 }: PointExchangeRequestCardProps) {
   const queryClient = useQueryClient();
+  const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
 
   function invalidateAfterDecision(): void {
+    setApproveOpen(false);
     setRejectOpen(false);
     setRejectReason("");
     void queryClient.invalidateQueries({ queryKey: ["pointExchangeRequests"] });
@@ -534,13 +587,18 @@ function PointExchangeRequestCard({
   if (!isPending) {
     return (
       <li
-        className="flex items-center gap-2 rounded-default bg-surface px-3 py-3"
+        className="flex flex-col gap-1 rounded-default bg-surface px-3 py-3"
         data-testid={`parent-rewards-item-${request.id}`}
       >
-        <p className="flex-1 text-sm text-ink">{formatExchangeHistoryRow(request)}</p>
-        <StatusBadge tone={pointExchangeStatusTone(request.status)}>
-          {POINT_EXCHANGE_STATUS_LABEL[request.status]}
-        </StatusBadge>
+        <div className="flex items-center gap-2">
+          <p className="flex-1 text-sm text-ink">{formatExchangeHistoryRow(request)}</p>
+          <StatusBadge tone={pointExchangeStatusTone(request.status)}>
+            {POINT_EXCHANGE_STATUS_LABEL[request.status]}
+          </StatusBadge>
+        </div>
+        {request.status === "rejected" && request.rejectReason && (
+          <p className="text-sm text-muted">理由: {request.rejectReason}</p>
+        )}
       </li>
     );
   }
@@ -601,10 +659,20 @@ function PointExchangeRequestCard({
         }
         processingSummary={processingSummary}
         isProcessing={decisionMutation.isPending && decisionMutation.variables?.decision === "approve"}
+        approveOpen={approveOpen}
         approveDisabled={penaltyTicketShortage || decisionMutation.isPending}
-        onApprove={() => decisionMutation.mutate({ decision: "approve" })}
+        approveSubmitDisabled={penaltyTicketShortage || decisionMutation.isPending}
+        approveConfirmMessage={`${request.totalPoints}pt を消費して承認します。よろしいですか？`}
+        approveErrorMessage={
+          decisionMutation.error instanceof Error ? decisionMutation.error.message : null
+        }
+        onApproveOpen={() => setApproveOpen(true)}
+        onApproveCancel={() => setApproveOpen(false)}
+        onApproveConfirm={() => decisionMutation.mutate({ decision: "approve" })}
         onRejectOpen={() => setRejectOpen(true)}
-        approveTestId={`parent-rewards-approve-open-${request.id}`}
+        approveOpenTestId={`parent-rewards-approve-open-${request.id}`}
+        approveSubmitTestId={`parent-rewards-approve-submit-${request.id}`}
+        approvePanelTestId={`parent-rewards-approve-panel-${request.id}`}
         rejectOpenTestId={`parent-rewards-reject-open-${request.id}`}
         cardClassName="bg-surface-warm"
         itemTestId={`parent-rewards-item-${request.id}`}
@@ -649,10 +717,12 @@ function RewardVoucherRefundRequestCard({
   onFeedback,
 }: RewardVoucherRefundRequestCardProps) {
   const queryClient = useQueryClient();
+  const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
 
   function invalidateAfterDecision(): void {
+    setApproveOpen(false);
     setRejectOpen(false);
     setRejectReason("");
     void queryClient.invalidateQueries({
@@ -700,13 +770,18 @@ function RewardVoucherRefundRequestCard({
   if (!isPending) {
     return (
       <li
-        className="flex items-center gap-2 rounded-default bg-surface px-3 py-3"
+        className="flex flex-col gap-1 rounded-default bg-surface px-3 py-3"
         data-testid={`parent-refund-item-${request.id}`}
       >
-        <p className="flex-1 text-sm text-ink">{formatRefundHistoryRow(request)}</p>
-        <StatusBadge tone={pointExchangeStatusTone(request.status)}>
-          {POINT_EXCHANGE_STATUS_LABEL[request.status]}
-        </StatusBadge>
+        <div className="flex items-center gap-2">
+          <p className="flex-1 text-sm text-ink">{formatRefundHistoryRow(request)}</p>
+          <StatusBadge tone={pointExchangeStatusTone(request.status)}>
+            {POINT_EXCHANGE_STATUS_LABEL[request.status]}
+          </StatusBadge>
+        </div>
+        {request.status === "rejected" && request.rejectReason && (
+          <p className="text-sm text-muted">理由: {request.rejectReason}</p>
+        )}
       </li>
     );
   }
@@ -765,10 +840,20 @@ function RewardVoucherRefundRequestCard({
         }
         processingSummary={processingSummary}
         isProcessing={decisionMutation.isPending && decisionMutation.variables?.decision === "approve"}
+        approveOpen={approveOpen}
         approveDisabled={hasVoucherShortage || decisionMutation.isPending}
-        onApprove={() => decisionMutation.mutate({ decision: "approve" })}
+        approveSubmitDisabled={hasVoucherShortage || decisionMutation.isPending}
+        approveConfirmMessage={`${request.totalPoints}pt を戻して承認します。よろしいですか？`}
+        approveErrorMessage={
+          decisionMutation.error instanceof Error ? decisionMutation.error.message : null
+        }
+        onApproveOpen={() => setApproveOpen(true)}
+        onApproveCancel={() => setApproveOpen(false)}
+        onApproveConfirm={() => decisionMutation.mutate({ decision: "approve" })}
         onRejectOpen={() => setRejectOpen(true)}
-        approveTestId={`parent-refund-approve-open-${request.id}`}
+        approveOpenTestId={`parent-refund-approve-open-${request.id}`}
+        approveSubmitTestId={`parent-refund-approve-submit-${request.id}`}
+        approvePanelTestId={`parent-refund-approve-panel-${request.id}`}
         rejectOpenTestId={`parent-refund-reject-open-${request.id}`}
         cardClassName="bg-surface"
         itemTestId={`parent-refund-item-${request.id}`}

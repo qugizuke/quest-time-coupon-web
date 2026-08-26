@@ -366,7 +366,7 @@ export function HomePage() {
         onClose={() => setBedtimeModalOpen(false)}
         selectedHour={bedtimeHour}
         onSelect={handleBedtimeChange}
-        disabled={registrationMutation.isPending}
+        processing={registrationMutation.isPending}
       />
     </ChildPageFrame>
   );

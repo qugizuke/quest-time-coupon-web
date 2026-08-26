@@ -4,7 +4,7 @@
  * @vitest-environment jsdom
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { queryKeys } from "@/api/queries";
@@ -150,6 +150,32 @@ describe("QuestConfirmPage", () => {
 
     expect(screen.getByTestId("wake-up-section")).toBeTruthy();
     expect(screen.getByText("明日の起きる時間")).toBeTruthy();
+  });
+
+  it("Figma寄せ: サブタイトル・CTA順・起床チップ選択を表示する", () => {
+    renderConfirm(
+      buildHome({
+        isVacationMode: false,
+      }),
+    );
+
+    expect(screen.getByText("回答のまとめ")).toBeTruthy();
+    expect(screen.getByText("登録する前にかくにんしよう")).toBeTruthy();
+
+    const fixBtn = screen.getByRole("button", { name: "修正する" });
+    const submitBtn = screen.getByRole("button", { name: "登録する" });
+    expect(
+      fixBtn.compareDocumentPosition(submitBtn) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    const defaultChip = screen.getByRole("button", { name: "8:00" });
+    expect(defaultChip.getAttribute("aria-pressed")).toBe("true");
+
+    const otherChip = screen.getByRole("button", { name: "7:00" });
+    fireEvent.click(otherChip);
+    expect(otherChip.getAttribute("aria-pressed")).toBe("true");
+    expect(defaultChip.getAttribute("aria-pressed")).toBe("false");
   });
 
   it("長期休みの中日は平日でも起床 UI を表示する", () => {

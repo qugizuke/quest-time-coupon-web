@@ -113,7 +113,7 @@ describe("ParentHomePage parentHome", () => {
       }),
     });
     expect(screen.getByTestId("registration-reopen-card")).toBeTruthy();
-    expect(screen.getByText("締切超過")).toBeTruthy();
+    expect(screen.getByText("締切済み")).toBeTruthy();
   });
 
   it("再開フォーム展開時にタイマー候補を表示し初期値は1時間", () => {
@@ -143,7 +143,7 @@ describe("ParentHomePage parentHome", () => {
     expect(screen.getByText("再開する時間")).toBeTruthy();
   });
 
-  it("used 済みなら再開 CTA を出さない", () => {
+  it("used 済みならカードは表示しつつ再開 CTA を disabled にする", () => {
     renderParentPages({
       path: "/parent",
       parentHome: buildParentHome({
@@ -157,7 +157,12 @@ describe("ParentHomePage parentHome", () => {
         },
       }),
     });
-    expect(screen.queryByTestId("registration-reopen-card")).toBeNull();
+    expect(screen.getByTestId("registration-reopen-card")).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: "登録受付を再開" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
   });
 
   it("longVacation を parentHome から表示する", () => {

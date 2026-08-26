@@ -103,7 +103,7 @@ describe("HomePage", () => {
     expect(screen.getByTestId("exempt-message")).toBeTruthy();
     expect(screen.getByTestId("nav-results")).toBeTruthy();
     expect(
-      screen.queryByRole("button", { name: "⚔️ クエストをはじめる！" }),
+      screen.queryByRole("button", { name: "🎯 クエストをはじめる！" }),
     ).toBeNull();
   });
 
@@ -173,7 +173,7 @@ describe("HomePage", () => {
 
     expect(screen.getByTestId("reopen-active-hint")).toBeTruthy();
     const startButton = screen.getByRole("button", {
-      name: "⚔️ クエストをはじめる！",
+      name: "🎯 クエストをはじめる！",
     });
     expect(startButton.hasAttribute("disabled")).toBe(false);
   });
@@ -181,6 +181,7 @@ describe("HomePage", () => {
   it("負残高を表示し、発行 UI は出さない", () => {
     renderHome(
       buildHome({
+        balancePoints: -30,
         displayBalance: -30,
         switchMinutes: -30,
         debtMinutes: 30,
@@ -191,11 +192,50 @@ describe("HomePage", () => {
       }),
     );
 
-    expect(screen.getByTestId("balance-minutes").textContent).toBe("-30");
-    expect(screen.getByTestId("balance-debt-minutes").textContent).toContain(
-      "30分",
-    );
-    expect(screen.getByTestId("balance-child-hint")).toBeTruthy();
+    expect(screen.getByTestId("balance-points").textContent).toBe("-30");
+    expect(screen.queryByTestId("balance-minutes")).toBeNull();
+    expect(screen.getByTestId("point-debt-banner")).toBeTruthy();
     expect(screen.queryByTestId("penalty-ticket-issue-section")).toBeNull();
+  });
+
+  it("通常の平日も固定の就寝時刻をポイント直下に表示する", () => {
+    renderHome(buildHome());
+
+    expect(screen.getByTestId("bedtime-locked").textContent).toContain("21時");
+    expect(screen.queryByText("きょうの状態")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "🎯 クエストをはじめる！" }),
+    ).toBeTruthy();
+  });
+
+  it("未確認バナーからルールまでを Figma の順番で表示する", () => {
+    renderHome(buildHome({ unacknowledgedCount: 1 }));
+
+    const page = screen.getByTestId("home-page");
+    const children = Array.from(page.children);
+    const indexOfSection = (element: HTMLElement) => {
+      let section = element;
+      while (section.parentElement && section.parentElement !== page) {
+        section = section.parentElement;
+      }
+      return children.indexOf(section);
+    };
+
+    const unread = screen.getByRole("button", {
+      name: "採点結果を確認する（未確認あり！）",
+    });
+    const balance = screen.getByTestId("balance-display");
+    const bedtime = screen.getByTestId("bedtime-locked");
+    const quest = screen.getByRole("button", {
+      name: "🎯 クエストをはじめる！",
+    });
+    const results = screen.getByTestId("nav-results");
+    const rules = screen.getByRole("button", { name: "クエストのルール" });
+
+    expect(indexOfSection(unread)).toBeLessThan(indexOfSection(balance));
+    expect(indexOfSection(balance)).toBeLessThan(indexOfSection(bedtime));
+    expect(indexOfSection(bedtime)).toBeLessThan(indexOfSection(quest));
+    expect(indexOfSection(quest)).toBeLessThan(indexOfSection(results));
+    expect(indexOfSection(results)).toBeLessThan(indexOfSection(rules));
   });
 });

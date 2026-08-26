@@ -2,6 +2,7 @@
  * @file BalanceDisplay
  * @description ポイント残高と Switch/YouTube 時間残高（二財布・ADR-005）を分けて表示する。
  *   負数を丸めず、負債時は色とラベルを変える。タイマー超過ペナルティ表示とは混同しない（超過分は別行で明示）。
+ *   子どもホームの compact 表示ではポイントだけを大きく表示する。
  */
 import {
   calcDebtMinutes,
@@ -62,6 +63,27 @@ export function BalanceDisplay({
     debtMinutesProp ?? calcDebtMinutes(switchMinutes, penaltyMinutes);
   const hasDebt = debtMinutes > 0;
   const issuable = calcIssuableTicketCount(debtMinutes);
+
+  if (compact && typeof balancePoints === "number") {
+    return (
+      <div
+        className="flex flex-col items-center gap-2 text-center"
+        data-testid="balance-display"
+        data-has-debt={hasDebt ? "true" : "false"}
+      >
+        <p className="text-sm text-muted">いまのポイント</p>
+        <p className="flex items-baseline justify-center gap-1 text-ink">
+          <span
+            className="font-display text-app-xl leading-none"
+            data-testid="balance-points"
+          >
+            {balancePoints}
+          </span>
+          <span className="text-xl">pt</span>
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div

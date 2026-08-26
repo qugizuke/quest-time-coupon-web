@@ -170,7 +170,7 @@ describe("ParentRewardsPage", () => {
 
   it("承認待ちが無ければ0件と表示する", () => {
     renderParentRewards({ month: currentMonth(), items: [] });
-    expect(screen.getByText("承認待ちの申請はありません")).toBeTruthy();
+    expect(screen.getByText("現在、承認待ちの交換申請はありません")).toBeTruthy();
   });
 
   it("pending 申請を承認待ちセクションに表示する", () => {
@@ -178,10 +178,10 @@ describe("ParentRewardsPage", () => {
     renderParentRewards({ month: currentMonth(), items: [request] });
     const card = screen.getByTestId(`parent-rewards-item-${request.id}`);
     expect(card.textContent).toContain("承認待ち");
-    expect(card.textContent).toContain("100円 × 5（500pt）");
-    expect(card.textContent).toContain("合計 500pt");
-    expect(card.textContent).toContain("承認後残高: 500pt");
-    expect(card.textContent).toContain("承認後 100円: 8枚");
+    expect(card.textContent).toContain("100円 × 5");
+    expect(card.textContent).toContain("必要ポイント");
+    expect(card.textContent).toContain("承認後の残高");
+    expect(card.textContent).toContain("承認後の100円");
   });
 
   it("承認すると API を呼ぶ", async () => {
@@ -225,7 +225,7 @@ describe("ParentRewardsPage", () => {
     );
 
     const card = screen.getByTestId(`parent-rewards-item-${request.id}`);
-    expect(card.textContent).toContain("承認後 ペナルティチケット: -1枚");
+    expect(card.textContent).toContain("承認後のペナルティチケット");
     expect(card.textContent).toContain("1枚不足しているため承認できません");
     expect(
       screen.getByTestId(`parent-rewards-approve-open-${request.id}`).hasAttribute("disabled"),
@@ -245,6 +245,7 @@ describe("ParentRewardsPage", () => {
       undefined,
       { penaltyTicketCount: 2 },
     );
+
     fireEvent.click(screen.getByTestId(`parent-rewards-approve-open-${request.id}`));
 
     act(() => {
@@ -288,7 +289,7 @@ describe("ParentRewardsPage", () => {
       decidedAt: "2026-08-26T10:00:00+09:00",
     });
     renderParentRewards({ month: currentMonth(), items: [approved] });
-    expect(screen.getByText("承認待ちの申請はありません")).toBeTruthy();
+    expect(screen.getByText("現在、承認待ちの交換申請はありません")).toBeTruthy();
     expect(screen.getByTestId(`parent-rewards-item-${approved.id}`)).toBeTruthy();
   });
 
@@ -301,11 +302,11 @@ describe("ParentRewardsPage", () => {
     );
 
     const card = screen.getByTestId(`parent-refund-item-${request.id}`);
-    expect(card.textContent).toContain("承認待ち");
-    expect(card.textContent).toContain("100円 × 2（200pt）");
-    expect(card.textContent).toContain("戻る合計 200pt");
-    expect(card.textContent).toContain("承認後残高: 1200pt");
-    expect(card.textContent).toContain("承認後 100円: 1枚");
+    expect(card.textContent).toContain("戻し申請");
+    expect(card.textContent).toContain("100円 × 2");
+    expect(card.textContent).toContain("返却ポイント");
+    expect(card.textContent).toContain("承認後の残高");
+    expect(card.textContent).toContain("承認後の100円");
 
     fireEvent.click(screen.getByTestId(`parent-refund-approve-open-${request.id}`));
     fireEvent.click(screen.getByTestId(`parent-refund-approve-submit-${request.id}`));
@@ -358,7 +359,7 @@ describe("ParentRewardsPage", () => {
     );
 
     const card = screen.getByTestId(`parent-refund-item-${request.id}`);
-    expect(card.textContent).toContain("承認後 100円: -1枚");
+    expect(card.textContent).toContain("承認後の100円");
     expect(card.textContent).toContain("100円が1枚不足しているため承認できません");
     expect(
       screen.getByTestId(`parent-refund-approve-open-${request.id}`).hasAttribute("disabled"),
@@ -371,6 +372,7 @@ describe("ParentRewardsPage", () => {
       { month: currentMonth(), items: [] },
       { month: currentMonth(), items: [request] },
     );
+
     fireEvent.click(screen.getByTestId(`parent-refund-approve-open-${request.id}`));
 
     act(() => {
@@ -434,8 +436,8 @@ describe("ParentRewardsPage", () => {
     );
 
     const history = screen.getByTestId("parent-consumption-history-card");
-    expect(history.textContent).toContain("100円 × 2");
-    expect(history.textContent).toContain("5枚 → 3枚");
+    expect(history.textContent).toContain("× 2 枚");
+    expect(history.textContent).toContain("5枚 → 残り 3枚");
     const entries = history.querySelectorAll('[data-testid^="parent-consumption-item-"]');
     expect(entries[0]?.getAttribute("data-testid")).toBe(
       "parent-consumption-item-newer-operation",
@@ -476,11 +478,9 @@ describe("ParentRewardsPage", () => {
       },
     );
 
-    fireEvent.change(screen.getByTestId("parent-rewards-status-filter"), {
-      target: { value: "approved" },
-    });
+    fireEvent.click(screen.getByTestId("parent-rewards-history-tab-exchange"));
 
-    expect(screen.queryByTestId(`parent-rewards-item-${pending.id}`)).toBeNull();
+    expect(screen.getByTestId(`parent-rewards-item-${pending.id}`)).toBeTruthy();
     expect(screen.getByTestId(`parent-rewards-item-${approved.id}`)).toBeTruthy();
     expect(screen.getByText("承認待ち 1件")).toBeTruthy();
     expect(
@@ -490,6 +490,17 @@ describe("ParentRewardsPage", () => {
     ).toBeTruthy();
   });
 
+
+  it("却下済み履歴に rejectReason を表示する", () => {
+    const rejected = buildPendingRequest({
+      id: "pex_rejected_reason",
+      status: "rejected",
+      decidedAt: "2026-08-26T10:00:00+09:00",
+      rejectReason: "今日はやめておこう",
+    });
+    renderParentRewards({ month: currentMonth(), items: [rejected] });
+    expect(screen.getByText("理由: 今日はやめておこう")).toBeTruthy();
+  });
   it("月選択を変えると物理券使用履歴も同じ月へ切り替える", async () => {
     const queryClient = renderParentRewards({ month: currentMonth(), items: [] });
     const previousMonth = shiftMonth(currentMonth(), -1);

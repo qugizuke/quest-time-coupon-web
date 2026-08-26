@@ -202,7 +202,7 @@ export function GradeDatePage() {
   const gradedCount = gradableItems.filter(
     (item) => grades[item.questId] !== undefined,
   ).length;
-  const totalItemCount = gradeData?.items.length ?? 0;
+  const totalItemCount = gradableItems.length;
   const progressPercent =
     totalItemCount === 0 ? 0 : Math.round((gradedCount / totalItemCount) * 100);
 

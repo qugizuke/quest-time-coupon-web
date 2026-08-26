@@ -4,7 +4,7 @@
  * @vitest-environment jsdom
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { queryKeys } from "@/api/queries";
@@ -139,6 +139,19 @@ describe("HomePage", () => {
       "kid-home-vacation",
     );
     expect(screen.getByTestId("bedtime-entry")).toBeTruthy();
+  });
+
+  it("移行期間フラグをクエストルールへ渡す", () => {
+    renderHome(
+      buildHome({
+        isVacationMode: true,
+        isVacationTransition: true,
+      }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "クエストのルール" }));
+
+    expect(screen.getByTestId("quest-rules-vacation-transition")).toBeTruthy();
   });
 
   it("受付再開中は締切後でもクエスト開始ボタンを有効にする", () => {

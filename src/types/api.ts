@@ -446,6 +446,12 @@ export type RewardVoucherCatalogItemId = Exclude<
 /** 報酬チケット在庫（5キーを必ず持つ。欠落は0扱い・契約 §3.3） */
 export type RewardVouchers = Record<RewardVoucherCatalogItemId, number>;
 
+/** 子どもが即時使用できる物理報酬券（契約 §3.11.5） */
+export type PhysicalRewardVoucherCatalogItemId = Exclude<
+  RewardVoucherCatalogItemId,
+  SwitchTicketCatalogItemId
+>;
+
 /** ポイント交換申請ステータス */
 export type PointExchangeStatus = "pending" | "approved" | "rejected";
 
@@ -612,4 +618,37 @@ export interface PointDebtOffsetResult {
   /** 埋めきれなかった負債（`max(0, -balancePoints)`） */
   remainingDebtPoints: number;
   rewardVouchers: RewardVouchers;
+}
+
+/** POST rewardVoucherConsumptions の使用内訳 */
+export interface RewardVoucherConsumptionItemInput {
+  catalogItemId: PhysicalRewardVoucherCatalogItemId;
+  quantity: number;
+}
+
+/** GET/POST rewardVoucherConsumptions の保存済み在庫スナップショット */
+export interface RewardVoucherConsumptionLineItem
+  extends RewardVoucherConsumptionItemInput {
+  label: string;
+  stockBefore: number;
+  stockAfter: number;
+}
+
+/** 物理報酬券の使用ログ */
+export interface RewardVoucherConsumption {
+  operationId: string;
+  consumedAt: string;
+  items: RewardVoucherConsumptionLineItem[];
+}
+
+/** GET rewardVoucherConsumptions */
+export interface RewardVoucherConsumptionsData {
+  month: string;
+  items: RewardVoucherConsumption[];
+}
+
+/** POST rewardVoucherConsumptions */
+export interface RewardVoucherConsumptionResult
+  extends RewardVoucherConsumption {
+  idempotentReplay: boolean;
 }

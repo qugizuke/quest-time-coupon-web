@@ -25,6 +25,7 @@ import type {
   PointExchangeRequestItemInput,
   PointExchangeRequestsData,
   PointExchangeStatus,
+  PhysicalRewardVoucherCatalogItemId,
   QuestExemptionsData,
   RegistrationActor,
   ResultItem,
@@ -34,6 +35,9 @@ import type {
   RewardVoucherRefundItemInput,
   RewardVoucherRefundRequestsData,
   RewardVoucherRefundStatus,
+  RewardVoucherConsumptionItemInput,
+  RewardVoucherConsumptionResult,
+  RewardVoucherConsumptionsData,
   SwitchTicketCatalogItemId,
   SwitchTicketRedeemResult,
   WakeTime,
@@ -78,21 +82,26 @@ function buildAuthHeaders(): Record<string, string> {
  */
 function withHomeAliases(data: HomeData): HomeData {
   const balance = normalizeBalanceDebtFields(data);
+  const vacationPhase =
+    data.vacationPhase ??
+    (data.isVacationTransition
+      ? "transition"
+      : data.isLongVacation
+        ? "active"
+        : "none");
   return {
     ...data,
     ...balance,
     rewardVouchers: normalizeRewardVouchers(data.rewardVouchers),
     isExemptDay: data.isExemptToday,
-    isVacationMode: data.isLongVacation,
+    // Functions 契約は vacationPhase 正本。旧 isLongVacation 欠落時もモード判定できるようにする。
+    isVacationMode: data.isLongVacation ?? vacationPhase !== "none",
+    isLongVacation: data.isLongVacation ?? vacationPhase !== "none",
     isWeekendEve: data.isWeekendEve ?? false,
-    isVacationTransition: data.isVacationTransition ?? false,
-    vacationPhase:
-      data.vacationPhase ??
-      (data.isVacationTransition
-        ? "transition"
-        : data.isLongVacation
-          ? "active"
-          : "none"),
+    vacationPhase,
+    // Functions 契約は vacationPhase 正本。旧 boolean 欠落時は transition から導出する。
+    isVacationTransition:
+      data.isVacationTransition ?? vacationPhase === "transition",
     timerBlockCount: data.timerBlockCount ?? 0,
     registrationReopen: data.registrationReopen ?? null,
     wakePromiseYesterday: data.wakePromiseYesterday ?? null,
@@ -108,18 +117,20 @@ function withHomeAliases(data: HomeData): HomeData {
  * @returns {ParentHomeData} 正規化済み
  */
 function withParentHomeBalance(data: ParentHomeData): ParentHomeData {
+  const vacationPhase =
+    data.vacationPhase ??
+    (data.isVacationTransition
+      ? "transition"
+      : data.isLongVacation
+        ? "active"
+        : "none");
   return {
     ...data,
     ...normalizeBalanceDebtFields(data),
     rewardVouchers: normalizeRewardVouchers(data.rewardVouchers),
-    isVacationTransition: data.isVacationTransition ?? false,
-    vacationPhase:
-      data.vacationPhase ??
-      (data.isVacationTransition
-        ? "transition"
-        : data.isLongVacation
-          ? "active"
-          : "none"),
+    vacationPhase,
+    isVacationTransition:
+      data.isVacationTransition ?? vacationPhase === "transition",
   };
 }
 
@@ -569,6 +580,28 @@ export function postPointDebtOffset(payload: {
   items: PointDebtOffsetItemInput[];
 }): Promise<PointDebtOffsetResult> {
   return request("pointDebtOffset", {
+    method: "POST",
+    headers: JSON_POST_HEADERS,
+    body: JSON.stringify(payload),
+  });
+}
+
+/** GET rewardVoucherConsumptions（物理報酬券の月次使用履歴） */
+export function fetchRewardVoucherConsumptions(opts: {
+  month: string;
+  catalogItemId?: PhysicalRewardVoucherCatalogItemId;
+}): Promise<RewardVoucherConsumptionsData> {
+  const query: Record<string, string> = { month: opts.month };
+  if (opts.catalogItemId) query.catalogItemId = opts.catalogItemId;
+  return request("rewardVoucherConsumptions", { method: "GET" }, query);
+}
+
+/** POST rewardVoucherConsumptions（子どもによる即時使用・保護者承認不要） */
+export function postRewardVoucherConsumption(payload: {
+  operationId: string;
+  items: RewardVoucherConsumptionItemInput[];
+}): Promise<RewardVoucherConsumptionResult> {
+  return request("rewardVoucherConsumptions", {
     method: "POST",
     headers: JSON_POST_HEADERS,
     body: JSON.stringify(payload),

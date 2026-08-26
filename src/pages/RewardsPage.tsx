@@ -3,7 +3,8 @@
  * @description 子ども向けポイント交換・報酬チケット管理（Issue #38 / #43）。固定カタログから複数枚を選んで申請し、
  *   自分の申請状況・月次履歴を確認する。申請時点では残高を変えない（承認時のみ反映）。
  *   Issue #43 以降は保有券の表示、券をポイントへ戻す申請、`balancePoints` 負債の穴埋めも扱う。
- *   正本: docs `screen-design.md` §6.7 / `api-tobe-f-contract.md` §3.11.1〜§3.11.4。
+ *   Issue #59 で物理報酬券3種の即時使用・冪等回復・使用履歴を追加する。
+ *   正本: docs `screen-design.md` §6.7 / `api-tobe-f-contract.md` §3.11.1〜§3.11.5。
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState, type KeyboardEvent } from "react";
@@ -11,11 +12,13 @@ import {
   homeQuery,
   pointExchangeRequestsQuery,
   queryKeys,
+  rewardVoucherConsumptionsQuery,
   rewardVoucherRefundRequestsQuery,
 } from "@/api/queries";
 import {
   postPointDebtOffset,
   postPointExchangeRequest,
+  postRewardVoucherConsumption,
   postRewardVoucherRefundRequest,
 } from "@/api/client";
 import { ChildPageFrame } from "@/components/layout/ChildPageFrame";
@@ -25,6 +28,12 @@ import { Card } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { currentMonth, formatMonthLabel, shiftMonth } from "@/lib/month";
 import { calcExchangeTotals, POINT_EXCHANGE_CATALOG } from "@/lib/pointExchangeCatalog";
+import {
+  clearPendingRewardVoucherConsumption,
+  loadPendingRewardVoucherConsumption,
+  savePendingRewardVoucherConsumption,
+  type PendingRewardVoucherConsumptionOperation,
+} from "@/lib/rewardVoucherConsumptionOperation";
 import {
   POINT_EXCHANGE_STATUS_LABEL,
   formatDateTimeJstLabel,
@@ -41,6 +50,8 @@ import {
 } from "@/lib/rewardVouchers";
 import type {
   PointExchangeCatalogItemId,
+  PhysicalRewardVoucherCatalogItemId,
+  RewardVoucherConsumptionResult,
   RewardVoucherCatalogItemId,
   RewardVouchers,
 } from "@/types/api";
@@ -51,14 +62,35 @@ type QuantityState = Record<PointExchangeCatalogItemId, number>;
 /** 報酬チケット ID → 選択数量 */
 type VoucherQuantityState = Record<RewardVoucherCatalogItemId, number>;
 
+/** 即時使用できる物理券3種の数量 */
+type ConsumptionQuantityState = Record<PhysicalRewardVoucherCatalogItemId, number>;
+
 /** 交換画面内のタブ */
-type RewardsTab = "exchange" | "refund" | "history";
+type RewardsTab = "exchange" | "use" | "refund" | "history";
+
+/** 物理券使用フロー。結果不明は pending operation を保持する。 */
+type ConsumptionPhase =
+  | "select"
+  | "confirm"
+  | "processing"
+  | "complete"
+  | "stock-conflict"
+  | "unknown"
+  | "error";
 
 /** ARIA tabs の表示順とラベル */
 const REWARDS_TABS: ReadonlyArray<readonly [RewardsTab, string]> = [
   ["exchange", "🛒 交換する"],
+  ["use", "🎟️ 使う"],
   ["refund", "🔄 ポイントへ戻す"],
   ["history", "📋 履歴"],
+];
+
+/** 物理報酬券の契約上の固定順 */
+const PHYSICAL_REWARD_VOUCHER_KEYS: readonly PhysicalRewardVoucherCatalogItemId[] = [
+  "snack-10",
+  "cash-100",
+  "dining-1000",
 ];
 
 /** Figmaから書き出したカタログアイコン */
@@ -119,6 +151,24 @@ function initialVoucherQuantities(): VoucherQuantityState {
     state[key] = 0;
   }
   return state;
+}
+
+function initialConsumptionQuantities(): ConsumptionQuantityState {
+  return { "snack-10": 0, "cash-100": 0, "dining-1000": 0 };
+}
+
+/** 確定応答（4xx）か、結果不明として同じIDを残すべき失敗かを分ける。 */
+function consumptionFailureKind(
+  error: unknown,
+): "stock-conflict" | "terminal" | "unknown" {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.startsWith("FORBIDDEN_STATE:")) return "stock-conflict";
+  if (
+    /^(BAD_REQUEST|NOT_FOUND|IDEMPOTENCY_CONFLICT|UNAUTHORIZED):/.test(message)
+  ) {
+    return "terminal";
+  }
+  return "unknown";
 }
 
 /**
@@ -197,7 +247,18 @@ function VoucherQuantityRow({
 export function RewardsPage() {
   const queryClient = useQueryClient();
   const { data: home, isLoading: homeLoading } = useQuery(homeQuery);
+  const [pendingConsumption, setPendingConsumption] = useState<PendingRewardVoucherConsumptionOperation | null>(
+    () => loadPendingRewardVoucherConsumption(),
+  );
   const [quantities, setQuantities] = useState<QuantityState>(initialQuantities);
+  const [consumptionQuantities, setConsumptionQuantities] =
+    useState<ConsumptionQuantityState>(initialConsumptionQuantities);
+  const [consumptionPhase, setConsumptionPhase] = useState<ConsumptionPhase>(
+    pendingConsumption ? "unknown" : "select",
+  );
+  const [consumptionResult, setConsumptionResult] =
+    useState<RewardVoucherConsumptionResult | null>(null);
+  const [consumptionError, setConsumptionError] = useState("");
   const [refundQuantities, setRefundQuantities] = useState<VoucherQuantityState>(
     initialVoucherQuantities,
   );
@@ -205,7 +266,9 @@ export function RewardsPage() {
     initialVoucherQuantities,
   );
   const [month, setMonth] = useState(currentMonth());
-  const [activeTab, setActiveTab] = useState<RewardsTab>("exchange");
+  const [activeTab, setActiveTab] = useState<RewardsTab>(
+    pendingConsumption ? "use" : "exchange",
+  );
 
   /** 矢印/Home/Endでタブを移動し、移動先を自動選択する。 */
   function handleTabKeyDown(
@@ -238,6 +301,12 @@ export function RewardsPage() {
     error: refundHistoryError,
   } = useQuery(rewardVoucherRefundRequestsQuery(month));
 
+  const {
+    data: consumptionHistory,
+    isLoading: consumptionHistoryLoading,
+    error: consumptionHistoryError,
+  } = useQuery(rewardVoucherConsumptionsQuery(month));
+
   const totals = useMemo(() => {
     const items = POINT_EXCHANGE_CATALOG.map((item) => ({
       catalogItemId: item.catalogItemId,
@@ -252,6 +321,51 @@ export function RewardsPage() {
   // 申請時点ではポイントを予約・減算しない。残高不足でも契約上は申請でき、
   // 保護者の承認トランザクションで最終残高が確定する。
   const canSubmit = totals.totalPoints > 0;
+
+  const selectedConsumptionItems = useMemo(
+    () =>
+      PHYSICAL_REWARD_VOUCHER_KEYS.map((catalogItemId) => ({
+        catalogItemId,
+        quantity: consumptionQuantities[catalogItemId],
+      })).filter((item) => item.quantity > 0),
+    [consumptionQuantities],
+  );
+
+  const consumptionMutation = useMutation({
+    mutationFn: (operation: PendingRewardVoucherConsumptionOperation) =>
+      postRewardVoucherConsumption(operation),
+    onMutate: () => {
+      setConsumptionError("");
+      setConsumptionPhase("processing");
+    },
+    onSuccess: (result) => {
+      clearPendingRewardVoucherConsumption(result.operationId);
+      setPendingConsumption(null);
+      setConsumptionResult(result);
+      setConsumptionQuantities(initialConsumptionQuantities());
+      setConsumptionError("");
+      setConsumptionPhase("complete");
+      void queryClient.invalidateQueries({ queryKey: queryKeys.home });
+      void queryClient.invalidateQueries({
+        queryKey: ["rewardVoucherConsumptions"],
+      });
+    },
+    onError: (error, operation) => {
+      const kind = consumptionFailureKind(error);
+      const message = error instanceof Error ? error.message : "使用に失敗しました";
+      setConsumptionError(message);
+      if (kind === "unknown") {
+        setConsumptionPhase("unknown");
+        return;
+      }
+      clearPendingRewardVoucherConsumption(operation.operationId);
+      setPendingConsumption(null);
+      setConsumptionPhase(kind === "stock-conflict" ? "stock-conflict" : "error");
+      if (kind === "stock-conflict") {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.home });
+      }
+    },
+  });
 
   const submitMutation = useMutation({
     mutationFn: () =>
@@ -387,6 +501,57 @@ export function RewardsPage() {
     }));
   }
 
+  /** 使用数量を現在在庫の範囲で変更する。 */
+  function changeConsumptionQuantity(
+    catalogItemId: PhysicalRewardVoucherCatalogItemId,
+    delta: number,
+  ): void {
+    if (pendingConsumption || consumptionPhase !== "select") return;
+    const maxQuantity = rewardVouchers?.[catalogItemId] ?? 0;
+    setConsumptionQuantities((current) => ({
+      ...current,
+      [catalogItemId]: Math.min(
+        maxQuantity,
+        Math.max(0, current[catalogItemId] + delta),
+      ),
+    }));
+  }
+
+  /** 新しいユーザー意図を保存してから送信する。 */
+  function consumeSelectedVouchers(): void {
+    if (pendingConsumption || selectedConsumptionItems.length === 0) return;
+    try {
+      const operation: PendingRewardVoucherConsumptionOperation = {
+        operationId: crypto.randomUUID(),
+        items: selectedConsumptionItems,
+      };
+      savePendingRewardVoucherConsumption(operation);
+      setPendingConsumption(operation);
+      consumptionMutation.mutate(operation);
+    } catch (error) {
+      setConsumptionError(
+        error instanceof Error
+          ? `操作を安全に保存できませんでした: ${error.message}`
+          : "操作を安全に保存できませんでした",
+      );
+      setConsumptionPhase("error");
+    }
+  }
+
+  /** 結果不明の操作を、新しいIDを発行せずそのまま再送する。 */
+  function retryPendingConsumption(): void {
+    if (!pendingConsumption || consumptionMutation.isPending) return;
+    consumptionMutation.mutate(pendingConsumption);
+  }
+
+  /** 在庫競合・確定エラー後に最新在庫から選び直す。 */
+  function resetConsumptionSelection(): void {
+    setConsumptionQuantities(initialConsumptionQuantities());
+    setConsumptionResult(null);
+    setConsumptionError("");
+    setConsumptionPhase("select");
+  }
+
   if (homeLoading) {
     return <LoadingScreen />;
   }
@@ -483,7 +648,7 @@ export function RewardsPage() {
       )}
 
       <div
-        className="mb-4 grid grid-cols-3 gap-2 rounded-default bg-white p-2"
+        className="mb-4 grid grid-cols-2 gap-2 rounded-default bg-white p-2 sm:grid-cols-4"
         role="tablist"
         aria-label="ごほうびショップ"
       >
@@ -496,7 +661,7 @@ export function RewardsPage() {
             aria-controls={`rewards-panel-${tab}`}
             aria-selected={activeTab === tab}
             tabIndex={activeTab === tab ? 0 : -1}
-            className={`min-h-16 rounded-default px-2 py-3 font-bold transition-colors ${
+            className={`min-h-14 rounded-default px-1 py-2 text-sm font-bold leading-tight transition-colors sm:min-h-16 sm:px-2 sm:py-3 sm:text-base ${
               activeTab === tab
                 ? "bg-primary text-white"
                 : "bg-chip text-ink hover:bg-surface-warm"
@@ -618,6 +783,185 @@ export function RewardsPage() {
       </div>
       )}
 
+      {activeTab === "use" && rewardVouchers && (
+        <div id="rewards-panel-use" role="tabpanel" aria-labelledby="rewards-tab-use">
+          <Card className="mb-4 flex flex-col gap-4" data-testid="rewards-use-card">
+            {consumptionPhase === "select" && (
+              <>
+                <div>
+                  <h2 className="font-bold text-ink">チケットを使う</h2>
+                  <p className="text-sm text-muted">
+                    おやつ・100円・外食は、ママの承認なしですぐ使えます
+                  </p>
+                </div>
+                <ul className="flex flex-col gap-3">
+                  {PHYSICAL_REWARD_VOUCHER_KEYS.map((catalogItemId) => (
+                    <VoucherQuantityRow
+                      key={catalogItemId}
+                      catalogItemId={catalogItemId}
+                      quantity={consumptionQuantities[catalogItemId]}
+                      maxQuantity={rewardVouchers[catalogItemId]}
+                      onChange={(delta) =>
+                        changeConsumptionQuantity(catalogItemId, delta)
+                      }
+                      disabled={consumptionMutation.isPending}
+                      testIdPrefix="use-voucher"
+                      ariaLabelPrefix="使う"
+                    />
+                  ))}
+                </ul>
+                {PHYSICAL_REWARD_VOUCHER_KEYS.every(
+                  (catalogItemId) => rewardVouchers[catalogItemId] === 0,
+                ) && (
+                  <p className="rounded-default bg-surface-soft px-4 py-3 text-sm text-muted" data-testid="use-vouchers-empty">
+                    いま使える物理チケットはありません
+                  </p>
+                )}
+                <Button
+                  fullWidth
+                  disabled={selectedConsumptionItems.length === 0}
+                  onClick={() => setConsumptionPhase("confirm")}
+                  data-testid="use-confirm-open"
+                >
+                  選んだチケットを使う
+                </Button>
+              </>
+            )}
+
+            {consumptionPhase === "confirm" && (
+              <>
+                <div>
+                  <h2 className="font-bold text-ink">使用内容を確認</h2>
+                  <p className="text-sm font-bold text-danger">
+                    使ったチケットは元に戻せません
+                  </p>
+                </div>
+                <ul className="flex flex-col gap-2" data-testid="use-confirm-items">
+                  {selectedConsumptionItems.map((item) => (
+                    <li
+                      key={item.catalogItemId}
+                      className="grid grid-cols-[1fr_auto] gap-3 rounded-default border-[3px] border-border-soft bg-surface-soft px-4 py-3 text-sm"
+                    >
+                      <span className="font-medium text-ink">
+                        {REWARD_VOUCHER_LABELS[item.catalogItemId]} × {item.quantity}
+                      </span>
+                      <span className="whitespace-nowrap text-muted">
+                        {rewardVouchers[item.catalogItemId]}枚 → {rewardVouchers[item.catalogItemId] - item.quantity}枚
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Button
+                    variant="secondary"
+                    disabled={consumptionMutation.isPending}
+                    onClick={() => setConsumptionPhase("select")}
+                    data-testid="use-confirm-back"
+                  >
+                    選び直す
+                  </Button>
+                  <Button
+                    disabled={consumptionMutation.isPending}
+                    onClick={consumeSelectedVouchers}
+                    data-testid="use-submit"
+                  >
+                    この内容で使う
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {consumptionPhase === "processing" && (
+              <div className="flex min-h-48 flex-col items-center justify-center gap-3 text-center" aria-live="polite" data-testid="use-processing">
+                <div className="size-10 animate-spin rounded-full border-4 border-border-soft border-t-primary" aria-hidden="true" />
+                <h2 className="font-bold text-ink">使用中…</h2>
+                <p className="text-sm text-muted">画面を閉じても、同じ操作として安全に確認できます</p>
+                <Button fullWidth disabled>使用中…</Button>
+              </div>
+            )}
+
+            {consumptionPhase === "complete" && consumptionResult && (
+              <div className="flex flex-col gap-4" data-testid="use-complete">
+                <div>
+                  <h2 className="font-bold text-success">チケットを使いました！</h2>
+                  <p className="text-sm text-muted">
+                    {formatDateTimeJstLabel(consumptionResult.consumedAt)}
+                  </p>
+                </div>
+                <ul className="flex flex-col gap-2">
+                  {consumptionResult.items.map((item) => (
+                    <li key={item.catalogItemId} className="rounded-default border-[3px] border-border-soft bg-surface-soft px-4 py-3">
+                      <p className="font-medium text-ink">
+                        {item.label} × {item.quantity}
+                      </p>
+                      <p className="text-sm text-muted">
+                        {item.stockBefore}枚 → {item.stockAfter}枚
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Button variant="secondary" onClick={resetConsumptionSelection}>
+                    券一覧へ戻る
+                  </Button>
+                  <Button onClick={() => setActiveTab("history")}>
+                    使用履歴を見る
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {consumptionPhase === "stock-conflict" && (
+              <div className="flex flex-col gap-4" role="alert" data-testid="use-stock-conflict">
+                <div>
+                  <h2 className="font-bold text-danger">チケットの在庫が変わりました</h2>
+                  <p className="text-sm text-muted">
+                    ほかの操作で使われた可能性があります。最新の枚数から選び直してください。
+                  </p>
+                </div>
+                <Button onClick={resetConsumptionSelection}>最新の在庫で選び直す</Button>
+              </div>
+            )}
+
+            {consumptionPhase === "unknown" && pendingConsumption && (
+              <div className="flex flex-col gap-4" role="alert" data-testid="use-unknown-result">
+                <div>
+                  <h2 className="font-bold text-danger">使用結果を確認できませんでした</h2>
+                  <p className="text-sm text-muted">
+                    新しい操作は作らず、保存済みの同じ操作を再確認します。
+                  </p>
+                </div>
+                <ul className="rounded-default bg-surface-soft px-4 py-3 text-sm text-ink">
+                  {pendingConsumption.items.map((item) => (
+                    <li key={item.catalogItemId}>
+                      {REWARD_VOUCHER_LABELS[item.catalogItemId]} × {item.quantity}
+                    </li>
+                  ))}
+                </ul>
+                <Button
+                  fullWidth
+                  disabled={consumptionMutation.isPending}
+                  onClick={retryPendingConsumption}
+                  data-testid="use-retry"
+                >
+                  {consumptionMutation.isPending ? "確認中…" : "同じ操作を再確認する"}
+                </Button>
+              </div>
+            )}
+
+            {consumptionPhase === "error" && (
+              <div className="flex flex-col gap-4" role="alert" data-testid="use-error">
+                <div>
+                  <h2 className="font-bold text-danger">チケットを使用できませんでした</h2>
+                  <p className="break-words text-sm text-muted">{consumptionError}</p>
+                </div>
+                <Button onClick={resetConsumptionSelection}>選び直す</Button>
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
+
       {activeTab === "refund" && rewardVouchers && (
         <div id="rewards-panel-refund" role="tabpanel" aria-labelledby="rewards-tab-refund">
         <Card className="mb-4 flex flex-col gap-4" data-testid="rewards-refund-card">
@@ -671,7 +1015,7 @@ export function RewardsPage() {
         <div className="mb-3 flex items-center justify-between gap-2">
           <Button
             variant="secondary"
-            className="px-3 text-base"
+            className="whitespace-nowrap px-2 text-sm sm:px-3 sm:text-base"
             onClick={() => setMonth((m) => shiftMonth(m, -1))}
             data-testid="rewards-prev-month"
           >
@@ -682,7 +1026,7 @@ export function RewardsPage() {
           </p>
           <Button
             variant="secondary"
-            className="px-3 text-base"
+            className="whitespace-nowrap px-2 text-sm sm:px-3 sm:text-base"
             onClick={() => setMonth((m) => shiftMonth(m, 1))}
             data-testid="rewards-next-month"
           >
@@ -738,7 +1082,7 @@ export function RewardsPage() {
         </ul>
       </Card>
 
-      <Card data-testid="rewards-refund-history-card">
+      <Card className="mb-4" data-testid="rewards-refund-history-card">
         <h2 className="mb-2 font-bold text-ink">戻し申請の履歴</h2>
         {refundHistoryLoading && <p className="text-muted">読み込み中…</p>}
         {refundHistoryError && (
@@ -777,6 +1121,50 @@ export function RewardsPage() {
               {request.status === "rejected" && request.rejectReason && (
                 <p className="text-sm text-muted">理由: {request.rejectReason}</p>
               )}
+            </li>
+          ))}
+        </ul>
+      </Card>
+
+      <Card data-testid="rewards-consumption-history-card">
+        <h2 className="mb-2 font-bold text-ink">チケット使用履歴</h2>
+        {consumptionHistoryLoading && <p className="text-muted">読み込み中…</p>}
+        {consumptionHistoryError && (
+          <p className="break-words text-danger">
+            {consumptionHistoryError instanceof Error
+              ? consumptionHistoryError.message
+              : "エラー"}
+          </p>
+        )}
+        {!consumptionHistoryLoading &&
+          (consumptionHistory?.items ?? []).length === 0 && (
+            <p className="text-sm text-muted" data-testid="rewards-consumption-history-empty">
+              この月の使用履歴はありません
+            </p>
+          )}
+        <ul className="flex flex-col gap-2">
+          {(consumptionHistory?.items ?? []).map((consumption) => (
+            <li
+              key={consumption.operationId}
+              className="rounded-default border-[3px] border-border-soft bg-surface px-4 py-3"
+              data-testid={`rewards-consumption-history-item-${consumption.operationId}`}
+            >
+              <p className="mb-1 text-sm text-muted">
+                {formatDateTimeJstLabel(consumption.consumedAt)}
+              </p>
+              <ul className="flex flex-col gap-1 text-sm text-ink">
+                {consumption.items.map((item) => (
+                  <li
+                    key={item.catalogItemId}
+                    className="grid grid-cols-[1fr_auto] gap-2"
+                  >
+                    <span>{item.label} × {item.quantity}</span>
+                    <span className="whitespace-nowrap text-muted">
+                      {item.stockBefore}枚 → {item.stockAfter}枚
+                    </span>
+                  </li>
+                ))}
+              </ul>
             </li>
           ))}
         </ul>

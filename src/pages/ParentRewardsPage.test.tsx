@@ -7,7 +7,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { queryKeys } from "@/api/queries";
-import { currentMonth } from "@/lib/month";
+import { currentMonth, shiftMonth } from "@/lib/month";
 import { ParentRewardsPage } from "@/pages/ParentRewardsPage";
 import { buildParentHomeData } from "@/test/fixtures";
 import type {
@@ -16,6 +16,7 @@ import type {
   ParentHomeData,
   RewardVoucherRefundRequest,
   RewardVoucherRefundRequestsData,
+  RewardVoucherConsumptionsData,
 } from "@/types/api";
 
 vi.mock("@/api/client", async (importOriginal) => {
@@ -112,6 +113,10 @@ function renderParentRewards(
   data: PointExchangeRequestsData,
   refundData: RewardVoucherRefundRequestsData = { month: currentMonth(), items: [] },
   parentHomeOverrides: Partial<ParentHomeData> = {},
+  consumptionData: RewardVoucherConsumptionsData = {
+    month: currentMonth(),
+    items: [],
+  },
 ): QueryClient {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -123,6 +128,10 @@ function renderParentRewards(
   queryClient.setQueryData(
     queryKeys.rewardVoucherRefundRequests(currentMonth()),
     refundData,
+  );
+  queryClient.setQueryData(
+    queryKeys.rewardVoucherConsumptions(currentMonth()),
+    consumptionData,
   );
   queryClient.setQueryData(
     queryKeys.parentHome,
@@ -383,6 +392,140 @@ describe("ParentRewardsPage", () => {
       expect(
         screen.getByTestId(`parent-refund-approve-submit-${request.id}`).hasAttribute("disabled"),
       ).toBe(true);
+    });
+  });
+
+  it("物理券使用履歴を保存済み在庫スナップショットで新しい順に表示する", () => {
+    renderParentRewards(
+      { month: currentMonth(), items: [] },
+      undefined,
+      {},
+      {
+        month: currentMonth(),
+        items: [
+          {
+            operationId: "older-operation",
+            consumedAt: "2026-08-20T01:00:00.000Z",
+            items: [
+              {
+                catalogItemId: "snack-10",
+                label: "おやつ",
+                quantity: 1,
+                stockBefore: 4,
+                stockAfter: 3,
+              },
+            ],
+          },
+          {
+            operationId: "newer-operation",
+            consumedAt: "2026-08-25T01:00:00.000Z",
+            items: [
+              {
+                catalogItemId: "cash-100",
+                label: "100円",
+                quantity: 2,
+                stockBefore: 5,
+                stockAfter: 3,
+              },
+            ],
+          },
+        ],
+      },
+    );
+
+    const history = screen.getByTestId("parent-consumption-history-card");
+    expect(history.textContent).toContain("100円 × 2");
+    expect(history.textContent).toContain("5枚 → 3枚");
+    const entries = history.querySelectorAll('[data-testid^="parent-consumption-item-"]');
+    expect(entries[0]?.getAttribute("data-testid")).toBe(
+      "parent-consumption-item-newer-operation",
+    );
+    expect(entries[1]?.getAttribute("data-testid")).toBe(
+      "parent-consumption-item-older-operation",
+    );
+  });
+
+  it("状態フィルタは交換・戻しだけに適用し、使用履歴と承認待ち件数を変えない", () => {
+    const pending = buildPendingRequest();
+    const approved = buildPendingRequest({
+      id: "pex_approved_filter",
+      status: "approved",
+      decidedAt: "2026-08-25T11:00:00+09:00",
+    });
+    renderParentRewards(
+      { month: currentMonth(), items: [pending, approved] },
+      undefined,
+      {},
+      {
+        month: currentMonth(),
+        items: [
+          {
+            operationId: "consumption-filter-independent",
+            consumedAt: "2026-08-25T01:00:00.000Z",
+            items: [
+              {
+                catalogItemId: "dining-1000",
+                label: "外食",
+                quantity: 1,
+                stockBefore: 2,
+                stockAfter: 1,
+              },
+            ],
+          },
+        ],
+      },
+    );
+
+    fireEvent.change(screen.getByTestId("parent-rewards-status-filter"), {
+      target: { value: "approved" },
+    });
+
+    expect(screen.queryByTestId(`parent-rewards-item-${pending.id}`)).toBeNull();
+    expect(screen.getByTestId(`parent-rewards-item-${approved.id}`)).toBeTruthy();
+    expect(screen.getByText("承認待ち 1件")).toBeTruthy();
+    expect(
+      screen.getByTestId(
+        "parent-consumption-item-consumption-filter-independent",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("月選択を変えると物理券使用履歴も同じ月へ切り替える", async () => {
+    const queryClient = renderParentRewards({ month: currentMonth(), items: [] });
+    const previousMonth = shiftMonth(currentMonth(), -1);
+    queryClient.setQueryData(queryKeys.pointExchangeRequests(previousMonth), {
+      month: previousMonth,
+      items: [],
+    });
+    queryClient.setQueryData(queryKeys.rewardVoucherRefundRequests(previousMonth), {
+      month: previousMonth,
+      items: [],
+    });
+    queryClient.setQueryData(queryKeys.rewardVoucherConsumptions(previousMonth), {
+      month: previousMonth,
+      items: [
+        {
+          operationId: "previous-month-consumption",
+          consumedAt: "2026-07-25T01:00:00.000Z",
+          items: [
+            {
+              catalogItemId: "cash-100",
+              label: "前月の100円",
+              quantity: 1,
+              stockBefore: 2,
+              stockAfter: 1,
+            },
+          ],
+        },
+      ],
+    });
+
+    fireEvent.click(screen.getByTestId("parent-rewards-prev-month"));
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("parent-consumption-item-previous-month-consumption"),
+      ).toBeTruthy();
     });
   });
 });

@@ -411,7 +411,11 @@ export function HomePage() {
         </div>
       </div>
 
-      <QuestRulesDialog open={rulesOpen} onClose={() => setRulesOpen(false)} />
+      <QuestRulesDialog
+        open={rulesOpen}
+        onClose={() => setRulesOpen(false)}
+        isVacationTransition={isVacationTransition}
+      />
 
       <BedtimeModal
         open={bedtimeModalOpen}

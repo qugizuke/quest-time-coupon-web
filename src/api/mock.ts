@@ -9,8 +9,12 @@ import type {
   HomeData,
   PointExchangeRequest,
   PointExchangeStatus,
+  PhysicalRewardVoucherCatalogItemId,
   QuestDefinition,
   RewardVoucherCatalogItemId,
+  RewardVoucherConsumption,
+  RewardVoucherConsumptionItemInput,
+  RewardVoucherConsumptionResult,
   RewardVoucherRefundRequest,
   RewardVoucherRefundStatus,
   RewardVouchers,
@@ -28,6 +32,7 @@ import {
 import { normalizeBalanceDebtFields } from "@/lib/balanceDebt";
 import {
   SWITCH_TICKET_MINUTES,
+  REWARD_VOUCHER_LABELS,
   calcRewardVoucherTotals,
   hasEnoughRewardVouchers,
   isRewardVoucherCatalogItemId,
@@ -75,6 +80,16 @@ const MOCK_EXEMPT_KEY = "qtc:mock:exempt";
 /** @type {number} 未登録・採点拒否ペナルティ（pt・ADR-005） */
 const MISSED_REGISTRATION_PENALTY = -100;
 
+/** 物理券の契約上の固定順 */
+const PHYSICAL_REWARD_VOUCHER_IDS: readonly PhysicalRewardVoucherCatalogItemId[] = [
+  "snack-10",
+  "cash-100",
+  "dining-1000",
+];
+
+const UUID_V4_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
 interface MockStore {
   /** クエスト結果で増減するポイント残高（pt）。0未満にはならない */
   balancePoints: number;
@@ -108,6 +123,8 @@ interface MockStore {
   rewardVoucherRefundRequests: Map<string, RewardVoucherRefundRequest>;
   /** 戻し申請 ID 発行用の連番 */
   rewardVoucherRefundSeq: number;
+  /** operationId → 物理報酬券使用ログ（Issue #59） */
+  rewardVoucherConsumptions: Map<string, RewardVoucherConsumption>;
   /** テスト用オーバーライド（undefined なら localStorage） */
   vacationModeOverride?: boolean;
   /** テスト用免除日セット（未設定なら localStorage の当日免除） */
@@ -138,6 +155,7 @@ const store: MockStore = {
   rewardVouchers: zeroRewardVouchers(),
   rewardVoucherRefundRequests: new Map(),
   rewardVoucherRefundSeq: 0,
+  rewardVoucherConsumptions: new Map(),
 };
 
 /**
@@ -504,6 +522,7 @@ export function resetMockStore(): void {
   store.rewardVouchers = zeroRewardVouchers();
   store.rewardVoucherRefundRequests.clear();
   store.rewardVoucherRefundSeq = 0;
+  store.rewardVoucherConsumptions.clear();
   clearMockHomeModeFlags();
 }
 
@@ -1975,6 +1994,110 @@ export async function mockApi<T>(
       } as T;
     }
 
+    case "rewardVoucherConsumptions": {
+      if (init?.method === "POST") {
+        const { operationId, items } = body as {
+          operationId?: string;
+          items?: Array<{ catalogItemId: string; quantity: number }>;
+        };
+        if (!operationId || !UUID_V4_PATTERN.test(operationId)) {
+          throw new Error("BAD_REQUEST: operationId は小文字 UUID v4 が必要です");
+        }
+        if (!Array.isArray(items) || items.length < 1 || items.length > 3) {
+          throw new Error("BAD_REQUEST: items は1〜3件必要です");
+        }
+        const seen = new Set<string>();
+        for (const item of items) {
+          if (
+            !item ||
+            !(PHYSICAL_REWARD_VOUCHER_IDS as readonly string[]).includes(
+              item.catalogItemId,
+            ) ||
+            !Number.isSafeInteger(item.quantity) ||
+            item.quantity < 1 ||
+            seen.has(item.catalogItemId)
+          ) {
+            throw new Error("BAD_REQUEST: 物理券の items が不正です");
+          }
+          seen.add(item.catalogItemId);
+        }
+        const normalizedItems = PHYSICAL_REWARD_VOUCHER_IDS.flatMap(
+          (catalogItemId) => {
+            const item = items.find(
+              (candidate) => candidate.catalogItemId === catalogItemId,
+            );
+            return item
+              ? [{ catalogItemId, quantity: item.quantity }]
+              : [];
+          },
+        ) as RewardVoucherConsumptionItemInput[];
+
+        const existing = store.rewardVoucherConsumptions.get(operationId);
+        if (existing) {
+          const existingPayload = existing.items.map(
+            ({ catalogItemId, quantity }) => ({ catalogItemId, quantity }),
+          );
+          if (JSON.stringify(existingPayload) !== JSON.stringify(normalizedItems)) {
+            throw new Error(
+              "IDEMPOTENCY_CONFLICT: 同じ operationId に異なる内容は使えません",
+            );
+          }
+          return { ...existing, idempotentReplay: true } as T;
+        }
+
+        if (!hasEnoughRewardVouchers(store.rewardVouchers, normalizedItems)) {
+          throw new Error("FORBIDDEN_STATE: 保有している券が不足しています");
+        }
+        const consumedAt = new Date().toISOString();
+        const log: RewardVoucherConsumption = {
+          operationId,
+          consumedAt,
+          items: normalizedItems.map(({ catalogItemId, quantity }) => {
+            const stockBefore = store.rewardVouchers[catalogItemId];
+            const stockAfter = stockBefore - quantity;
+            store.rewardVouchers[catalogItemId] = stockAfter;
+            return {
+              catalogItemId,
+              label: REWARD_VOUCHER_LABELS[catalogItemId],
+              quantity,
+              stockBefore,
+              stockAfter,
+            };
+          }),
+        };
+        store.rewardVoucherConsumptions.set(operationId, log);
+        return ({
+          ...log,
+          idempotentReplay: false,
+        } satisfies RewardVoucherConsumptionResult) as T;
+      }
+
+      const month = query?.month;
+      if (!month || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+        throw new Error("BAD_REQUEST: month が必要です（YYYY-MM）");
+      }
+      const catalogItemId = query?.catalogItemId;
+      if (
+        catalogItemId !== undefined &&
+        !(PHYSICAL_REWARD_VOUCHER_IDS as readonly string[]).includes(catalogItemId)
+      ) {
+        throw new Error("BAD_REQUEST: catalogItemId は物理券3種だけ指定できます");
+      }
+      const items = [...store.rewardVoucherConsumptions.values()]
+        .filter((log) => jstMonthFromIso(log.consumedAt) === month)
+        .filter(
+          (log) =>
+            !catalogItemId ||
+            log.items.some((item) => item.catalogItemId === catalogItemId),
+        )
+        .sort(
+          (a, b) =>
+            b.consumedAt.localeCompare(a.consumedAt) ||
+            a.operationId.localeCompare(b.operationId),
+        );
+      return { month, items } as T;
+    }
+
     case "rewardVoucherRefundRequests": {
       if (init?.method === "POST") {
         const { items } = body as {
@@ -2178,6 +2301,12 @@ export async function mockApi<T>(
     default:
       throw new Error(`mockApi: 未対応 action=${action}`);
   }
+}
+
+/** ISO timestamp を JST の YYYY-MM に変換する。 */
+function jstMonthFromIso(value: string): string {
+  const shifted = new Date(new Date(value).getTime() + 9 * 60 * 60 * 1000);
+  return shifted.toISOString().slice(0, 7);
 }
 
 /**

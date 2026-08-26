@@ -14,6 +14,7 @@ import {
   pointExchangeRequestsQuery,
   parentHomeQuery,
   queryKeys,
+  rewardVoucherConsumptionsQuery,
   rewardVoucherRefundRequestsQuery,
 } from "@/api/queries";
 import { ParentPageFrame } from "@/components/layout/ParentPageFrame";
@@ -32,9 +33,56 @@ import {
 } from "@/lib/pointExchangeUi";
 import type {
   PointExchangeRequest,
+  PointExchangeStatus,
+  RewardVoucherConsumption,
   RewardVoucherRefundRequest,
   RewardVouchers,
 } from "@/types/api";
+
+/** 交換・戻し申請の表示状態。all は API の状態値ではない UI 専用値。 */
+type RequestStatusFilter = "all" | PointExchangeStatus;
+
+const REQUEST_STATUS_FILTER_LABEL: Record<RequestStatusFilter, string> = {
+  all: "すべて",
+  pending: "承認待ち",
+  approved: "承認済み",
+  rejected: "却下済み",
+};
+
+/**
+ * 物理券使用ログ1件（読取専用）
+ * @param {{ consumption: RewardVoucherConsumption }} props - 使用ログ
+ * @returns {JSX.Element} カード
+ */
+function RewardVoucherConsumptionCard({
+  consumption,
+}: {
+  consumption: RewardVoucherConsumption;
+}) {
+  return (
+    <li
+      className="rounded-default border-[3px] border-border-soft bg-surface px-4 py-3"
+      data-testid={`parent-consumption-item-${consumption.operationId}`}
+    >
+      <p className="mb-1 text-sm text-muted">
+        {formatDateTimeJstLabel(consumption.consumedAt)}
+      </p>
+      <ul className="flex flex-col gap-1">
+        {consumption.items.map((item) => (
+          <li
+            key={item.catalogItemId}
+            className="flex items-center justify-between gap-3 text-sm text-ink"
+          >
+            <span>{item.label} × {item.quantity}</span>
+            <span className="whitespace-nowrap font-bold">
+              {item.stockBefore}枚 → {item.stockAfter}枚
+            </span>
+          </li>
+        ))}
+      </ul>
+    </li>
+  );
+}
 
 /**
  * @typedef {object} PointExchangeRequestCardProps
@@ -444,6 +492,8 @@ function RewardVoucherRefundRequestCard({
  */
 export function ParentRewardsPage() {
   const [month, setMonth] = useState(currentMonth());
+  const [statusFilter, setStatusFilter] =
+    useState<RequestStatusFilter>("all");
   const { data: parentHome } = useQuery(parentHomeQuery);
   const { data, isLoading, error } = useQuery(pointExchangeRequestsQuery(month));
   const {
@@ -451,6 +501,11 @@ export function ParentRewardsPage() {
     isLoading: refundLoading,
     error: refundError,
   } = useQuery(rewardVoucherRefundRequestsQuery(month));
+  const {
+    data: consumptionData,
+    isLoading: consumptionLoading,
+    error: consumptionError,
+  } = useQuery(rewardVoucherConsumptionsQuery(month));
 
   if (isLoading) {
     return <LoadingScreen />;
@@ -473,6 +528,22 @@ export function ParentRewardsPage() {
   const refundItems = refundData?.items ?? [];
   const refundPendingItems = refundItems.filter((item) => item.status === "pending");
   const refundDecidedItems = refundItems.filter((item) => item.status !== "pending");
+  const visiblePendingItems = pendingItems.filter(
+    (item) => statusFilter === "all" || item.status === statusFilter,
+  );
+  const visibleDecidedItems = decidedItems.filter(
+    (item) => statusFilter === "all" || item.status === statusFilter,
+  );
+  const visibleRefundPendingItems = refundPendingItems.filter(
+    (item) => statusFilter === "all" || item.status === statusFilter,
+  );
+  const visibleRefundDecidedItems = refundDecidedItems.filter(
+    (item) => statusFilter === "all" || item.status === statusFilter,
+  );
+  const consumptions = [...(consumptionData?.items ?? [])].sort((a, b) => {
+    const timeOrder = Date.parse(b.consumedAt) - Date.parse(a.consumedAt);
+    return timeOrder || a.operationId.localeCompare(b.operationId);
+  });
   const currentBalancePoints = parentHome?.balancePoints ?? null;
   const currentRewardVouchers = parentHome?.rewardVouchers ?? null;
   const currentPenaltyTicketCount = parentHome?.penaltyTicketCount ?? null;
@@ -494,15 +565,15 @@ export function ParentRewardsPage() {
       <Card className="mb-4" data-testid="parent-rewards-pending-card">
         <div className="mb-2 flex items-center justify-between gap-3">
           <h2 className="font-bold text-ink">承認待ち</h2>
-          <StatusBadge tone={pendingItems.length > 0 ? "warning" : "muted"}>
-            {pendingItems.length}件
+          <StatusBadge tone={visiblePendingItems.length > 0 ? "warning" : "muted"}>
+            {visiblePendingItems.length}件
           </StatusBadge>
         </div>
-        {pendingItems.length === 0 ? (
+        {visiblePendingItems.length === 0 ? (
           <p className="text-sm text-muted">承認待ちの申請はありません</p>
         ) : (
           <ul className="flex flex-col gap-2">
-            {pendingItems.map((request) => (
+            {visiblePendingItems.map((request) => (
               <PointExchangeRequestCard
                 key={request.id}
                 request={request}
@@ -518,8 +589,8 @@ export function ParentRewardsPage() {
       <Card className="mb-4" data-testid="parent-refund-pending-card">
         <div className="mb-2 flex items-center justify-between gap-3">
           <h2 className="font-bold text-ink">戻し申請の承認待ち</h2>
-          <StatusBadge tone={refundPendingItems.length > 0 ? "warning" : "muted"}>
-            {refundPendingItems.length}件
+          <StatusBadge tone={visibleRefundPendingItems.length > 0 ? "warning" : "muted"}>
+            {visibleRefundPendingItems.length}件
           </StatusBadge>
         </div>
         {refundLoading && <p className="text-sm text-muted">読み込み中…</p>}
@@ -528,11 +599,11 @@ export function ParentRewardsPage() {
             {refundError instanceof Error ? refundError.message : "読み込みに失敗しました"}
           </p>
         )}
-        {!refundLoading && refundPendingItems.length === 0 ? (
+        {!refundLoading && visibleRefundPendingItems.length === 0 ? (
           <p className="text-sm text-muted">戻し申請の承認待ちはありません</p>
         ) : (
           <ul className="flex flex-col gap-2">
-            {refundPendingItems.map((request) => (
+            {visibleRefundPendingItems.map((request) => (
               <RewardVoucherRefundRequestCard
                 key={request.id}
                 request={request}
@@ -567,14 +638,34 @@ export function ParentRewardsPage() {
           </Button>
         </div>
 
+        <label className="mb-3 flex items-center justify-end gap-2 text-sm text-ink">
+          <span>状態</span>
+          <select
+            className="rounded-default border-[3px] border-border bg-surface px-3 py-2 text-ink"
+            value={statusFilter}
+            onChange={(event) =>
+              setStatusFilter(event.target.value as RequestStatusFilter)
+            }
+            data-testid="parent-rewards-status-filter"
+          >
+            {(
+              Object.entries(REQUEST_STATUS_FILTER_LABEL) as Array<
+                [RequestStatusFilter, string]
+              >
+            ).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+        </label>
+
         <h3 className="mb-2 text-sm font-bold text-ink">交換の履歴</h3>
-        {decidedItems.length === 0 ? (
+        {visibleDecidedItems.length === 0 ? (
           <p className="text-sm text-muted" data-testid="parent-rewards-history-empty">
             この月に承認／却下済みの申請はありません
           </p>
         ) : (
           <ul className="flex flex-col gap-2">
-            {decidedItems.map((request) => (
+            {visibleDecidedItems.map((request) => (
               <PointExchangeRequestCard
                 key={request.id}
                 request={request}
@@ -587,20 +678,47 @@ export function ParentRewardsPage() {
         )}
       </Card>
 
-      <Card data-testid="parent-refund-history-card">
+      <Card className="mb-4" data-testid="parent-refund-history-card">
         <h3 className="mb-2 text-sm font-bold text-ink">戻し申請の履歴</h3>
-        {refundDecidedItems.length === 0 ? (
+        {visibleRefundDecidedItems.length === 0 ? (
           <p className="text-sm text-muted" data-testid="parent-refund-history-empty">
             この月に承認／却下済みの戻し申請はありません
           </p>
         ) : (
           <ul className="flex flex-col gap-2">
-            {refundDecidedItems.map((request) => (
+            {visibleRefundDecidedItems.map((request) => (
               <RewardVoucherRefundRequestCard
                 key={request.id}
                 request={request}
                 currentBalancePoints={currentBalancePoints}
                 currentRewardVouchers={currentRewardVouchers}
+              />
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <Card data-testid="parent-consumption-history-card">
+        <h3 className="mb-2 text-sm font-bold text-ink">物理券の使用履歴</h3>
+        {consumptionLoading && <p className="text-sm text-muted">読み込み中…</p>}
+        {consumptionError && (
+          <p className="text-sm text-danger" role="alert">
+            {consumptionError instanceof Error
+              ? consumptionError.message
+              : "使用履歴の読み込みに失敗しました"}
+          </p>
+        )}
+        {!consumptionLoading && !consumptionError && consumptions.length === 0 && (
+          <p className="text-sm text-muted" data-testid="parent-consumption-history-empty">
+            この月の使用履歴はありません
+          </p>
+        )}
+        {consumptions.length > 0 && (
+          <ul className="flex flex-col gap-2">
+            {consumptions.map((consumption) => (
+              <RewardVoucherConsumptionCard
+                key={consumption.operationId}
+                consumption={consumption}
               />
             ))}
           </ul>

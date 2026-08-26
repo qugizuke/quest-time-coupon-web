@@ -28,7 +28,7 @@ describe("resolveHomeVariant", () => {
 });
 
 describe("resolveBedtimeUiMode", () => {
-  it("免除日は就寝 UI を隠す（長期休み併用でも仕様勝ち）", () => {
+  it("免除日は就寝 UI を固定表示する", () => {
     expect(
       resolveBedtimeUiMode({
         isExemptDay: true,
@@ -39,7 +39,21 @@ describe("resolveBedtimeUiMode", () => {
         date: "2026-07-30",
         now: new Date(2026, 6, 30, 10, 0, 0),
       }),
-    ).toBe("hidden");
+    ).toBe("locked21");
+  });
+
+  it("免除日の設定済み就寝時刻は表示する", () => {
+    expect(
+      resolveBedtimeUiMode({
+        isExemptDay: true,
+        isVacationMode: false,
+        isWeekendEveDay: false,
+        bedtimeHour: 22,
+        todayStatus: "exempt",
+        date: "2026-07-30",
+        now: new Date(2026, 6, 30, 10, 0, 0),
+      }),
+    ).toBe("display");
   });
 
   it("長期休み・18時前・未設定なら settable", () => {
@@ -142,7 +156,7 @@ describe("resolveBedtimeUiMode", () => {
     ).toBe("locked21");
   });
 
-  it("免除日は移行期間中でも hidden（仕様勝ち）", () => {
+  it("免除日は移行期間中でも就寝時刻を固定表示する", () => {
     expect(
       resolveBedtimeUiMode({
         isExemptDay: true,
@@ -154,7 +168,7 @@ describe("resolveBedtimeUiMode", () => {
         now: new Date(2026, 7, 25, 10, 0, 0),
         isTransitionPeriod: true,
       }),
-    ).toBe("hidden");
+    ).toBe("locked21");
   });
 });
 

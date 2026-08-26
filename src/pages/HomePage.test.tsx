@@ -88,11 +88,13 @@ describe("HomePage", () => {
     sessionStorage.clear();
   });
 
-  it("免除日でも採点結果導線を残す", () => {
+  it("免除日は Figma どおり休日バナー・就寝・無効 CTA・各導線を表示する", () => {
     renderHome(
       buildHome({
         isExemptDay: true,
-        todayStatus: "completed",
+        balancePoints: 120,
+        bedtimeHour: 22,
+        todayStatus: "exempt",
         questAction: "none",
       }),
     );
@@ -100,14 +102,40 @@ describe("HomePage", () => {
     expect(screen.getByTestId("home-page").getAttribute("data-home-variant")).toBe(
       "kid-home-exempt",
     );
-    expect(screen.getByTestId("exempt-message")).toBeTruthy();
+    expect(screen.getByTestId("exempt-message").textContent).toBe(
+      "今日はクエストお休みです",
+    );
+    expect(screen.getByTestId("bedtime-display").textContent).toContain("22時");
+    const startButton = screen.getByRole("button", {
+      name: "🎯 クエストをはじめる！",
+    });
+    expect(startButton.hasAttribute("disabled")).toBe(true);
     expect(screen.getByTestId("nav-results")).toBeTruthy();
-    expect(
-      screen.queryByRole("button", { name: "🎯 クエストをはじめる！" }),
-    ).toBeNull();
+    expect(screen.getByTestId("nav-rewards")).toBeTruthy();
+    expect(screen.getByTestId("nav-timer")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "クエストのルール" })).toBeTruthy();
+
+    const page = screen.getByTestId("home-page");
+    const children = Array.from(page.children);
+    const sectionIndex = (element: HTMLElement) => {
+      let section = element;
+      while (section.parentElement && section.parentElement !== page) {
+        section = section.parentElement;
+      }
+      return children.indexOf(section);
+    };
+    expect(sectionIndex(screen.getByTestId("exempt-message"))).toBeLessThan(
+      sectionIndex(screen.getByTestId("balance-display")),
+    );
+    expect(sectionIndex(screen.getByTestId("balance-display"))).toBeLessThan(
+      sectionIndex(screen.getByTestId("bedtime-display")),
+    );
+    expect(sectionIndex(screen.getByTestId("bedtime-display"))).toBeLessThan(
+      sectionIndex(startButton),
+    );
   });
 
-  it("exempt-vacation では就寝 UI を出さない", () => {
+  it("exempt-vacation でも就寝 UI を固定表示する", () => {
     renderHome(
       buildHome({
         isExemptDay: true,
@@ -122,7 +150,7 @@ describe("HomePage", () => {
     );
     expect(screen.queryByTestId("bedtime-entry")).toBeNull();
     expect(screen.queryByTestId("bedtime-display")).toBeNull();
-    expect(screen.queryByTestId("bedtime-locked")).toBeNull();
+    expect(screen.getByTestId("bedtime-locked").textContent).toContain("21時");
     expect(screen.getByText("🏖️ 長期休みモード")).toBeTruthy();
   });
 

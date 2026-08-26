@@ -32,8 +32,8 @@ import {
 } from "@/lib/sessionStorage";
 import type { BedtimeHour } from "@/types/api";
 
-/** 免除日のお休み文言（仕様正） */
-const EXEMPT_MESSAGE = "今日はクエストお休みです（ママが免除日に設定）";
+/** Figma kid-home-exempt の免除日バナー文言 */
+const EXEMPT_MESSAGE = "今日はクエストお休みです";
 
 /** 長期休みモード終了1週間前の移行期間バナー文言（仕様正・Issue #36） */
 const VACATION_TRANSITION_MESSAGE =
@@ -156,7 +156,8 @@ export function HomePage() {
     deadline.pastRegistrationCutoff &&
     data.todayStatus === "unanswered" &&
     data.questAction === "start";
-  const showQuestStart = !isExemptDay && data.questAction === "start";
+  // 免除日は導線の位置を保ったまま、開始できないことを示す。
+  const showQuestStart = isExemptDay || data.questAction === "start";
   const showQuestRetry = !isExemptDay && data.questAction === "retry";
 
   /**
@@ -190,6 +191,12 @@ export function HomePage() {
         {data.unacknowledgedCount > 0 && (
           <Banner onClick={() => navigate("/results?unacked=1")}>
             採点結果を確認する（未確認あり！）
+          </Banner>
+        )}
+
+        {isExemptDay && (
+          <Banner tone="warning" data-testid="exempt-message">
+            {EXEMPT_MESSAGE}
           </Banner>
         )}
 
@@ -260,8 +267,7 @@ export function HomePage() {
             <span aria-hidden>✓</span>
           </div>
         )}
-        {(bedtimeUi === "locked21" ||
-          (bedtimeUi === "hidden" && !isExemptDay)) && (
+        {(bedtimeUi === "locked21" || bedtimeUi === "hidden") && (
           <div
             className="flex min-h-touch items-center gap-3 rounded-default border border-border bg-surface px-5 py-3 text-base text-ink"
             data-testid="bedtime-locked"
@@ -269,15 +275,6 @@ export function HomePage() {
             <span aria-hidden>🛏️</span>
             <span className="flex-1">今日の寝る時間: 21時</span>
             <span aria-hidden>✓</span>
-          </div>
-        )}
-
-        {isExemptDay && (
-          <div className="flex items-start gap-3 rounded-default border-[3px] border-info bg-info-soft p-5">
-            <span aria-hidden>🌙</span>
-            <p className="text-lg text-ink" data-testid="exempt-message">
-              {EXEMPT_MESSAGE}
-            </p>
           </div>
         )}
 
@@ -347,15 +344,13 @@ export function HomePage() {
           </Button>
         </div>
 
-        {!isExemptDay && (
-          <button
-            type="button"
-            className="flex min-h-touch w-full items-center justify-center rounded-default border border-border bg-surface px-6 py-3 text-lg text-ink hover:bg-surface-soft"
-            onClick={() => setRulesOpen(true)}
-          >
-            クエストのルール
-          </button>
-        )}
+        <button
+          type="button"
+          className="flex min-h-touch w-full items-center justify-center rounded-default border border-border bg-surface px-6 py-3 text-lg text-ink hover:bg-surface-soft"
+          onClick={() => setRulesOpen(true)}
+        >
+          クエストのルール
+        </button>
       </div>
 
       <QuestRulesDialog

@@ -1,9 +1,9 @@
 /**
  * @file QuestPage
  * @description 1問ずつクエストに回答する画面（宿題条件分岐対応）。
- *   見た目は Figma kid-quest（進捗バー・色付き3択・茶枠ボード）に寄せる（Issue #19）。
+ *   見た目は Figma kid-quest（ステップ円・色付き3択・茶枠ボード）に寄せる（Issue #67）。
  */
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import type { ChildAnswer, QuestDefinition } from "@/types/api";
@@ -22,6 +22,60 @@ import { isRegistrationReopenActive } from "@/lib/registrationReopen";
 import { HOMEWORK_QUEST_ID, PHONE_QUEST_ID } from "@/lib/questLabels";
 import { ensureQuestSessionStarted, getBedtimeHourDraft } from "@/lib/sessionStorage";
 
+/** ✓アイコン（できた） */
+function CheckIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={3}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="size-7 sm:size-9"
+      aria-hidden
+    >
+      <path d="M5 13l4 4L19 7" />
+    </svg>
+  );
+}
+
+/** ✗アイコン（できなかった） */
+function CrossIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={3}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="size-7 sm:size-9"
+      aria-hidden
+    >
+      <path d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  );
+}
+
+/** ?アイコン（わからない） */
+function QuestionIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={3}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="size-7 sm:size-9"
+      aria-hidden
+    >
+      <path d="M12 16v.01M8 8a4 4 0 118 0c0 2-2 3-4 3" />
+    </svg>
+  );
+}
+
 /**
  * 選択肢の見た目メタ
  * @typedef {object} ChoiceMeta
@@ -29,31 +83,36 @@ import { ensureQuestSessionStarted, getBedtimeHourDraft } from "@/lib/sessionSto
  * @property {string} label - 表示ラベル
  * @property {string} idleClass - 未選択クラス
  * @property {string} selectedClass - 選択中クラス
+ * @property {ReactNode} [icon] - アイコン
  */
 type ChoiceMeta = {
   value: ChildAnswer;
   label: string;
   idleClass: string;
   selectedClass: string;
+  icon?: ReactNode;
 };
 
 /** 3択クエスト用の選択肢（Figma 色） */
 const CHOICES: ChoiceMeta[] = [
   {
     value: 1,
-    label: "👍 できた",
+    label: "できた",
+    icon: <CheckIcon />,
     idleClass: "border-success bg-success-soft",
     selectedClass: "border-success bg-success text-white shadow-[var(--shadow-secondary)]",
   },
   {
     value: 0,
-    label: "👎 できなかった",
+    label: "できなかった",
+    icon: <CrossIcon />,
     idleClass: "border-danger bg-danger-soft",
     selectedClass: "border-danger bg-danger text-white shadow-[var(--shadow-danger)]",
   },
   {
     value: -1,
-    label: "🤔 わからない",
+    label: "わからない",
+    icon: <QuestionIcon />,
     idleClass: "border-primary bg-surface-warm",
     selectedClass: "border-primary bg-primary text-white shadow-[var(--shadow-primary)]",
   },
@@ -69,19 +128,22 @@ const BINARY_CHOICES: ChoiceMeta[] = [
 const HOMEWORK_CHOICES: ChoiceMeta[] = [
   {
     value: 1,
-    label: "👍 テキパキできた",
+    label: "テキパキできた",
+    icon: <CheckIcon />,
     idleClass: "border-success bg-success-soft",
     selectedClass: "border-success bg-success text-white shadow-[var(--shadow-secondary)]",
   },
   {
     value: 0,
-    label: "👎 テキパキできなかった",
+    label: "テキパキできなかった",
+    icon: <CrossIcon />,
     idleClass: "border-danger bg-danger-soft",
     selectedClass: "border-danger bg-danger text-white shadow-[var(--shadow-danger)]",
   },
   {
     value: -1,
-    label: "📚 今日は宿題がなかった",
+    label: "今日は宿題がなかった",
+    icon: <QuestionIcon />,
     idleClass: "border-primary bg-surface-warm",
     selectedClass: "border-primary bg-primary text-white shadow-[var(--shadow-primary)]",
   },
@@ -91,19 +153,22 @@ const HOMEWORK_CHOICES: ChoiceMeta[] = [
 const PHONE_CHOICES: ChoiceMeta[] = [
   {
     value: 1,
-    label: "👍 できた",
+    label: "できた",
+    icon: <CheckIcon />,
     idleClass: "border-success bg-success-soft",
     selectedClass: "border-success bg-success text-white shadow-[var(--shadow-secondary)]",
   },
   {
     value: 0,
-    label: "👎 できなかった",
+    label: "できなかった",
+    icon: <CrossIcon />,
     idleClass: "border-danger bg-danger-soft",
     selectedClass: "border-danger bg-danger text-white shadow-[var(--shadow-danger)]",
   },
   {
     value: -1,
-    label: "📱 今日はキッズケータイを使う必要がなかった",
+    label: "今日はキッズケータイを使う必要がなかった",
+    icon: <QuestionIcon />,
     idleClass: "border-primary bg-surface-warm",
     selectedClass: "border-primary bg-primary text-white shadow-[var(--shadow-primary)]",
   },
@@ -113,13 +178,15 @@ const PHONE_CHOICES: ChoiceMeta[] = [
 const YES_NO_CHOICES: ChoiceMeta[] = [
   {
     value: 1,
-    label: "👍 はい",
+    label: "はい",
+    icon: <CheckIcon />,
     idleClass: "border-success bg-success-soft",
     selectedClass: "border-success bg-success text-white",
   },
   {
     value: 0,
-    label: "👎 いいえ",
+    label: "いいえ",
+    icon: <CrossIcon />,
     idleClass: "border-danger bg-danger-soft",
     selectedClass: "border-danger bg-danger text-white",
   },
@@ -158,7 +225,6 @@ export function QuestPage() {
     setAnswer,
     goNext,
     goPrev,
-    isComplete,
     currentQuest,
     currentAnswer,
     isFollowUpMode,
@@ -200,14 +266,15 @@ export function QuestPage() {
   }
 
   const choices = answerChoicesFor(currentQuest, isFollowUpMode);
-  const progressIndex = isFollowUpMode ? draft.index + 1 : draft.index + 1;
+  const progressIndex = draft.index + 1;
   const progressTotal = daily.quests.length;
-  const progressRatio = progressTotal > 0 ? progressIndex / progressTotal : 0;
+  const isLastQuest = draft.index >= progressTotal - 1;
 
   return (
     <ChildPageFrame vacationMode={homeData?.isVacationMode}>
       <div className="flex flex-1 flex-col gap-6 transition-opacity duration-300">
-        <div className="flex flex-col gap-2">
+        {/* タイトル＋ステップ円 */}
+        <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted">
               {isFollowUpMode ? "追問" : "まいにちクエスト"}
@@ -220,21 +287,37 @@ export function QuestPage() {
           </div>
           {!isFollowUpMode && (
             <div
-              className="h-4 overflow-hidden rounded-sm border-2 border-border bg-progress-track"
+              className="flex items-center gap-2"
               role="progressbar"
               aria-valuenow={progressIndex}
               aria-valuemin={1}
               aria-valuemax={progressTotal}
             >
-              <div
-                className="h-full bg-info transition-[width] duration-300"
-                style={{ width: `${Math.round(progressRatio * 100)}%` }}
-              />
+              {Array.from({ length: progressTotal }, (_, i) => {
+                const step = i + 1;
+                const isDone = step < progressIndex;
+                const isCurrent = step === progressIndex;
+                return (
+                  <div
+                    key={step}
+                    className={[
+                      "flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-bold transition-colors sm:size-10 sm:text-base",
+                      isDone
+                        ? "bg-info text-white"
+                        : isCurrent
+                          ? "border-[3px] border-primary bg-primary text-white"
+                          : "border-2 border-border bg-surface text-muted",
+                    ].join(" ")}
+                  >
+                    {isDone ? "✓" : step}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
 
-        <Card className="flex flex-1 flex-col items-center gap-8 border-4 p-8 text-center shadow-[var(--shadow-quest-board)] sm:p-12">
+        <Card className="flex flex-1 flex-col items-center gap-8 border-4 border-border p-8 text-center shadow-[var(--shadow-quest-board)] sm:p-12">
           <h1 className="text-2xl font-bold leading-relaxed text-ink sm:text-[32px]">
             {currentQuest.title}
           </h1>
@@ -242,14 +325,7 @@ export function QuestPage() {
             <p className="text-muted">{currentQuest.hint}</p>
           )}
 
-          <div
-            className={[
-              "flex w-full gap-3",
-              choices.length >= 3
-                ? "flex-col sm:flex-row"
-                : "flex-col sm:flex-row",
-            ].join(" ")}
-          >
+          <div className="flex w-full gap-3 flex-col sm:flex-row">
             {choices.map((c) => {
               const selected = currentAnswer === c.value;
               return (
@@ -258,10 +334,11 @@ export function QuestPage() {
                   type="button"
                   onClick={() => setAnswer(c.value)}
                   className={[
-                    "flex min-h-[72px] flex-1 items-center justify-center rounded-[20px] border-4 px-4 py-6 text-lg font-medium text-ink transition-transform active:scale-[0.98] sm:min-h-[120px] sm:text-[22px]",
+                    "flex min-h-[72px] flex-1 flex-col items-center justify-center gap-2 rounded-[20px] border-4 px-4 py-6 text-lg font-medium text-ink transition-transform active:scale-[0.98] sm:min-h-[120px] sm:text-[22px]",
                     selected ? c.selectedClass : c.idleClass,
                   ].join(" ")}
                 >
+                  {c.icon && <span className="shrink-0">{c.icon}</span>}
                   {c.label}
                 </button>
               );
@@ -276,19 +353,23 @@ export function QuestPage() {
             disabled={draft.index === 0 && !isFollowUpMode}
             onClick={goPrev}
           >
-            👈 もどる
+            もどる
           </Button>
-          {canGoNext ? (
-            <Button className="flex-1" onClick={goNext}>
-              つぎへ 👉
+          {isLastQuest && !isFollowUpMode ? (
+            <Button
+              className="flex-1"
+              disabled={!canConfirm}
+              onClick={() => navigate("/quest/confirm")}
+            >
+              確認へ
             </Button>
           ) : (
             <Button
               className="flex-1"
-              disabled={!canConfirm && !isComplete}
-              onClick={() => navigate("/quest/confirm")}
+              disabled={!canGoNext}
+              onClick={goNext}
             >
-              確認へ 👉
+              つぎへ
             </Button>
           )}
         </div>

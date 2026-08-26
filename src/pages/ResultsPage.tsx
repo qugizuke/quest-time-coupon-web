@@ -99,6 +99,11 @@ function weekCardLabel(item: ResultItem | undefined): {
   };
 }
 
+/** Figma の日付バー用に全角括弧へ揃える */
+function todayBannerLabel(date: string): string {
+  return `${formatDateJa(date).replace("(", "（").replace(")", "）")}・今日`;
+}
+
 /**
  * 未確認（要確認）かどうか
  * @param {ResultItem} item - 結果
@@ -191,6 +196,16 @@ export function ResultsPage() {
   }, [items]);
 
   const selected = selectedDate ? byDate.get(selectedDate) : undefined;
+
+  /** 未確認分は残高へ未反映のため、週間合計には確認済み結果だけを含める */
+  const weeklyTotal = useMemo(
+    () =>
+      weekDates.reduce((total, date) => {
+        const item = byDate.get(date);
+        return item && !needsAck(item) ? total + item.totalPoints : total;
+      }, 0),
+    [byDate, weekDates],
+  );
 
   const ackMutation = useMutation({
     mutationFn: (date: string) => postResultsAck(date),
@@ -291,28 +306,30 @@ export function ResultsPage() {
 
   return (
     <ChildPageFrame>
-      <div className="mb-6">
-        <p className="text-sm text-muted">📊 週ごとの結果</p>
-        <h1 className="text-app-lg font-bold">採点結果</h1>
-      </div>
-
       {!selected && (
-        <div className="flex flex-col gap-4" data-testid="results-week-list">
+        <div className="flex flex-col gap-6" data-testid="results-week-list">
+          <div
+            className="w-full rounded-default border-[3px] border-border bg-surface px-6 py-3 text-[22px] leading-none text-ink"
+            data-testid="results-today-banner"
+          >
+            {todayBannerLabel(today)}
+          </div>
+
           <div className="flex items-center justify-between gap-2">
             <Button
               variant="secondary"
-              className="px-3 text-base"
+              className="h-[58px] w-[120px] shrink-0 p-3 text-base font-normal"
               onClick={() => setWeekOffset((v) => v - 1)}
               data-testid="results-prev-week"
             >
               ← 前週
             </Button>
-            <p className="text-center text-sm font-medium" data-testid="results-week-label">
+            <p className="flex-1 text-center text-[22px] leading-none" data-testid="results-week-label">
               {formatWeekLabel(monday)}
             </p>
             <Button
               variant="secondary"
-              className="px-3 text-base"
+              className="h-[58px] w-[120px] shrink-0 p-3 text-base font-normal"
               onClick={() => setWeekOffset((v) => v + 1)}
               data-testid="results-next-week"
             >
@@ -320,14 +337,16 @@ export function ResultsPage() {
             </Button>
           </div>
 
-          <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-7">
+          <ul className="grid grid-cols-7 gap-3 overflow-x-auto pt-3">
             {weekDates.map((date) => {
               const item = byDate.get(date);
               const clickable = !!item;
               const unacked = item ? needsAck(item) : false;
+              const isToday = date === today;
+              const highlighted = isToday || unacked;
               const card = weekCardLabel(item);
               return (
-                <li key={date}>
+                <li key={date} className="min-w-[112px]">
                   <button
                     type="button"
                     disabled={!clickable}
@@ -340,40 +359,71 @@ export function ResultsPage() {
                     data-testid={`results-day-${date}`}
                     data-reason-code={item?.reasonCode ?? ""}
                     data-unacked={unacked ? "true" : "false"}
-                    className={`flex w-full flex-col items-center gap-1 rounded-default px-2 py-3 text-center ${
-                      clickable
-                        ? unacked
-                          ? "border-[3px] border-danger bg-surface shadow-[var(--shadow-card)]"
-                          : "border-[3px] border-border bg-surface shadow-[var(--shadow-card)]"
-                        : "cursor-default border border-transparent bg-muted-soft text-muted"
+                    className={`relative flex h-[180px] w-full flex-col items-center gap-2 rounded-default border-[3px] px-3 pb-3 pt-4 text-center ${
+                      highlighted
+                        ? "border-primary bg-warning/15"
+                        : clickable
+                          ? "border-border bg-surface"
+                          : "cursor-default border-border bg-muted-soft opacity-70"
                     }`}
                   >
-                    <span className="font-display text-2xl leading-none text-ink">
-                      {formatDayNumber(date)}
+                    {isToday && (
+                      <span className="absolute -top-[15px] left-1/2 -translate-x-1/2 rounded-[12px] bg-primary px-2.5 py-[3px] text-[11px] leading-none text-white">
+                        今日
+                      </span>
+                    )}
+                    <span className="flex items-center gap-2">
+                      <span className="text-sm text-muted">{formatDayNumber(date)}</span>
+                      <span
+                        className={`flex size-10 items-center justify-center rounded-full text-lg ${
+                          highlighted ? "bg-primary text-white" : "bg-info-soft text-info"
+                        }`}
+                      >
+                        {formatWeekdayJa(date)}
+                      </span>
                     </span>
-                    <span className="text-xs text-muted">{formatWeekdayJa(date)}</span>
-                    <span
-                      className={[
-                        "text-sm font-bold",
-                        card.tone === "danger"
-                          ? "text-danger"
-                          : card.tone === "success"
-                            ? "text-success"
-                            : card.tone === "info"
-                              ? "text-info"
-                              : "text-muted",
-                      ].join(" ")}
-                    >
-                      {card.pointsText}
-                    </span>
-                    {card.statusText && (
-                      <StatusBadge tone={card.tone}>{card.statusText}</StatusBadge>
+                    {unacked ? (
+                      <>
+                        <StatusBadge tone="warning">🔔 未確認</StatusBadge>
+                        <span className="text-[13px] leading-[22px] text-primary">
+                          確認する →
+                        </span>
+                      </>
+                    ) : item ? (
+                      <>
+                        <StatusBadge tone={card.tone}>
+                          {card.statusText ?? "✅ 採点済み"}
+                        </StatusBadge>
+                        <span className="text-[15px] leading-[22px] text-ink">
+                          {card.pointsText}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <StatusBadge tone="muted">— 結果なし</StatusBadge>
+                        <span className="text-xs text-muted">結果なし</span>
+                      </>
                     )}
                   </button>
                 </li>
               );
             })}
           </ul>
+
+          <div
+            className="flex w-full items-center justify-between rounded-default border-[3px] border-border bg-surface px-6 py-3"
+            data-testid="results-weekly-summary"
+          >
+            <span className="text-base">週間合計</span>
+            <span
+              className={`font-display text-[32px] leading-none ${
+                weeklyTotal >= 0 ? "text-success" : "text-danger"
+              }`}
+              data-testid="results-weekly-total"
+            >
+              {weeklyTotal >= 0 ? "+" : ""}{weeklyTotal}{pointsUnitLabel(monday)}
+            </span>
+          </div>
         </div>
       )}
 

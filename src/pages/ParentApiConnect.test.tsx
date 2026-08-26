@@ -113,7 +113,7 @@ describe("ParentHomePage parentHome", () => {
       }),
     });
     expect(screen.getByTestId("registration-reopen-card")).toBeTruthy();
-    expect(screen.getByText("締切超過")).toBeTruthy();
+    expect(screen.getByText("締切済み")).toBeTruthy();
   });
 
   it("再開フォーム展開時にタイマー候補を表示し初期値は1時間", () => {
@@ -143,7 +143,7 @@ describe("ParentHomePage parentHome", () => {
     expect(screen.getByText("再開する時間")).toBeTruthy();
   });
 
-  it("used 済みなら再開 CTA を出さない", () => {
+  it("used 済みならカードは表示しつつ再開 CTA を disabled にする", () => {
     renderParentPages({
       path: "/parent",
       parentHome: buildParentHome({
@@ -157,7 +157,12 @@ describe("ParentHomePage parentHome", () => {
         },
       }),
     });
-    expect(screen.queryByTestId("registration-reopen-card")).toBeNull();
+    expect(screen.getByTestId("registration-reopen-card")).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: "登録受付を再開" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
   });
 
   it("longVacation を parentHome から表示する", () => {
@@ -216,6 +221,7 @@ describe("ParentSettingsPage API 接続", () => {
         endDate: "2026-08-10",
         updatedAt: "2026-07-19T10:00:00+09:00",
         active: true,
+        vacationPhase: "active",
       },
       exemptions: {
         periods: [
@@ -228,10 +234,48 @@ describe("ParentSettingsPage API 接続", () => {
         updatedAt: "2026-07-24T10:00:00+09:00",
       },
     });
+    const summary = screen.getByTestId("settings-summary-card");
+    expect(summary.textContent).toContain("現在の設定状況");
+    expect(summary.textContent).toContain("長期休みモード");
+    expect(summary.textContent).toContain("1件");
+    expect(summary.textContent).toContain("21:00");
     expect(screen.getByTestId("long-vacation-card")).toBeTruthy();
-    expect(screen.getByText("設定あり")).toBeTruthy();
+    expect(screen.getAllByText("設定あり")).toHaveLength(2);
+    const period = screen.getByTestId("exempt-period-2026-07-25|2026-07-26");
+    expect(period.textContent).toContain("2026/07/25（土）");
+    expect(period.textContent).toContain("2026/07/26（日）");
+    expect(period.textContent).toContain("2日間");
+    expect(period.textContent).toContain("終了日を変更");
+  });
+
+  it("免除終了日編集中は削除ボタンを無効化する", () => {
+    renderParentPages({
+      path: "/parent/settings",
+      parentHome: buildParentHome(),
+      exemptions: {
+        periods: [
+          {
+            startDate: "2026-07-25",
+            endDate: "2026-07-26",
+            createdAt: "2026-07-24T10:00:00+09:00",
+          },
+        ],
+        updatedAt: "2026-07-24T10:00:00+09:00",
+      },
+    });
+    const period = screen.getByTestId("exempt-period-2026-07-25|2026-07-26");
+    const editButton = Array.from(period.querySelectorAll("button")).find(
+      (button) => button.textContent === "終了日を変更",
+    );
+    expect(editButton).toBeTruthy();
+    fireEvent.click(editButton!);
+    const deleteButton = Array.from(period.querySelectorAll("button")).find(
+      (button) => button.textContent === "削除",
+    );
+    expect(deleteButton).toBeTruthy();
+    expect((deleteButton as HTMLButtonElement).disabled).toBe(true);
     expect(
-      screen.getByTestId("exempt-period-2026-07-25|2026-07-26"),
+      screen.getByTestId("exempt-end-input-2026-07-25|2026-07-26"),
     ).toBeTruthy();
   });
 

@@ -67,6 +67,12 @@ describe("BalanceDisplay", () => {
     expect(screen.getByTestId("balance-minutes").textContent).toBe("30");
   });
 
+  it("compact ではポイントだけを大きく表示する", () => {
+    render(<BalanceDisplay balancePoints={120} switchMinutes={30} compact />);
+    expect(screen.getByTestId("balance-points").textContent).toBe("120");
+    expect(screen.queryByTestId("balance-minutes")).toBeNull();
+  });
+
   it("balancePoints 未指定時はポイント表示を出さない", () => {
     render(<BalanceDisplay switchMinutes={30} />);
     expect(screen.queryByTestId("balance-points")).toBeNull();

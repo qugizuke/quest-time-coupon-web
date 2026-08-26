@@ -7,8 +7,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { QuestDeadlineCountdown } from "@/components/QuestDeadlineCountdown";
-import { QuestRegistrationCutoffCountdown } from "@/components/QuestRegistrationCutoffCountdown";
 import { QuestRulesDialog } from "@/components/QuestRulesDialog";
 import { BedtimeModal } from "@/components/BedtimeModal";
 import { BalanceDisplay } from "@/components/BalanceDisplay";
@@ -17,7 +15,6 @@ import { postRegistrationSetting } from "@/api/client";
 import { ChildPageFrame } from "@/components/layout/ChildPageFrame";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { useQuestDeadlineClock } from "@/hooks/useQuestDeadlineClock";
 import { isWeekendEve } from "@/lib/deadline";
 import { todayLocal } from "@/lib/date";
@@ -35,16 +32,8 @@ import {
 } from "@/lib/sessionStorage";
 import type { BedtimeHour } from "@/types/api";
 
-const STATUS_LABEL = {
-  unanswered: "今日はまだ答えていません",
-  answered_ungraded: "回答済み・採点待ち",
-  pending_ack: "結果の確認が必要です",
-  completed: "今日は全部終わり！",
-  exempt: "今日はクエストお休みです",
-} as const;
-
-/** 免除日のお休み文言（仕様正） */
-const EXEMPT_MESSAGE = "今日はクエストお休みです（ママが免除日に設定）";
+/** Figma kid-home-exempt の免除日バナー文言 */
+const EXEMPT_MESSAGE = "今日はクエストお休みです";
 
 /** 長期休みモード終了1週間前の移行期間バナー文言（仕様正・Issue #36） */
 const VACATION_TRANSITION_MESSAGE =
@@ -167,7 +156,8 @@ export function HomePage() {
     deadline.pastRegistrationCutoff &&
     data.todayStatus === "unanswered" &&
     data.questAction === "start";
-  const showQuestStart = !isExemptDay && data.questAction === "start";
+  // 免除日は導線の位置を保ったまま、開始できないことを示す。
+  const showQuestStart = isExemptDay || data.questAction === "start";
   const showQuestRetry = !isExemptDay && data.questAction === "retry";
 
   /**
@@ -191,57 +181,28 @@ export function HomePage() {
     return `今日の寝る時間: ${bedtimeHour}時`;
   }
 
-  /** きょうの状態本文（Figma 寄せ・免除は仕様文言） */
-  const statusBody = isExemptDay
-    ? EXEMPT_MESSAGE
-    : showMissedStartMessage
-      ? missedStartMessage(deadline.registrationCutoffLabel)
-      : data.todayStatus === "unanswered"
-        ? "クエスト未回答：今日のクエストが待っているよ！"
-        : STATUS_LABEL[data.todayStatus];
-
   return (
     <ChildPageFrame showHome={false} vacationMode={isVacationMode}>
       <div
-        className="flex flex-1 flex-col gap-8"
+        className="flex flex-1 flex-col gap-5"
         data-testid="home-page"
         data-home-variant={variant}
       >
-        <Card
-          tone="hero"
-          className="flex flex-col items-center justify-center gap-3 p-8 text-center"
-        >
-          <BalanceDisplay
-            balancePoints={data.balancePoints}
-            switchMinutes={data.switchMinutes ?? data.displayBalance}
-            penaltyMinutes={data.penaltyMinutes}
-            debtMinutes={data.debtMinutes}
-            penaltyTicketCount={data.penaltyTicketCount}
-            rewardVouchers={data.rewardVouchers}
-            audience="child"
-            compact
-          />
-        </Card>
-
-        {data.balancePoints < 0 && (
-          <Banner
-            tone="danger"
-            onClick={() => navigate("/rewards")}
-            data-testid="point-debt-banner"
-          >
-            ポイントがマイナスです。チケットで穴埋めできます
-          </Banner>
-        )}
-
         {data.unacknowledgedCount > 0 && (
           <Banner onClick={() => navigate("/results?unacked=1")}>
             採点結果を確認する（未確認あり！）
           </Banner>
         )}
 
+        {isExemptDay && (
+          <Banner tone="warning" data-testid="exempt-message">
+            {EXEMPT_MESSAGE}
+          </Banner>
+        )}
+
         {!isExemptDay && isVacationTransition && (
           <div
-            className="flex items-start gap-3 rounded-default border-[3px] border-info bg-info-soft px-4 py-4"
+            className="flex items-start gap-3 rounded-default border-[3px] border-primary bg-primary/15 px-4 py-4"
             data-testid="vacation-transition-banner"
           >
             <span className="mt-0.5 shrink-0 text-lg" aria-hidden>
@@ -253,172 +214,159 @@ export function HomePage() {
           </div>
         )}
 
-        <div
-          className={[
-            "flex items-start gap-4 rounded-default border-[3px] p-5",
-            isExemptDay
-              ? "border-info bg-info-soft"
-              : data.todayStatus === "completed"
-                ? "border-success bg-success-soft"
-                : "border-danger bg-danger-soft",
-          ].join(" ")}
-        >
-          <span className="mt-0.5 shrink-0 text-xl" aria-hidden>
-            {isExemptDay ? "🌙" : data.todayStatus === "completed" ? "✅" : "❗"}
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-[13px] text-muted">きょうの状態</p>
-            <p
-              className="mt-1 text-lg leading-snug text-ink"
-              data-testid={isExemptDay ? "exempt-message" : undefined}
-            >
-              {statusBody}
-            </p>
-            {!isExemptDay && isReopenActive && data.registrationReopen?.endsAt && (
-              <p className="mt-2 text-sm text-muted" data-testid="reopen-active-hint">
-                ママが受付を再開してくれたよ！
-                {formatRegistrationReopenEndsAtLabel(
-                  data.registrationReopen.endsAt,
-                  today,
-                )}
-                までクエストできる
-              </p>
-            )}
-            {!isExemptDay &&
-              !isReopenActive &&
-              !deadline.pastRegistrationCutoff &&
-              deadline.beforeRegistrationStart &&
-              data.questAction === "start" && (
-                <p className="mt-2 text-sm text-muted">
-                  {deadline.registrationStartLabel} からクエスト開始できます（
-                  {deadline.registrationCutoffLabel} まで受付）
-                </p>
-              )}
-            {!isExemptDay &&
-              !isReopenActive &&
-              !deadline.pastRegistrationCutoff &&
-              (data.questAction === "start" || data.questAction === "retry") &&
-              !deadline.beforeRegistrationStart &&
-              !deadline.showBonusCountdown &&
-              !deadline.showRegistrationCountdown && (
-                <p className="mt-2 text-sm text-muted">
-                  {deadline.bonusDeadlineLabel}{" "}
-                  までに登録して、寝る準備をママが確認できたら +5pt！（
-                  {deadline.registrationStartLabel}〜
-                  {deadline.registrationCutoffLabel} 受付）
-                </p>
-              )}
-          </div>
-        </div>
-
-        {!isExemptDay && deadline.showBonusCountdown && (
-          <QuestDeadlineCountdown
-            countdownFormatted={deadline.bonusCountdownFormatted}
-            bonusDeadlineLabel={deadline.bonusDeadlineLabel}
+        <div className="flex flex-col items-center justify-center gap-3 rounded-card bg-surface-warm p-8 text-center shadow-[var(--shadow-card)]">
+          <BalanceDisplay
+            balancePoints={data.balancePoints}
+            switchMinutes={data.switchMinutes ?? data.displayBalance}
+            penaltyMinutes={data.penaltyMinutes}
+            debtMinutes={data.debtMinutes}
+            penaltyTicketCount={data.penaltyTicketCount}
+            rewardVouchers={data.rewardVouchers}
+            audience="child"
+            compact
           />
-        )}
-
-        {!isExemptDay && deadline.showRegistrationCountdown && (
-          <QuestRegistrationCutoffCountdown
-            countdownFormatted={deadline.registrationCountdownFormatted}
-            registrationCutoffLabel={deadline.registrationCutoffLabel}
-          />
-        )}
-
-        <div className="flex flex-col gap-6">
-          <div className="flex flex-col gap-3">
-            {showQuestStart && canStartQuest && (
-              <Button fullWidth onClick={() => navigate("/quest")}>
-                ⚔️ クエストをはじめる！
-              </Button>
-            )}
-            {showQuestStart && !canStartQuest && (
-              <Button fullWidth disabled>
-                ⚔️ クエストをはじめる！
-              </Button>
-            )}
-            {showQuestRetry && (
-              <Button
-                fullWidth
-                variant="secondary"
-                onClick={() => navigate("/quest")}
-              >
-                やり直す
-              </Button>
-            )}
-            {!isExemptDay && (
-              <Button
-                fullWidth
-                variant="secondary"
-                onClick={() => setRulesOpen(true)}
-              >
-                クエストのルール
-              </Button>
-            )}
-          </div>
-
-          <div className="flex flex-col gap-3">
-            <Button
-              fullWidth
-              variant="navResults"
-              onClick={() => navigate("/results")}
-              data-testid="nav-results"
-            >
-              📊 採点結果をみる
-            </Button>
-            <Button
-              fullWidth
-              variant="navRewards"
+          {variant !== "kid-home-exempt-vacation" && (
+            <button
+              type="button"
+              className="text-sm text-ink underline-offset-4 hover:underline"
               onClick={() => navigate("/rewards")}
-              data-testid="nav-rewards"
             >
-              🎁 ポイントを交換する
-            </Button>
-            <Button
-              fullWidth
-              variant="navTimer"
-              onClick={() => navigate("/timer")}
-              data-testid="nav-timer"
-            >
-              ⏱️ タイマーをスタート
-            </Button>
-          </div>
-
-          {bedtimeUi === "settable" && (
-            <Card className="flex flex-col gap-3 p-6">
-              <p className="text-base text-ink">🛏️ 今日の寝る時間を設定する</p>
-              <Button
-                fullWidth
-                variant="secondary"
-                onClick={() => setBedtimeModalOpen(true)}
-                disabled={registrationMutation.isPending}
-                data-testid="bedtime-entry"
-              >
-                {bedtimeButtonLabel()}
-              </Button>
-            </Card>
-          )}
-          {bedtimeUi === "display" && bedtimeHour !== undefined && (
-            <Card className="p-6 text-center" data-testid="bedtime-display">
-              <p className="text-base">今日の寝る時間: {bedtimeHour}時</p>
-            </Card>
-          )}
-          {bedtimeUi === "locked21" && (
-            <Card className="p-6 text-center" data-testid="bedtime-locked">
-              <p className="text-base">今日は21時</p>
-            </Card>
+              🎫 チケットをみる →
+            </button>
           )}
         </div>
+
+        {data.balancePoints < 0 && (
+          <Banner
+            tone="danger"
+            onClick={() => navigate("/rewards")}
+            data-testid="point-debt-banner"
+          >
+            ポイントがマイナスです。チケットで穴埋めできます
+          </Banner>
+        )}
+
+        {bedtimeUi === "settable" && (
+          <button
+            type="button"
+            onClick={() => setBedtimeModalOpen(true)}
+            disabled={registrationMutation.isPending}
+            data-testid="bedtime-entry"
+            className="flex min-h-touch w-full items-center gap-3 rounded-default border border-border bg-surface px-5 py-3 text-left text-base text-ink disabled:opacity-40"
+          >
+            <span aria-hidden>🛏️</span>
+            <span className="min-w-0 flex-1">{bedtimeButtonLabel()}</span>
+            <span aria-hidden>{bedtimeHour === undefined ? "→" : "✓"}</span>
+          </button>
+        )}
+        {bedtimeUi === "display" && bedtimeHour !== undefined && (
+          <div
+            className="flex min-h-touch items-center gap-3 rounded-default border border-border bg-surface px-5 py-3 text-base text-ink"
+            data-testid="bedtime-display"
+          >
+            <span aria-hidden>🛏️</span>
+            <span className="flex-1">今日の寝る時間: {bedtimeHour}時</span>
+            <span aria-hidden>✓</span>
+          </div>
+        )}
+        {(bedtimeUi === "locked21" || bedtimeUi === "hidden") && (
+          <div
+            className="flex min-h-touch items-center gap-3 rounded-default border border-border bg-surface px-5 py-3 text-base text-ink"
+            data-testid="bedtime-locked"
+          >
+            <span aria-hidden>🛏️</span>
+            <span className="flex-1">今日の寝る時間: 21時</span>
+            <span aria-hidden>✓</span>
+          </div>
+        )}
+
+        <div className="flex flex-col gap-3">
+          {showQuestStart && canStartQuest && (
+            <Button fullWidth onClick={() => navigate("/quest")}>
+              🎯 クエストをはじめる！
+            </Button>
+          )}
+          {showQuestStart && !canStartQuest && (
+            <Button fullWidth disabled>
+              🎯 クエストをはじめる！
+            </Button>
+          )}
+          {showQuestRetry && (
+            <Button
+              fullWidth
+              variant="secondary"
+              onClick={() => navigate("/quest")}
+            >
+              やり直す
+            </Button>
+          )}
+        </div>
+
+        {!isExemptDay && isReopenActive && data.registrationReopen?.endsAt && (
+          <p className="text-center text-sm text-muted" data-testid="reopen-active-hint">
+            ママが受付を再開してくれたよ！
+            {formatRegistrationReopenEndsAtLabel(
+              data.registrationReopen.endsAt,
+              today,
+            )}
+            までクエストできる
+          </p>
+        )}
+
+        {showMissedStartMessage && (
+          <Banner tone="danger">
+            {missedStartMessage(deadline.registrationCutoffLabel)}
+          </Banner>
+        )}
+
+        <div className="flex flex-col gap-3">
+          <Button
+            fullWidth
+            variant="navResults"
+            onClick={() => navigate("/results")}
+            data-testid="nav-results"
+          >
+            採点結果をみる
+          </Button>
+          <Button
+            fullWidth
+            variant="navRewards"
+            onClick={() => navigate("/rewards")}
+            data-testid="nav-rewards"
+          >
+            ポイントを交換する
+          </Button>
+          <Button
+            fullWidth
+            variant="navTimer"
+            onClick={() => navigate("/timer")}
+            data-testid="nav-timer"
+          >
+            タイマーをスタート
+          </Button>
+        </div>
+
+        <button
+          type="button"
+          className="flex min-h-touch w-full items-center justify-center rounded-default border border-border bg-surface px-6 py-3 text-lg text-ink hover:bg-surface-soft"
+          onClick={() => setRulesOpen(true)}
+        >
+          クエストのルール
+        </button>
       </div>
 
-      <QuestRulesDialog open={rulesOpen} onClose={() => setRulesOpen(false)} />
+      <QuestRulesDialog
+        open={rulesOpen}
+        onClose={() => setRulesOpen(false)}
+        isVacationTransition={isVacationTransition}
+      />
 
       <BedtimeModal
         open={bedtimeModalOpen}
         onClose={() => setBedtimeModalOpen(false)}
         selectedHour={bedtimeHour}
         onSelect={handleBedtimeChange}
-        disabled={registrationMutation.isPending}
+        processing={registrationMutation.isPending}
       />
     </ChildPageFrame>
   );

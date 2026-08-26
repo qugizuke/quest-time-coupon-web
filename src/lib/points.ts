@@ -15,3 +15,12 @@ export const POINTS_CUTOVER_DATE = "2026-08-25";
 export function isOnOrAfterPointsCutover(date: string): boolean {
   return date >= POINTS_CUTOVER_DATE;
 }
+
+/**
+ * 日次ポイントの表示単位を返す。
+ * @param {string} date - 対象日（YYYY-MM-DD）
+ * @returns {"pt" | "分（旧）"} 切替日に応じた単位
+ */
+export function pointsUnitLabel(date: string): "pt" | "分（旧）" {
+  return isOnOrAfterPointsCutover(date) ? "pt" : "分（旧）";
+}

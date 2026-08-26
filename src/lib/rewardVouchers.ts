@@ -51,7 +51,10 @@ export function normalizeRewardVouchers(
   const normalized = zeroRewardVouchers();
   for (const key of REWARD_VOUCHER_KEYS) {
     const value = raw?.[key];
-    normalized[key] = typeof value === "number" && value > 0 ? value : 0;
+    normalized[key] =
+      typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+        ? value
+        : 0;
   }
   return normalized;
 }

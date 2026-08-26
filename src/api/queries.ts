@@ -13,6 +13,7 @@ import {
   fetchQuestExemptions,
   fetchResults,
   fetchRewardVoucherRefundRequests,
+  fetchRewardVoucherConsumptions,
 } from "@/api/client";
 import type { PointExchangeStatus, RewardVoucherRefundStatus } from "@/types/api";
 
@@ -26,12 +27,17 @@ export const queryKeys = {
   longVacation: ["longVacation"] as const,
   questExemptions: ["questExemptions"] as const,
   dailyQuests: (date: string) => ["dailyQuests", date] as const,
+  pointExchangeRequestsRoot: ["pointExchangeRequests"] as const,
   pointExchangeRequests: (month: string, status?: PointExchangeStatus) =>
     ["pointExchangeRequests", month, status ?? "all"] as const,
+  rewardVoucherRefundRequestsRoot: ["rewardVoucherRefundRequests"] as const,
   rewardVoucherRefundRequests: (
     month: string,
     status?: RewardVoucherRefundStatus,
   ) => ["rewardVoucherRefundRequests", month, status ?? "all"] as const,
+  rewardVoucherConsumptionsRoot: ["rewardVoucherConsumptions"] as const,
+  rewardVoucherConsumptions: (month: string) =>
+    ["rewardVoucherConsumptions", month] as const,
 };
 
 export const homeQuery = {
@@ -114,5 +120,13 @@ export function rewardVoucherRefundRequestsQuery(
   return {
     queryKey: queryKeys.rewardVoucherRefundRequests(month, status),
     queryFn: () => fetchRewardVoucherRefundRequests({ month, status }),
+  };
+}
+
+/** 物理報酬券使用の月次履歴（子ども／保護者で共用） */
+export function rewardVoucherConsumptionsQuery(month: string) {
+  return {
+    queryKey: queryKeys.rewardVoucherConsumptions(month),
+    queryFn: () => fetchRewardVoucherConsumptions({ month }),
   };
 }

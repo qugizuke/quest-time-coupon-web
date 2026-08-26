@@ -9,6 +9,7 @@ import { GradeDatePage } from "@/pages/GradeDatePage";
 import { GradeListPage } from "@/pages/GradeListPage";
 import { HomePage } from "@/pages/HomePage";
 import { ParentHomePage } from "@/pages/ParentHomePage";
+import { ParentManagementPage } from "@/pages/ParentManagementPage";
 import { ParentRewardsPage } from "@/pages/ParentRewardsPage";
 import { ParentSettingsPage } from "@/pages/ParentSettingsPage";
 import { QuestConfirmPage } from "@/pages/QuestConfirmPage";
@@ -36,6 +37,7 @@ export const router = createBrowserRouter(
         { index: true, element: <ParentHomePage /> },
         { path: "grades", element: <GradeListPage /> },
         { path: "grades/:date", element: <GradeDatePage /> },
+        { path: "management", element: <ParentManagementPage /> },
         { path: "rewards", element: <ParentRewardsPage /> },
         { path: "settings", element: <ParentSettingsPage /> },
       ],

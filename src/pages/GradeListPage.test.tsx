@@ -1,14 +1,21 @@
 /**
  * @file GradeListPage テスト
  * @description gradeDates API を正とし、stale localStorage 免除を優先しないことを検証する。
+ *   Figma 寄せ（Issue #76）: サブ見出し・未採点のみフィルタ・今日タグ・分単位も検証する。
  * @vitest-environment jsdom
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen, within } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { queryKeys } from "@/api/queries";
-import { formatDateJa, todayLocal } from "@/lib/date";
+import { formatDateJa } from "@/lib/date";
 import {
   clearParentLocalSettings,
   setExemptPeriods,
@@ -18,6 +25,17 @@ import type { GradeDateItem } from "@/types/api";
 
 /** gradeDates レスポンス形 */
 type GradeDatesResponse = { dates: GradeDateItem[] };
+
+/** テスト用の今日（2026-08-26 水・ポイント切替日 2026-08-25 の翌日） */
+const TODAY = "2026-08-26";
+
+vi.mock("@/lib/date", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/date")>("@/lib/date");
+  return {
+    ...actual,
+    todayLocal: () => "2026-08-26",
+  };
+});
 
 /**
  * GradeDateItem を組み立てる
@@ -59,12 +77,21 @@ function renderGradeList(gradeDates: GradeDatesResponse): void {
 }
 
 /**
+ * 行日付ラベル（Figma 寄せ: 全角括弧）
+ * @param {string} date - YYYY-MM-DD
+ * @returns {string} 例: 2026年8月26日（水）
+ */
+function rowDateLabel(date: string): string {
+  return formatDateJa(date).replace("(", "（").replace(")", "）");
+}
+
+/**
  * 日付行の button を取得する
  * @param {string} date - YYYY-MM-DD
  * @returns {HTMLElement} 行ボタン
  */
 function getDateRow(date: string): HTMLElement {
-  const label = formatDateJa(date);
+  const label = rowDateLabel(date);
   const buttons = screen.getAllByRole("button");
   const row = buttons.find((el) => el.textContent?.includes(label));
   if (!row) {
@@ -80,13 +107,12 @@ describe("GradeListPage gradeDates 正", () => {
   });
 
   it("API が ungraded なら stale localStorage 免除より採点へ進める", () => {
-    const today = todayLocal();
-    setExemptPeriods([{ id: "stale", startDate: today, endDate: today }], today);
+    setExemptPeriods([{ id: "stale", startDate: TODAY, endDate: TODAY }], TODAY);
 
     renderGradeList({
       dates: [
         buildGradeDateItem({
-          date: today,
+          date: TODAY,
           status: "ungraded",
           isExempt: false,
           ungradedCount: 2,
@@ -94,20 +120,19 @@ describe("GradeListPage gradeDates 正", () => {
       ],
     });
 
-    const row = getDateRow(today);
+    const row = getDateRow(TODAY);
     expect(row.hasAttribute("disabled")).toBe(false);
     expect(within(row).getByText("未採点")).toBeTruthy();
     expect(within(row).queryByText("免除")).toBeNull();
   });
 
   it("API が graded なら stale localStorage 免除より採点画面へ進める", () => {
-    const today = todayLocal();
-    setExemptPeriods([{ id: "stale", startDate: today, endDate: today }], today);
+    setExemptPeriods([{ id: "stale", startDate: TODAY, endDate: TODAY }], TODAY);
 
     renderGradeList({
       dates: [
         buildGradeDateItem({
-          date: today,
+          date: TODAY,
           status: "graded",
           isExempt: false,
           totalPoints: 15,
@@ -115,28 +140,152 @@ describe("GradeListPage gradeDates 正", () => {
       ],
     });
 
-    const row = getDateRow(today);
+    const row = getDateRow(TODAY);
     expect(row.hasAttribute("disabled")).toBe(false);
     expect(within(row).getByText("+15分")).toBeTruthy();
     expect(within(row).queryByText("免除")).toBeNull();
   });
 
   it("API が exempt なら localStorage 未設定でも免除表示で disabled", () => {
-    const today = todayLocal();
     clearParentLocalSettings();
 
     renderGradeList({
       dates: [
         buildGradeDateItem({
-          date: today,
+          date: TODAY,
           status: "exempt",
           isExempt: true,
         }),
       ],
     });
 
-    const row = getDateRow(today);
+    const row = getDateRow(TODAY);
     expect(row.hasAttribute("disabled")).toBe(true);
     expect(within(row).getByText("免除")).toBeTruthy();
+  });
+});
+
+describe("GradeListPage Figma 寄せ (#76)", () => {
+  afterEach(() => {
+    cleanup();
+    clearParentLocalSettings();
+  });
+
+  it("タイトルとサブ見出し「未採点の日をタップして採点」を表示する", () => {
+    renderGradeList({ dates: [] });
+
+    expect(screen.getByText("採点日一覧")).toBeTruthy();
+    expect(screen.getByText("未採点の日をタップして採点")).toBeTruthy();
+  });
+
+  it("行日付は全角括弧で、今日の行にのみ今日タグを表示する", () => {
+    renderGradeList({
+      dates: [
+        buildGradeDateItem({
+          date: TODAY,
+          status: "ungraded",
+          isExempt: false,
+          ungradedCount: 1,
+        }),
+      ],
+    });
+
+    const row = getDateRow(TODAY);
+    expect(row.textContent).toContain("2026年8月26日（水）");
+    expect(within(row).getByText("今日")).toBeTruthy();
+
+    const other = getDateRow("2026-08-27");
+    expect(other.textContent).toContain("2026年8月27日（木）");
+    expect(within(other).queryByText("今日")).toBeNull();
+  });
+
+  it("Figma の採点日一覧どおり採点済みの単位を分で表示する", () => {
+    renderGradeList({
+      dates: [
+        buildGradeDateItem({
+          date: "2026-08-24",
+          status: "graded",
+          isExempt: false,
+          totalPoints: 15,
+        }),
+        buildGradeDateItem({
+          date: "2026-08-25",
+          status: "graded",
+          isExempt: false,
+          totalPoints: 20,
+        }),
+        buildGradeDateItem({
+          date: TODAY,
+          status: "graded",
+          isExempt: false,
+          totalPoints: 45,
+        }),
+      ],
+    });
+
+    expect(within(getDateRow("2026-08-24")).getByText("+15分")).toBeTruthy();
+    expect(within(getDateRow("2026-08-25")).getByText("+20分")).toBeTruthy();
+    expect(within(getDateRow(TODAY)).getByText("+45分")).toBeTruthy();
+  });
+
+  it("「未採点のみ」チップで未採点行だけに絞り込む", () => {
+    renderGradeList({
+      dates: [
+        buildGradeDateItem({
+          date: "2026-08-24",
+          status: "graded",
+          isExempt: false,
+          totalPoints: 15,
+        }),
+        buildGradeDateItem({
+          date: TODAY,
+          status: "ungraded",
+          isExempt: false,
+          ungradedCount: 2,
+        }),
+        buildGradeDateItem({
+          date: "2026-08-27",
+          status: "exempt",
+          isExempt: true,
+        }),
+      ],
+    });
+
+    const chip = screen.getByTestId("ungraded-only-chip");
+    expect(chip.getAttribute("aria-pressed")).toBe("false");
+    expect(getDateRow("2026-08-24")).toBeTruthy();
+    expect(getDateRow(TODAY)).toBeTruthy();
+
+    fireEvent.click(chip);
+    expect(chip.getAttribute("aria-pressed")).toBe("true");
+    expect(getDateRow(TODAY)).toBeTruthy();
+    expect(screen.queryByText(rowDateLabel("2026-08-24"))).toBeNull();
+    expect(screen.queryByText(rowDateLabel("2026-08-27"))).toBeNull();
+    expect(screen.queryByText(rowDateLabel("2026-08-28"))).toBeNull();
+
+    fireEvent.click(chip);
+    expect(chip.getAttribute("aria-pressed")).toBe("false");
+    expect(getDateRow("2026-08-24")).toBeTruthy();
+    expect(getDateRow("2026-08-27")).toBeTruthy();
+  });
+
+  it("未採点がない週でフィルタ ON のとき空状態を表示する", () => {
+    renderGradeList({
+      dates: [
+        buildGradeDateItem({
+          date: TODAY,
+          status: "graded",
+          isExempt: false,
+          totalPoints: 15,
+        }),
+      ],
+    });
+
+    fireEvent.click(screen.getByTestId("ungraded-only-chip"));
+
+    expect(screen.getByTestId("ungraded-empty").textContent).toBe(
+      "未採点の日はありません",
+    );
+    expect(screen.queryByText(rowDateLabel(TODAY))).toBeNull();
   });
 });

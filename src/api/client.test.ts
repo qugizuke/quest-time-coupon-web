@@ -109,6 +109,34 @@ describe("client リクエスト組み立て", () => {
     });
   });
 
+  it("rewardVoucherConsumptions の GET/POST 契約を組み立てる", async () => {
+    vi.stubEnv("VITE_API_URL", API_BASE);
+    vi.stubEnv("VITE_MOCK_API", "false");
+    const fetchMock = stubFetch(jsonResponse({ ok: true, data: { month: "2026-08", items: [] } }));
+    const { fetchRewardVoucherConsumptions } = await importClient();
+    await fetchRewardVoucherConsumptions({ month: "2026-08", catalogItemId: "cash-100" });
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      `${API_BASE}?action=rewardVoucherConsumptions&month=2026-08&catalogItemId=cash-100`,
+    );
+
+    const operationId = "550e8400-e29b-41d4-a716-446655440000";
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      ok: true,
+      data: { operationId, consumedAt: "2026-08-26T01:00:00.000Z", items: [], idempotentReplay: false },
+    }));
+    const { postRewardVoucherConsumption } = await import("./client");
+    await postRewardVoucherConsumption({
+      operationId,
+      items: [{ catalogItemId: "cash-100", quantity: 1 }],
+    });
+    const [url, init] = fetchMock.mock.calls[1];
+    expect(url).toBe(`${API_BASE}?action=rewardVoucherConsumptions`);
+    expect(JSON.parse(String(init?.body))).toEqual({
+      operationId,
+      items: [{ catalogItemId: "cash-100", quantity: 1 }],
+    });
+  });
+
   it("VITE_API_URL 未設定なら設定箇所を示すエラーを投げる", async () => {
     vi.stubEnv("VITE_API_URL", "");
     vi.stubEnv("VITE_MOCK_API", "false");
@@ -159,6 +187,35 @@ describe("client リクエスト組み立て", () => {
     await expect(fetchHome("2026-07-28")).rejects.toThrow(
       /レスポンスの JSON 解析に失敗しました（action=home, status=500/,
     );
+  });
+});
+
+describe("client vacationPhase 互換", () => {
+  it("vacationPhase=transition のみでも isVacationTransition を true にする", async () => {
+    vi.stubEnv("VITE_API_URL", API_BASE);
+    vi.stubEnv("VITE_MOCK_API", "false");
+    stubFetch(
+      jsonResponse({
+        ok: true,
+        data: {
+          displayBalance: 0,
+          balancePoints: 0,
+          switchMinutes: 0,
+          penaltyMinutes: 0,
+          penaltyTicketCount: 0,
+          isExemptToday: false,
+          vacationPhase: "transition",
+        },
+      }),
+    );
+
+    const { fetchHome } = await importClient();
+    const home = await fetchHome("2026-08-26");
+
+    expect(home.vacationPhase).toBe("transition");
+    expect(home.isVacationTransition).toBe(true);
+    expect(home.isVacationMode).toBe(true);
+    expect(home.isLongVacation).toBe(true);
   });
 });
 

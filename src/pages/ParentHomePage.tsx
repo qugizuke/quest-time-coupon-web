@@ -317,6 +317,7 @@ export function ParentHomePage() {
             </p>
             <Button
               fullWidth
+              disabled={pendingExchangeCount === 0}
               variant={pendingExchangeCount > 0 ? "primary" : "secondary"}
               onClick={() => navigate("/parent/rewards")}
             >
@@ -341,6 +342,7 @@ export function ParentHomePage() {
             </p>
             <Button
               fullWidth
+              disabled={pendingRefundCount === 0}
               variant={pendingRefundCount > 0 ? "primary" : "secondary"}
               onClick={() => navigate("/parent/rewards")}
             >

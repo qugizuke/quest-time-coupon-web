@@ -266,4 +266,64 @@ describe("HomePage", () => {
     expect(indexOfSection(quest)).toBeLessThan(indexOfSection(results));
     expect(indexOfSection(results)).toBeLessThan(indexOfSection(rules));
   });
+
+  it("vacation 移行期間はオレンジの移行バナーをポイント表示より上に出す", () => {
+    renderHome(
+      buildHome({ isVacationMode: true, isVacationTransition: true }),
+    );
+
+    expect(screen.getByTestId("home-page").getAttribute("data-home-variant")).toBe(
+      "kid-home-vacation",
+    );
+    const banner = screen.getByTestId("vacation-transition-banner");
+    expect(banner.textContent).toContain("1週間前");
+    expect(banner.textContent).toContain("21時");
+    // 移行期間中は就寝は21時固定
+    expect(screen.getByTestId("bedtime-locked").textContent).toContain("21時");
+
+    const page = screen.getByTestId("home-page");
+    const children = Array.from(page.children);
+    const indexOfSection = (element: HTMLElement) => {
+      let section = element;
+      while (section.parentElement && section.parentElement !== page) {
+        section = section.parentElement;
+      }
+      return children.indexOf(section);
+    };
+    expect(indexOfSection(banner)).toBeLessThan(
+      indexOfSection(screen.getByTestId("balance-display")),
+    );
+  });
+
+  it("vacation の CTA 順序は quest→results→exchange→timer→rules", () => {
+    renderHome(buildHome({ isVacationMode: true }));
+
+    const page = screen.getByTestId("home-page");
+    const children = Array.from(page.children);
+    const indexOfSection = (element: HTMLElement) => {
+      let section = element;
+      while (section.parentElement && section.parentElement !== page) {
+        section = section.parentElement;
+      }
+      return children.indexOf(section);
+    };
+    const indexAmongSiblings = (el: HTMLElement) => {
+      const parent = el.parentElement;
+      return parent ? Array.from(parent.children).indexOf(el) : -1;
+    };
+
+    const quest = screen.getByRole("button", { name: "🎯 クエストをはじめる！" });
+    const results = screen.getByTestId("nav-results");
+    const exchange = screen.getByTestId("nav-rewards");
+    const timer = screen.getByTestId("nav-timer");
+    const rules = screen.getByRole("button", { name: "クエストのルール" });
+
+    // quest section before the nav section
+    expect(indexOfSection(quest)).toBeLessThan(indexOfSection(results));
+    // within the nav section: results -> exchange -> timer
+    expect(indexAmongSiblings(results)).toBeLessThan(indexAmongSiblings(exchange));
+    expect(indexAmongSiblings(exchange)).toBeLessThan(indexAmongSiblings(timer));
+    // nav section before rules
+    expect(indexOfSection(timer)).toBeLessThan(indexOfSection(rules));
+  });
 });

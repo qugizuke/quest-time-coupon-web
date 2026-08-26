@@ -200,6 +200,20 @@ export function HomePage() {
           </Banner>
         )}
 
+        {!isExemptDay && isVacationTransition && (
+          <div
+            className="flex items-start gap-3 rounded-default border-[3px] border-primary bg-primary/15 px-4 py-4"
+            data-testid="vacation-transition-banner"
+          >
+            <span className="mt-0.5 shrink-0 text-lg" aria-hidden>
+              ⏰
+            </span>
+            <p className="min-w-0 flex-1 text-[15px] leading-snug text-ink">
+              {VACATION_TRANSITION_MESSAGE}
+            </p>
+          </div>
+        )}
+
         <div className="flex flex-col items-center justify-center gap-3 rounded-card bg-surface-warm p-8 text-center shadow-[var(--shadow-card)]">
           <BalanceDisplay
             balancePoints={data.balancePoints}
@@ -228,20 +242,6 @@ export function HomePage() {
           >
             ポイントがマイナスです。チケットで穴埋めできます
           </Banner>
-        )}
-
-        {!isExemptDay && isVacationTransition && (
-          <div
-            className="flex items-start gap-3 rounded-default border-[3px] border-info bg-info-soft px-4 py-4"
-            data-testid="vacation-transition-banner"
-          >
-            <span className="mt-0.5 shrink-0 text-lg" aria-hidden>
-              ⏰
-            </span>
-            <p className="min-w-0 flex-1 text-[15px] leading-snug text-ink">
-              {VACATION_TRANSITION_MESSAGE}
-            </p>
-          </div>
         )}
 
         {bedtimeUi === "settable" && (

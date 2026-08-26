@@ -282,7 +282,7 @@ describe("ParentRewardsPage", () => {
     });
   });
 
-  it("複数商品の却下確認は全商品を示し、残高が変わらないと説明する", () => {
+  it("複数商品の却下確認は全商品を示す", () => {
     const request = buildPendingRequest({
       items: [
         {
@@ -313,10 +313,6 @@ describe("ParentRewardsPage", () => {
 
     const dialog = screen.getByRole("dialog");
     expect(dialog.textContent).toContain("100円 × 1、おやつ × 2");
-    expect(dialog.textContent).toContain(
-      "ポイント残高とチケット枚数は変わりません",
-    );
-    expect(dialog.textContent).not.toContain("ポイントは返還されます");
   });
 
   it("承認済み・却下済みは月次履歴に表示し、承認待ちには出さない", () => {

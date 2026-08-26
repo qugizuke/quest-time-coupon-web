@@ -262,7 +262,7 @@ function RejectDecisionDialog({
           <p className="text-sm text-ink">{summary}</p>
           <div className="text-[13px] text-muted">
             <p>却下すると、お子さまに通知されます。</p>
-            <p>ポイント残高とチケット枚数は変わりません。</p>
+            <p>ポイントは返還されます。</p>
           </div>
           <label className="flex flex-col gap-1">
             <span className="sr-only">却下理由（任意）</span>
@@ -567,8 +567,7 @@ function PointExchangeRequestCard({
         onFeedback({
           kind: "success-reject",
           summary,
-          detail:
-            "お子さまに却下が通知されました。ポイント残高とチケット枚数は変わりません。",
+          detail: "お子さまに却下が通知されました。ポイントは返還されます。",
         });
       }
       invalidateAfterDecision();
@@ -750,8 +749,7 @@ function RewardVoucherRefundRequestCard({
         onFeedback({
           kind: "success-reject",
           summary,
-          detail:
-            "お子さまに却下が通知されました。ポイント残高とチケット枚数は変わりません。",
+          detail: "お子さまに却下が通知されました。ポイントは返還されます。",
         });
       }
       invalidateAfterDecision();

@@ -270,7 +270,7 @@ describe("ResultsPage week UI (#17)", () => {
     expect(screen.getByTestId("results-day-2026-08-02")).toBeTruthy();
     expect(screen.getAllByText("— 結果なし")).toHaveLength(7);
     expect(screen.getByTestId("results-weekly-total").textContent).toBe(
-      "+0分（旧）",
+      "+0 分（旧）",
     );
   });
 
@@ -325,7 +325,7 @@ describe("ResultsPage week UI (#17)", () => {
     ]);
     expect(screen.getByTestId("results-weekly-summary")).toBeTruthy();
     expect(screen.getByTestId("results-weekly-total").textContent).toBe(
-      "+20分（旧）",
+      "+20 分（旧）",
     );
   });
 
@@ -347,7 +347,7 @@ describe("ResultsPage week UI (#17)", () => {
     ]);
 
     expect(screen.getByTestId("results-weekly-total").textContent).toBe(
-      "+20分（旧）/+30pt",
+      "+20 分（旧）/+30 pt",
     );
   });
 

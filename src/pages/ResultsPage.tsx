@@ -500,6 +500,7 @@ export function ResultsPage() {
                   {index > 0 && <span className="mr-2 text-muted">/</span>}
                   {total >= 0 ? "+" : ""}
                   {total}
+                  {" "}
                   {unit}
                 </span>
               ))}

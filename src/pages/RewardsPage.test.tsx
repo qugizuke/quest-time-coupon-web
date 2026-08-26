@@ -3,7 +3,7 @@
  * @vitest-environment jsdom
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { queryKeys } from "@/api/queries";
@@ -459,5 +459,44 @@ describe("RewardsPage", () => {
     );
     expect(item.textContent).toContain("100円 × 2");
     expect(item.textContent).toContain("5枚 → 3枚");
+  });
+  it("使うタブの絵文字は Figma どおり 🎫 を使う", () => {
+    renderRewards({ balancePoints: 1000 });
+    expect(screen.getByRole("tab", { name: "🎫 使う" })).toBeTruthy();
+  });
+
+  it("フッタに合計ポイントと交換後の残りを並記する", () => {
+    renderRewards({ balancePoints: 1000 });
+    expect(screen.getByTestId("rewards-total-points").textContent).toBe("0pt");
+    expect(screen.getByTestId("rewards-remaining-points").textContent).toBe("1000pt");
+    fireEvent.click(screen.getByLabelText("100円を1個増やす"));
+    expect(screen.getByTestId("rewards-total-points").textContent).toBe("100pt");
+    expect(screen.getByTestId("rewards-remaining-points").textContent).toBe("900pt");
+  });
+
+  it("交換後の残りがマイナスになる見込みは赤字で示す", () => {
+    renderRewards({ balancePoints: 50 });
+    fireEvent.click(screen.getByLabelText("100円を1個増やす"));
+    const remaining = screen.getByTestId("rewards-remaining-points");
+    expect(remaining.textContent).toBe("-50pt");
+    expect(remaining.className).toContain("text-danger");
+  });
+
+  it("ポイント不足カタログは赤点線とあとNptバッジを表示する", () => {
+    renderRewards({ balancePoints: 30 });
+    const card = screen.getByTestId("catalog-item-dining-1000");
+    expect(card.className).toContain("border-dashed");
+    expect(card.className).toContain("border-danger");
+    expect(
+      within(card).getByTestId("catalog-shortfall-dining-1000").textContent,
+    ).toBe("あと970pt");
+  });
+
+  it("履歴タブの月ナビはパネル先頭に全履歴の共通として置く", () => {
+    renderRewards({ balancePoints: 1000 });
+    fireEvent.click(screen.getByTestId("rewards-tab-history"));
+    const panel = screen.getByTestId("rewards-history-card").parentElement;
+    expect(panel?.firstElementChild?.getAttribute("data-testid")).toBe("rewards-month-nav");
+    expect(screen.getByTestId("rewards-month-label").textContent).toBeTruthy();
   });
 });

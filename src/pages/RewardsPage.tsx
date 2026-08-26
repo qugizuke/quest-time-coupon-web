@@ -81,7 +81,7 @@ type ConsumptionPhase =
 /** ARIA tabs の表示順とラベル */
 const REWARDS_TABS: ReadonlyArray<readonly [RewardsTab, string]> = [
   ["exchange", "🛒 交換する"],
-  ["use", "🎟️ 使う"],
+  ["use", "🎫 使う"],
   ["refund", "🔄 ポイントへ戻す"],
   ["history", "📋 履歴"],
 ];
@@ -743,18 +743,40 @@ export function RewardsPage() {
                   </div>
                 </div>
                 {shortfall > 0 && (
-                  <p className="text-sm font-bold text-danger">あと{shortfall}pt</p>
+                  <p
+                    className="self-start rounded-pill bg-danger-soft px-3 py-1 text-sm font-bold text-danger"
+                    data-testid={`catalog-shortfall-${item.catalogItemId}`}
+                  >
+                    あと{shortfall}pt
+                  </p>
                 )}
               </li>
             );
           })}
         </ul>
 
-        <div className="flex items-center justify-between rounded-default border-[3px] border-border bg-surface-warm px-4 py-3">
-          <span className="text-sm text-muted">合計</span>
-          <span className="font-display text-2xl text-ink" data-testid="rewards-total-points">
-            {totals.totalPoints}pt
-          </span>
+        <div
+          className="flex flex-col gap-2 rounded-default border-[3px] border-border bg-surface-warm px-4 py-3"
+          data-testid="rewards-exchange-footer"
+        >
+          <h3 className="text-sm font-bold text-ink">選択サマリー</h3>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted">合計ポイント</span>
+            <span className="font-display text-2xl text-ink" data-testid="rewards-total-points">
+              {totals.totalPoints}pt
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted">交換後の残り</span>
+            <span
+              className={`font-display text-2xl ${
+                balancePoints - totals.totalPoints < 0 ? "text-danger" : "text-ink"
+              }`}
+              data-testid="rewards-remaining-points"
+            >
+              {balancePoints - totals.totalPoints}pt
+            </span>
+          </div>
         </div>
 
         {totals.totalPoints > 0 && totals.totalPoints > balancePoints && (
@@ -1011,29 +1033,28 @@ export function RewardsPage() {
 
       {activeTab === "history" && (
       <div id="rewards-panel-history" role="tabpanel" aria-labelledby="rewards-tab-history">
+      <div className="mb-4 flex items-center justify-between gap-2" data-testid="rewards-month-nav">
+        <Button
+          variant="secondary"
+          className="whitespace-nowrap px-2 text-sm sm:px-3 sm:text-base"
+          onClick={() => setMonth((m) => shiftMonth(m, -1))}
+          data-testid="rewards-prev-month"
+        >
+          ← 前月
+        </Button>
+        <p className="text-center text-sm font-medium text-ink" data-testid="rewards-month-label">
+          {formatMonthLabel(month)}
+        </p>
+        <Button
+          variant="secondary"
+          className="whitespace-nowrap px-2 text-sm sm:px-3 sm:text-base"
+          onClick={() => setMonth((m) => shiftMonth(m, 1))}
+          data-testid="rewards-next-month"
+        >
+          翌月 →
+        </Button>
+      </div>
       <Card className="mb-4" data-testid="rewards-history-card">
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <Button
-            variant="secondary"
-            className="whitespace-nowrap px-2 text-sm sm:px-3 sm:text-base"
-            onClick={() => setMonth((m) => shiftMonth(m, -1))}
-            data-testid="rewards-prev-month"
-          >
-            ← 前月
-          </Button>
-          <p className="text-center text-sm font-medium text-ink" data-testid="rewards-month-label">
-            {formatMonthLabel(month)}
-          </p>
-          <Button
-            variant="secondary"
-            className="whitespace-nowrap px-2 text-sm sm:px-3 sm:text-base"
-            onClick={() => setMonth((m) => shiftMonth(m, 1))}
-            data-testid="rewards-next-month"
-          >
-            翌月 →
-          </Button>
-        </div>
-
         <h2 className="mb-2 font-bold text-ink">交換の履歴</h2>
         {historyLoading && <p className="text-muted">読み込み中…</p>}
         {historyError && (

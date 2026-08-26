@@ -1,22 +1,18 @@
 /**
  * @file QuestRulesDialog 描画テスト
- * @description §8.7 の構成と条件付き移行期間メッセージを検証する。
+ * @description Figma 62:110 の構成（タイトル+✕・要点3カード・アコーディオン4節・閉じる）を検証する。
  * @vitest-environment jsdom
  */
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { QuestRulesDialog } from "@/components/QuestRulesDialog";
 
 afterEach(cleanup);
 
 describe("QuestRulesDialog", () => {
-  it("§8.7 のタイトル、要点カード、4つの節を表示する", () => {
+  it("タイトル・✕・要点3カード・4節・フッタ閉じるを表示する", () => {
     render(
-      <QuestRulesDialog
-        open
-        onClose={vi.fn()}
-        isVacationTransition={false}
-      />,
+      <QuestRulesDialog open onClose={vi.fn()} isVacationTransition={false} />,
     );
 
     expect(
@@ -29,6 +25,17 @@ describe("QuestRulesDialog", () => {
       }),
     ).toBeTruthy();
 
+    for (const text of [
+      "クエストをがんばるとポイントUP",
+      "できた +5pt ／ 全達成 +50pt",
+      "登録しないとポイントDOWN",
+      "未登録 −100pt ／ ウソ −30pt",
+      "ポイントでごほうび交換",
+      "Switch 30分 = 50pt など",
+    ]) {
+      expect(screen.getByText(text)).toBeTruthy();
+    }
+
     for (const name of [
       "加点（ポイントが増える）",
       "ペナルティ（ポイントが減る）",
@@ -37,22 +44,51 @@ describe("QuestRulesDialog", () => {
     ]) {
       expect(screen.getByRole("heading", { name })).toBeTruthy();
     }
+
+    // ヘッダー ✕ とフッタ閉じるの2つ
+    expect(screen.getAllByRole("button", { name: "閉じる" })).toHaveLength(2);
   });
 
-  it("ペナルティチケットの説明を移行期間外でも表示する", () => {
+  it("各節のポイント表と補足を表示する", () => {
+    render(
+      <QuestRulesDialog open onClose={vi.fn()} isVacationTransition={false} />,
+    );
+
+    expect(screen.getByText("できたクエスト 1つにつき")).toBeTruthy();
+    expect(screen.getAllByText("+5pt")).toHaveLength(2);
+    expect(screen.getByText("+50pt")).toBeTruthy();
+    expect(screen.getByText("クエストを登録しなかった日")).toBeTruthy();
+    expect(screen.getAllByText("−100pt")).toHaveLength(2);
+    expect(screen.getByText("−30pt")).toBeTruthy();
+    expect(screen.getByText("Switch 30分券")).toBeTruthy();
+    expect(screen.getByText("50pt")).toBeTruthy();
+    expect(screen.getByText("100pt")).toBeTruthy();
+    expect(
+      screen.getByText("交換したいものを選んで申請 → ママが確認"),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("Switch・YouTubeの時間はゲーム・YouTube共通です"),
+    ).toBeTruthy();
+    expect(screen.getByText("YouTubeだけの交換はありません")).toBeTruthy();
+  });
+
+  it("ヘッダーの ✕ で onClose を呼ぶ", () => {
+    const onClose = vi.fn();
     render(
       <QuestRulesDialog
         open
-        onClose={vi.fn()}
+        onClose={onClose}
         isVacationTransition={false}
       />,
     );
 
-    expect(
-      screen.getByText(
-        "負債があるとき、ママがペナルティチケットを発行して精算してくれるよ。チケットは手伝いのご褒美だよ。",
-      ),
-    ).toBeTruthy();
+    const closeX = screen
+      .getAllByRole("button", { name: "閉じる" })
+      .find((button) => button.textContent === "✕");
+    expect(closeX).toBeTruthy();
+    fireEvent.click(closeX as HTMLElement);
+
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it("長期休み終了前の説明は移行期間中だけ表示する", () => {

@@ -182,7 +182,7 @@ describe("QuestConfirmPage", () => {
       { startDate: "2026-07-25", endDate: "2026-08-31" },
     );
 
-    expect(screen.getByText("最後の確認")).toBeTruthy();
+    expect(screen.getByText("回答のまとめ")).toBeTruthy();
     expect(screen.queryByTestId("wake-up-section")).toBeNull();
   });
 
@@ -197,7 +197,7 @@ describe("QuestConfirmPage", () => {
       }),
     );
 
-    expect(screen.getByText("最後の確認")).toBeTruthy();
+    expect(screen.getByText("回答のまとめ")).toBeTruthy();
     expect(screen.queryByTestId("wake-up-section")).toBeNull();
   });
 

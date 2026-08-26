@@ -185,7 +185,7 @@ describe("ResultsPage reasonCode", () => {
     expect(msg.textContent).toContain("おうちの人が採点をキャンセルしました");
     expect(msg.textContent).not.toContain("登録されませんでした");
     expect(screen.getByTestId("results-detail-badge").textContent).toBe(
-      "採点キャンセル",
+      "採点拒否",
     );
   });
 
@@ -468,7 +468,7 @@ describe("ResultsPage week UI (#17)", () => {
     expect(within(day).getByText(/免除/)).toBeTruthy();
   });
 
-  it("確認済みの拒否・未登録は週カードで拒否/未登録と表示する", () => {
+  it("確認済みの拒否・未登録は週カードで採点拒否/未登録と表示する", () => {
     renderResults([
       buildResult({
         date: "2026-07-21",
@@ -490,10 +490,29 @@ describe("ResultsPage week UI (#17)", () => {
     fireEvent.click(screen.getByTestId("results-prev-week"));
     const rejected = screen.getByTestId("results-day-2026-07-21");
     const unregistered = screen.getByTestId("results-day-2026-07-22");
-    expect(within(rejected).getByText("拒否")).toBeTruthy();
+    expect(within(rejected).getByText("採点拒否")).toBeTruthy();
     expect(within(rejected).queryByText("✅ 採点済み")).toBeNull();
     expect(within(unregistered).getByText("未登録")).toBeTruthy();
     expect(within(unregistered).queryByText("✅ 採点済み")).toBeNull();
+  });
+
+  it("未確認の採点拒否日は採点拒否ラベルと確認 CTA を出す", () => {
+    renderResults([
+      buildResult({
+        date: "2026-07-30",
+        reasonCode: "grade_rejected",
+        totalPoints: -100,
+        acknowledged: false,
+        requiresAck: true,
+        blocksTimer: true,
+      }),
+    ]);
+    const row = screen.getByTestId("results-day-2026-07-30");
+    expect(row.getAttribute("data-unacked")).toBe("true");
+    expect(within(row).getByText("採点拒否")).toBeTruthy();
+    expect(within(row).getByText("確認する →")).toBeTruthy();
+    expect(within(row).queryByText("✅ 採点済み")).toBeNull();
+    expect(within(row).queryByText("🔔 未確認")).toBeNull();
   });
 
   it("home再取得に失敗しても結果確認後の残高をタイマーへ引き継ぐ", async () => {

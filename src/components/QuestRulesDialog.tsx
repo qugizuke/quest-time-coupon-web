@@ -122,6 +122,9 @@ const RULE_SECTIONS: RuleSection[] = [
   },
 ];
 
+const PENALTY_TICKET_MESSAGE =
+  "負債があるとき、ママがペナルティチケットを発行して精算してくれるよ。チケットは手伝いのご褒美だよ。";
+
 const BADGE_TONE_CLASS: Record<BadgeTone, string> = {
   success: "bg-success",
   danger: "bg-danger",
@@ -237,6 +240,11 @@ export function QuestRulesDialog({
                     </li>
                   ))}
                 </ul>
+              )}
+              {section.title === "ペナルティ（ポイントが減る）" && (
+                <p className="rounded-default bg-danger-soft p-3 text-sm text-ink">
+                  {PENALTY_TICKET_MESSAGE}
+                </p>
               )}
             </div>
           </details>

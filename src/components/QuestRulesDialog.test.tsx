@@ -72,6 +72,18 @@ describe("QuestRulesDialog", () => {
     expect(screen.getByText("YouTubeだけの交換はありません")).toBeTruthy();
   });
 
+  it("ペナルティチケットの説明を移行期間外でも表示する", () => {
+    render(
+      <QuestRulesDialog open onClose={vi.fn()} isVacationTransition={false} />,
+    );
+
+    expect(
+      screen.getByText(
+        "負債があるとき、ママがペナルティチケットを発行して精算してくれるよ。チケットは手伝いのご褒美だよ。",
+      ),
+    ).toBeTruthy();
+  });
+
   it("ヘッダーの ✕ で onClose を呼ぶ", () => {
     const onClose = vi.fn();
     render(

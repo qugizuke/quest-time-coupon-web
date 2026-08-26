@@ -288,4 +288,62 @@ describe("GradeListPage Figma 寄せ (#76)", () => {
     );
     expect(screen.queryByText(rowDateLabel(TODAY))).toBeNull();
   });
+
+  it("採点拒否日は採点済ではなく採点拒否と表示し、詳細へ進める", () => {
+    renderGradeList({
+      dates: [
+        buildGradeDateItem({
+          date: TODAY,
+          status: "graded",
+          isExempt: false,
+          totalPoints: -100,
+          reasonCode: "grade_rejected",
+        }),
+        buildGradeDateItem({
+          date: "2026-08-25",
+          status: "graded",
+          isExempt: false,
+          totalPoints: 20,
+          reasonCode: "normal",
+        }),
+      ],
+    });
+
+    const rejected = screen.getByTestId(`grade-row-${TODAY}`);
+    expect(rejected.getAttribute("data-grade-status")).toBe("rejected");
+    expect(rejected.hasAttribute("disabled")).toBe(false);
+    expect(within(rejected).getByText("採点拒否")).toBeTruthy();
+    expect(within(rejected).queryByText("-100分")).toBeNull();
+    expect(within(rejected).queryByText("採点済")).toBeNull();
+
+    const graded = screen.getByTestId("grade-row-2026-08-25");
+    expect(graded.getAttribute("data-grade-status")).toBe("graded");
+    expect(within(graded).getByText("+20分")).toBeTruthy();
+    expect(within(graded).queryByText("採点拒否")).toBeNull();
+  });
+
+  it("未採点のみフィルタは採点拒否日を出さない", () => {
+    renderGradeList({
+      dates: [
+        buildGradeDateItem({
+          date: TODAY,
+          status: "ungraded",
+          isExempt: false,
+          ungradedCount: 1,
+        }),
+        buildGradeDateItem({
+          date: "2026-08-24",
+          status: "graded",
+          isExempt: false,
+          totalPoints: -100,
+          reasonCode: "grade_rejected",
+        }),
+      ],
+    });
+
+    expect(screen.getByTestId("grade-row-2026-08-24")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("ungraded-only-chip"));
+    expect(getDateRow(TODAY)).toBeTruthy();
+    expect(screen.queryByTestId("grade-row-2026-08-24")).toBeNull();
+  });
 });

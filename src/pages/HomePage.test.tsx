@@ -212,7 +212,7 @@ describe("HomePage", () => {
     expect(startButton.hasAttribute("disabled")).toBe(false);
   });
 
-  it("負残高を表示し、発行 UI は出さない", () => {
+  it("負残高でも報酬チケットがなければ穴埋めバナーを出さない", () => {
     renderHome(
       buildHome({
         balancePoints: -30,
@@ -228,8 +228,35 @@ describe("HomePage", () => {
 
     expect(screen.getByTestId("balance-points").textContent).toBe("-30");
     expect(screen.queryByTestId("balance-minutes")).toBeNull();
-    expect(screen.getByTestId("point-debt-banner")).toBeTruthy();
+    expect(screen.queryByTestId("point-debt-banner")).toBeNull();
     expect(screen.queryByTestId("penalty-ticket-issue-section")).toBeNull();
+  });
+
+  it("負残高かつ報酬チケットがあるとき穴埋めバナーをヒーローより上に出す", () => {
+    renderHome(
+      buildHome({
+        balancePoints: -30,
+        displayBalance: -30,
+        switchMinutes: -30,
+        debtMinutes: 30,
+        penaltyMinutes: 0,
+        issuablePenaltyTicketCount: 0,
+        rewardVouchers: {
+          ...zeroRewardVouchers(),
+          "cash-100": 1,
+        },
+        todayStatus: "completed",
+        questAction: "none",
+      }),
+    );
+
+    const banner = screen.getByTestId("point-debt-banner");
+    expect(banner.textContent).toContain("チケットで穴埋めできます");
+    const page = screen.getByTestId("home-page");
+    const children = Array.from(page.children);
+    expect(children.indexOf(screen.getByTestId("home-messages"))).toBeLessThan(
+      children.indexOf(screen.getByTestId("home-hero")),
+    );
   });
 
   it("通常の平日も固定の就寝時刻をポイント直下に表示する", () => {
@@ -267,6 +294,9 @@ describe("HomePage", () => {
     const rules = screen.getByRole("button", { name: "クエストのルール" });
 
     expect(indexOfSection(unread)).toBeLessThan(indexOfSection(balance));
+    expect(indexOfSection(screen.getByTestId("home-messages"))).toBeLessThan(
+      indexOfSection(screen.getByTestId("home-hero")),
+    );
     expect(indexOfSection(balance)).toBeLessThan(indexOfSection(bedtime));
     expect(indexOfSection(bedtime)).toBeLessThan(indexOfSection(quest));
     expect(indexOfSection(quest)).toBeLessThan(indexOfSection(results));
@@ -298,6 +328,54 @@ describe("HomePage", () => {
     };
     expect(indexOfSection(banner)).toBeLessThan(
       indexOfSection(screen.getByTestId("balance-display")),
+    );
+    expect(indexOfSection(screen.getByTestId("home-messages"))).toBeLessThan(
+      indexOfSection(screen.getByTestId("home-hero")),
+    );
+  });
+
+  it("受付再開の案内もヒーローより上に出す", () => {
+    vi.setSystemTime(new Date(2026, 7, 8, 22, 0, 0));
+
+    renderHome(
+      buildHome({
+        today: "2026-08-08",
+        todayStatus: "unanswered",
+        questAction: "start",
+        registrationReopen: {
+          endsAt: "2026-08-08T22:30:00+09:00",
+          setAt: "2026-08-08T21:30:00+09:00",
+          used: true,
+          isOpen: true,
+        },
+      }),
+    );
+
+    const page = screen.getByTestId("home-page");
+    const children = Array.from(page.children);
+    expect(children.indexOf(screen.getByTestId("home-messages"))).toBeLessThan(
+      children.indexOf(screen.getByTestId("home-hero")),
+    );
+    expect(screen.getByTestId("reopen-active-hint")).toBeTruthy();
+  });
+
+  it("締切超過の開始不可メッセージもヒーローより上に出す", () => {
+    vi.setSystemTime(new Date(2026, 6, 30, 22, 0, 0));
+
+    renderHome(
+      buildHome({
+        todayStatus: "unanswered",
+        questAction: "start",
+      }),
+    );
+
+    expect(screen.getByTestId("missed-start-banner").textContent).toContain(
+      "クエストを開始できません",
+    );
+    const page = screen.getByTestId("home-page");
+    const children = Array.from(page.children);
+    expect(children.indexOf(screen.getByTestId("home-messages"))).toBeLessThan(
+      children.indexOf(screen.getByTestId("home-hero")),
     );
   });
 

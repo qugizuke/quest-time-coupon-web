@@ -22,6 +22,7 @@ import {
   resolveBedtimeUiMode,
   resolveHomeVariant,
 } from "@/lib/homeMode";
+import { REWARD_VOUCHER_KEYS } from "@/lib/rewardVouchers";
 import {
   formatRegistrationReopenEndsAtLabel,
   isRegistrationReopenActive,
@@ -159,6 +160,19 @@ export function HomePage() {
   // 免除日は導線の位置を保ったまま、開始できないことを示す。
   const showQuestStart = isExemptDay || data.questAction === "start";
   const showQuestRetry = !isExemptDay && data.questAction === "retry";
+  const hasOffsetTickets = REWARD_VOUCHER_KEYS.some(
+    (key) => data.rewardVouchers[key] > 0,
+  );
+  const showPointDebtBanner = data.balancePoints < 0 && hasOffsetTickets;
+  const showReopenHint =
+    !isExemptDay && isReopenActive && !!data.registrationReopen?.endsAt;
+  const showHomeMessages =
+    data.unacknowledgedCount > 0 ||
+    isExemptDay ||
+    (!isExemptDay && isVacationTransition) ||
+    showPointDebtBanner ||
+    showMissedStartMessage ||
+    showReopenHint;
 
   /**
    * 寝る時間を選択してサーバに保存する
@@ -188,33 +202,70 @@ export function HomePage() {
         data-testid="home-page"
         data-home-variant={variant}
       >
-        {data.unacknowledgedCount > 0 && (
-          <Banner onClick={() => navigate("/results?unacked=1")}>
-            採点結果を確認する（未確認あり！）
-          </Banner>
-        )}
+        {showHomeMessages && (
+          <div className="flex flex-col gap-5" data-testid="home-messages">
+            {data.unacknowledgedCount > 0 && (
+              <Banner onClick={() => navigate("/results?unacked=1")}>
+                採点結果を確認する（未確認あり！）
+              </Banner>
+            )}
 
-        {isExemptDay && (
-          <Banner tone="warning" data-testid="exempt-message">
-            {EXEMPT_MESSAGE}
-          </Banner>
-        )}
+            {isExemptDay && (
+              <Banner tone="warning" data-testid="exempt-message">
+                {EXEMPT_MESSAGE}
+              </Banner>
+            )}
 
-        {!isExemptDay && isVacationTransition && (
-          <div
-            className="flex items-start gap-3 rounded-default border-[3px] border-primary bg-primary/15 px-4 py-4"
-            data-testid="vacation-transition-banner"
-          >
-            <span className="mt-0.5 shrink-0 text-lg" aria-hidden>
-              ⏰
-            </span>
-            <p className="min-w-0 flex-1 text-[15px] leading-snug text-ink">
-              {VACATION_TRANSITION_MESSAGE}
-            </p>
+            {!isExemptDay && isVacationTransition && (
+              <div
+                className="flex items-start gap-3 rounded-default border-[3px] border-primary bg-primary/15 px-4 py-4"
+                data-testid="vacation-transition-banner"
+              >
+                <span className="mt-0.5 shrink-0 text-lg" aria-hidden>
+                  ⏰
+                </span>
+                <p className="min-w-0 flex-1 text-[15px] leading-snug text-ink">
+                  {VACATION_TRANSITION_MESSAGE}
+                </p>
+              </div>
+            )}
+
+            {showPointDebtBanner && (
+              <Banner
+                tone="danger"
+                onClick={() => navigate("/rewards")}
+                data-testid="point-debt-banner"
+              >
+                ポイントがマイナスです。チケットで穴埋めできます
+              </Banner>
+            )}
+
+            {showMissedStartMessage && (
+              <Banner tone="danger" data-testid="missed-start-banner">
+                {missedStartMessage(deadline.registrationCutoffLabel)}
+              </Banner>
+            )}
+
+            {showReopenHint && data.registrationReopen?.endsAt && (
+              <p
+                className="text-center text-sm text-muted"
+                data-testid="reopen-active-hint"
+              >
+                ママが受付を再開してくれたよ！
+                {formatRegistrationReopenEndsAtLabel(
+                  data.registrationReopen.endsAt,
+                  today,
+                )}
+                までクエストできる
+              </p>
+            )}
           </div>
         )}
 
-        <div className="flex flex-col items-center justify-center gap-3 rounded-card bg-surface-warm p-8 text-center shadow-[var(--shadow-card)]">
+        <div
+          className="flex flex-col items-center justify-center gap-3 rounded-card bg-surface-warm p-8 text-center shadow-[var(--shadow-card)]"
+          data-testid="home-hero"
+        >
           <BalanceDisplay
             balancePoints={data.balancePoints}
             switchMinutes={data.switchMinutes ?? data.displayBalance}
@@ -235,16 +286,6 @@ export function HomePage() {
             </button>
           )}
         </div>
-
-        {data.balancePoints < 0 && (
-          <Banner
-            tone="danger"
-            onClick={() => navigate("/rewards")}
-            data-testid="point-debt-banner"
-          >
-            ポイントがマイナスです。チケットで穴埋めできます
-          </Banner>
-        )}
 
         {bedtimeUi === "settable" && (
           <button
@@ -301,23 +342,6 @@ export function HomePage() {
             </Button>
           )}
         </div>
-
-        {!isExemptDay && isReopenActive && data.registrationReopen?.endsAt && (
-          <p className="text-center text-sm text-muted" data-testid="reopen-active-hint">
-            ママが受付を再開してくれたよ！
-            {formatRegistrationReopenEndsAtLabel(
-              data.registrationReopen.endsAt,
-              today,
-            )}
-            までクエストできる
-          </p>
-        )}
-
-        {showMissedStartMessage && (
-          <Banner tone="danger">
-            {missedStartMessage(deadline.registrationCutoffLabel)}
-          </Banner>
-        )}
 
         <div className="flex flex-col gap-3">
           <Button

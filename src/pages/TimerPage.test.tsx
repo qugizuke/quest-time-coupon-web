@@ -8,6 +8,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { queryKeys } from "@/api/queries";
+import { TIMER_KEY } from "@/lib/sessionStorage";
 import { TimerPage } from "@/pages/TimerPage";
 import { buildHomeData } from "@/test/fixtures";
 import type { HomeData } from "@/types/api";
@@ -77,17 +78,30 @@ describe("TimerPage", () => {
       }),
     );
 
-    expect(screen.getByText("未確認の採点結果があります。")).toBeTruthy();
-    const start = screen.getByRole("button", { name: /スタート/ });
-    expect(start.hasAttribute("disabled")).toBe(true);
+    expect(screen.getByText("⚠️ 未確認の採点結果があります！")).toBeTruthy();
+    expect(screen.getByText("タイマーはロックされています")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "さいてん結果をかくにんしてから、タイマーをつかいましょう。",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /スタート/ })).toBeNull();
 
     const layout = screen.getByTestId("timer-layout");
     const timer = screen.getByTestId("timer-main");
     const alert = screen.getByTestId("timer-unacked-alert");
     expect(layout.className).toContain("flex-col");
     expect(layout.className).not.toContain("grid");
-    expect(layout.firstElementChild).toBe(timer);
-    expect(timer.nextElementSibling).toBe(alert);
+    expect(layout.firstElementChild).toBe(
+      screen.getByTestId("timer-unacked-banner"),
+    );
+    expect(alert.parentElement).toBe(timer);
+    expect(
+      screen.getByTestId("switch-ticket-redeem-section").className,
+    ).toContain("opacity-60");
+
+    fireEvent.click(screen.getByRole("button", { name: "👀 結果をかくにんする" }));
+    expect(screen.getByText("results-page")).toBeTruthy();
   });
 
   it("残高0のときスタートは disabled", () => {
@@ -173,6 +187,65 @@ describe("TimerPage", () => {
 
     const start = screen.getByRole("button", { name: /スタート/ });
     expect(start.hasAttribute("disabled")).toBe(false);
+    expect(screen.getByText("🎮 ゲーム・YouTube共通時間")).toBeTruthy();
+    expect(screen.getByText("のこりのゲーム時間")).toBeTruthy();
+  });
+
+  it("動作中は安全表示とチケットのロック案内を表示する", () => {
+    const now = Date.now();
+    sessionStorage.setItem(
+      TIMER_KEY,
+      JSON.stringify({
+        sessionId: "timer-running",
+        phase: "running",
+        startedAt: now - 15_000,
+        initialBalanceMinutes: 30,
+        lastTickAt: now,
+      }),
+    );
+
+    renderTimer(
+      buildHomeData({
+        displayBalance: 30,
+        switchMinutes: 30,
+        canStartTimer: true,
+      }),
+    );
+
+    expect(screen.getByText("⏲️ あんぜんにプレイ中...")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "⏸ いちじていし" })).toBeTruthy();
+    expect(screen.getByTestId("timer-running-lock").textContent).toContain(
+      "タイマー動作中はチケットを使えません",
+    );
+    expect(screen.queryByTestId("switch-ticket-redeem-section")).toBeNull();
+  });
+
+  it("超過中はペナルティ記録の案内を表示する", () => {
+    const now = Date.now();
+    sessionStorage.setItem(
+      TIMER_KEY,
+      JSON.stringify({
+        sessionId: "timer-penalty",
+        phase: "penalty",
+        startedAt: now - 75_000,
+        initialBalanceMinutes: 1,
+        lastTickAt: now,
+      }),
+    );
+
+    renderTimer(
+      buildHomeData({
+        displayBalance: 1,
+        switchMinutes: 1,
+        canStartTimer: true,
+      }),
+    );
+
+    expect(screen.getByText("⏲️ 超過時間")).toBeTruthy();
+    expect(screen.getByText(/\+0:1[45]/)).toBeTruthy();
+    expect(
+      screen.getByText("超過した時間はペナルティとして記録されます"),
+    ).toBeTruthy();
   });
 
   it("Switch券の保有枚数を表示し、消費すると switchTicketRedeem を呼ぶ", async () => {

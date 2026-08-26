@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/Button";
  * @property {() => void} onClose - 閉じる
  * @property {string} title - タイトル
  * @property {ReactNode} [titleIcon] - タイトル先頭のアイコン
+ * @property {boolean} [showCloseButton] - ヘッダー右端に ✕ ボタンを表示するか
  * @property {ReactNode} children - 本文
  */
 interface DialogProps {
@@ -22,6 +23,8 @@ interface DialogProps {
   title: string;
   /** @type {ReactNode} タイトル先頭のアイコン */
   titleIcon?: ReactNode;
+  /** @type {boolean} ヘッダー右端に ✕ ボタンを表示するか */
+  showCloseButton?: boolean;
   /** @type {ReactNode} 本文 */
   children: ReactNode;
 }
@@ -36,6 +39,7 @@ export function Dialog({
   onClose,
   title,
   titleIcon,
+  showCloseButton = false,
   children,
 }: DialogProps) {
   useEffect(() => {
@@ -76,10 +80,20 @@ export function Dialog({
             {titleIcon}
             <h2
               id="dialog-title"
-              className={`text-app-lg text-ink ${titleIcon ? "" : "font-bold"}`}
+              className={`min-w-0 flex-1 text-app-lg text-ink ${titleIcon ? "" : "font-bold"}`}
             >
               {title}
             </h2>
+            {showCloseButton && (
+              <button
+                type="button"
+                aria-label="閉じる"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-pill text-app-lg text-muted hover:bg-surface-soft"
+                onClick={onClose}
+              >
+                ✕
+              </button>
+            )}
           </div>
         </div>
         <div className="overflow-y-auto px-4 py-4 text-ink">{children}</div>

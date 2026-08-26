@@ -282,6 +282,43 @@ describe("ParentRewardsPage", () => {
     });
   });
 
+  it("複数商品の却下確認は全商品を示し、残高が変わらないと説明する", () => {
+    const request = buildPendingRequest({
+      items: [
+        {
+          catalogItemId: "cash-100",
+          label: "100円",
+          quantity: 1,
+          pointCost: 100,
+          subtotalPoints: 100,
+        },
+        {
+          catalogItemId: "snack-10",
+          label: "おやつ",
+          quantity: 2,
+          pointCost: 10,
+          subtotalPoints: 20,
+        },
+      ],
+      totalPoints: 120,
+      effects: {
+        spentPoints: 120,
+        issuedRewardVouchers: { "cash-100": 1, "snack-10": 2 },
+        consumedPenaltyTickets: 0,
+      },
+    });
+    renderParentRewards({ month: currentMonth(), items: [request] });
+
+    fireEvent.click(screen.getByTestId(`parent-rewards-reject-open-${request.id}`));
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.textContent).toContain("100円 × 1、おやつ × 2");
+    expect(dialog.textContent).toContain(
+      "ポイント残高とチケット枚数は変わりません",
+    );
+    expect(dialog.textContent).not.toContain("ポイントは返還されます");
+  });
+
   it("承認済み・却下済みは月次履歴に表示し、承認待ちには出さない", () => {
     const approved = buildPendingRequest({
       id: "pex_approved_1",

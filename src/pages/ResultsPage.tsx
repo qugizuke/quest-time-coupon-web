@@ -14,14 +14,14 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { StatusBadge, type StatusBadgeTone } from "@/components/ui/StatusBadge";
 import {
-  formatDateJa,
+  formatDateJaFullWidth,
   formatDayNumber,
   formatWeekdayJa,
   todayLocal,
 } from "@/lib/date";
 import { isUnknownChildAnswer } from "@/lib/labels";
 import { isSkipAnswerQuest } from "@/lib/questLabels";
-import { isOnOrAfterPointsCutover } from "@/lib/points";
+import { pointsUnitLabel } from "@/lib/points";
 import {
   formatWeekLabel,
   getMondayWithOffset,
@@ -152,15 +152,6 @@ function resultBreakdownRows(item: ResultItem): Array<{
 }
 
 /**
- * 日次結果の単位ラベルを返す（ADR-005: 切替日前は「分（旧）」、以降は「pt」）
- * @param {string} date - 結果の対象日
- * @returns {string} 単位ラベル
- */
-function pointsUnitLabel(date: string): string {
-  return isOnOrAfterPointsCutover(date) ? "pt" : "分（旧）";
-}
-
-/**
  * 週カードの点数・状態ラベルを返す
  * @param {ResultItem | undefined} item - 結果1件
  * @returns {{ pointsText: string; statusText: string | null; tone: StatusBadgeTone }} 表示
@@ -193,14 +184,9 @@ function weekCardLabel(item: ResultItem | undefined): {
   };
 }
 
-/** Figma の日付表示用に全角括弧へ揃える */
-function dateLabelJa(date: string): string {
-  return formatDateJa(date).replace("(", "（").replace(")", "）");
-}
-
 /** Figma の日付バー用ラベル */
 function todayBannerLabel(date: string): string {
-  return `${dateLabelJa(date)}・今日`;
+  return `${formatDateJaFullWidth(date)}・今日`;
 }
 
 /**
@@ -268,15 +254,23 @@ export function ResultsPage() {
 
   const selected = selectedDate ? byDate.get(selectedDate) : undefined;
 
-  /** 未確認分は残高へ未反映のため、週間合計には確認済み結果だけを含める */
-  const weeklyTotal = useMemo(
-    () =>
-      weekDates.reduce((total, date) => {
-        const item = byDate.get(date);
-        return item && !needsAck(item) ? total + item.totalPoints : total;
-      }, 0),
-    [byDate, weekDates],
-  );
+  /**
+   * 未確認分は残高へ未反映のため除外する。切替週は旧「分」と「pt」を混ぜず、
+   * 結果日の単位ごとに集計する。
+   */
+  const weeklyTotals = useMemo(() => {
+    const totals = new Map<ReturnType<typeof pointsUnitLabel>, number>();
+    for (const date of weekDates) {
+      const item = byDate.get(date);
+      if (!item || needsAck(item)) continue;
+      const unit = pointsUnitLabel(item.date);
+      totals.set(unit, (totals.get(unit) ?? 0) + item.totalPoints);
+    }
+    if (totals.size === 0) {
+      totals.set(pointsUnitLabel(monday), 0);
+    }
+    return [...totals.entries()].map(([unit, total]) => ({ unit, total }));
+  }, [byDate, monday, weekDates]);
 
   const ackMutation = useMutation({
     mutationFn: (date: string) => postResultsAck(date),
@@ -495,14 +489,20 @@ export function ResultsPage() {
           >
             <span className="text-base">週間合計</span>
             <span
-              className={`font-display text-[32px] leading-none ${
-                weeklyTotal >= 0 ? "text-success" : "text-danger"
-              }`}
+              className="flex flex-wrap justify-end gap-x-2 font-display text-[32px] leading-none"
               data-testid="results-weekly-total"
             >
-              {weeklyTotal >= 0 ? "+" : ""}
-              {weeklyTotal}
-              {pointsUnitLabel(monday)}
+              {weeklyTotals.map(({ unit, total }, index) => (
+                <span
+                  key={unit}
+                  className={total >= 0 ? "text-success" : "text-danger"}
+                >
+                  {index > 0 && <span className="mr-2 text-muted">/</span>}
+                  {total >= 0 ? "+" : ""}
+                  {total}
+                  {unit}
+                </span>
+              ))}
             </span>
           </div>
         </div>
@@ -511,7 +511,7 @@ export function ResultsPage() {
       {selected && (
         <div className="flex flex-col gap-6" data-testid="results-day-detail">
           <h1 className="text-[22px] font-bold leading-tight text-ink">
-            {dateLabelJa(selected.date)}
+            {formatDateJaFullWidth(selected.date)}
           </h1>
 
           <Card className="flex min-h-[460px] flex-col gap-6 p-7 sm:p-8">

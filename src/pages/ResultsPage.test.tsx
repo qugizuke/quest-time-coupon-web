@@ -33,6 +33,8 @@ const apiMocks = vi.hoisted(() => ({
   postResultsAck: vi.fn(),
 }));
 
+const dateMocks = vi.hoisted(() => ({ today: "2026-07-30" }));
+
 vi.mock("@/api/client", () => apiMocks);
 
 vi.mock("@/lib/date", async () => {
@@ -40,11 +42,12 @@ vi.mock("@/lib/date", async () => {
     await vi.importActual<typeof import("@/lib/date")>("@/lib/date");
   return {
     ...actual,
-    todayLocal: () => "2026-07-30",
+    todayLocal: () => dateMocks.today,
   };
 });
 
 beforeEach(() => {
+  dateMocks.today = "2026-07-30";
   apiMocks.fetchDailyQuests.mockResolvedValue({
     date: "2026-07-30",
     version: "test",
@@ -323,6 +326,28 @@ describe("ResultsPage week UI (#17)", () => {
     expect(screen.getByTestId("results-weekly-summary")).toBeTruthy();
     expect(screen.getByTestId("results-weekly-total").textContent).toBe(
       "+20分（旧）",
+    );
+  });
+
+  it("ポイント切替週は旧分とptを混ぜず結果日の単位別に集計する", () => {
+    dateMocks.today = "2026-08-26";
+    renderResults([
+      buildResult({
+        date: "2026-08-24",
+        reasonCode: "normal",
+        totalPoints: 20,
+        acknowledged: true,
+      }),
+      buildResult({
+        date: "2026-08-25",
+        reasonCode: "normal",
+        totalPoints: 30,
+        acknowledged: true,
+      }),
+    ]);
+
+    expect(screen.getByTestId("results-weekly-total").textContent).toBe(
+      "+20分（旧）/+30pt",
     );
   });
 

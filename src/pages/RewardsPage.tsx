@@ -347,7 +347,7 @@ export function RewardsPage() {
       setConsumptionPhase("complete");
       void queryClient.invalidateQueries({ queryKey: queryKeys.home });
       void queryClient.invalidateQueries({
-        queryKey: ["rewardVoucherConsumptions"],
+        queryKey: queryKeys.rewardVoucherConsumptionsRoot,
       });
     },
     onError: (error, operation) => {
@@ -379,7 +379,7 @@ export function RewardsPage() {
       setQuantities(initialQuantities());
       void queryClient.invalidateQueries({ queryKey: queryKeys.home });
       void queryClient.invalidateQueries({
-        queryKey: ["pointExchangeRequests"],
+        queryKey: queryKeys.pointExchangeRequestsRoot,
       });
     },
   });
@@ -415,7 +415,7 @@ export function RewardsPage() {
       setRefundQuantities(initialVoucherQuantities());
       void queryClient.invalidateQueries({ queryKey: queryKeys.home });
       void queryClient.invalidateQueries({
-        queryKey: ["rewardVoucherRefundRequests"],
+        queryKey: queryKeys.rewardVoucherRefundRequestsRoot,
       });
     },
   });

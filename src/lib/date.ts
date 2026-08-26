@@ -127,6 +127,15 @@ export function formatDateJa(value: string): string {
 }
 
 /**
+ * 日付を Figma の日本語表記（全角括弧）へ整形する。
+ * @param {string} value - YYYY-MM-DD
+ * @returns {string} 例: 2026年8月26日（水）
+ */
+export function formatDateJaFullWidth(value: string): string {
+  return formatDateJa(value).replace("(", "（").replace(")", "）");
+}
+
+/**
  * 日付の「日」だけを返す（週カード用）
  * @param {string} value - YYYY-MM-DD
  * @returns {string} 例: 28

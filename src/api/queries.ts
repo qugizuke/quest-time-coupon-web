@@ -27,12 +27,15 @@ export const queryKeys = {
   longVacation: ["longVacation"] as const,
   questExemptions: ["questExemptions"] as const,
   dailyQuests: (date: string) => ["dailyQuests", date] as const,
+  pointExchangeRequestsRoot: ["pointExchangeRequests"] as const,
   pointExchangeRequests: (month: string, status?: PointExchangeStatus) =>
     ["pointExchangeRequests", month, status ?? "all"] as const,
+  rewardVoucherRefundRequestsRoot: ["rewardVoucherRefundRequests"] as const,
   rewardVoucherRefundRequests: (
     month: string,
     status?: RewardVoucherRefundStatus,
   ) => ["rewardVoucherRefundRequests", month, status ?? "all"] as const,
+  rewardVoucherConsumptionsRoot: ["rewardVoucherConsumptions"] as const,
   rewardVoucherConsumptions: (month: string) =>
     ["rewardVoucherConsumptions", month] as const,
 };

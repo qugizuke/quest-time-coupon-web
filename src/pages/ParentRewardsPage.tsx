@@ -262,7 +262,7 @@ function RejectDecisionDialog({
           <p className="text-sm text-ink">{summary}</p>
           <div className="text-[13px] text-muted">
             <p>却下すると、お子さまに通知されます。</p>
-            <p>ポイントは返還されます。</p>
+            <p>ポイント残高とチケット枚数は変わりません。</p>
           </div>
           <label className="flex flex-col gap-1">
             <span className="sr-only">却下理由（任意）</span>
@@ -385,7 +385,6 @@ function DecisionFeedbackBanner({ feedback }: { feedback: DecisionFeedback }) {
 }
 
 interface PendingCardBaseProps {
-  requestId: string;
   requestedAt: string;
   badge: ReactNode;
   title: string;
@@ -544,7 +543,9 @@ function PointExchangeRequestCard({
     setApproveOpen(false);
     setRejectOpen(false);
     setRejectReason("");
-    void queryClient.invalidateQueries({ queryKey: ["pointExchangeRequests"] });
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.pointExchangeRequestsRoot,
+    });
     void queryClient.invalidateQueries({ queryKey: queryKeys.parentHome });
     void queryClient.invalidateQueries({ queryKey: queryKeys.home });
   }
@@ -566,7 +567,8 @@ function PointExchangeRequestCard({
         onFeedback({
           kind: "success-reject",
           summary,
-          detail: "お子さまに却下が通知されました。ポイントは返還されます。",
+          detail:
+            "お子さまに却下が通知されました。ポイント残高とチケット枚数は変わりません。",
         });
       }
       invalidateAfterDecision();
@@ -615,7 +617,6 @@ function PointExchangeRequestCard({
   return (
     <>
       <PendingRequestCard
-        requestId={request.id}
         requestedAt={request.requestedAt}
         badge={
           <StatusBadge tone="warning">{POINT_EXCHANGE_STATUS_LABEL.pending}</StatusBadge>
@@ -679,7 +680,7 @@ function PointExchangeRequestCard({
       />
       <RejectDecisionDialog
         open={rejectOpen}
-        summary={formatLineItemLabel(request.items[0])}
+        summary={primaryLine}
         rejectReason={rejectReason}
         errorMessage={
           decisionMutation.error instanceof Error ? decisionMutation.error.message : null
@@ -726,7 +727,7 @@ function RewardVoucherRefundRequestCard({
     setRejectOpen(false);
     setRejectReason("");
     void queryClient.invalidateQueries({
-      queryKey: ["rewardVoucherRefundRequests"],
+      queryKey: queryKeys.rewardVoucherRefundRequestsRoot,
     });
     void queryClient.invalidateQueries({ queryKey: queryKeys.parentHome });
     void queryClient.invalidateQueries({ queryKey: queryKeys.home });
@@ -749,7 +750,8 @@ function RewardVoucherRefundRequestCard({
         onFeedback({
           kind: "success-reject",
           summary,
-          detail: "お子さまに却下が通知されました。ポイントは返還されます。",
+          detail:
+            "お子さまに却下が通知されました。ポイント残高とチケット枚数は変わりません。",
         });
       }
       invalidateAfterDecision();
@@ -800,7 +802,6 @@ function RewardVoucherRefundRequestCard({
   return (
     <>
       <PendingRequestCard
-        requestId={request.id}
         requestedAt={request.requestedAt}
         badge={<StatusBadge tone="info">戻し申請</StatusBadge>}
         title={primaryLine}
@@ -860,7 +861,7 @@ function RewardVoucherRefundRequestCard({
       />
       <RejectDecisionDialog
         open={rejectOpen}
-        summary={formatRefundLineItemLabel(request.items[0])}
+        summary={primaryLine}
         rejectReason={rejectReason}
         errorMessage={
           decisionMutation.error instanceof Error ? decisionMutation.error.message : null

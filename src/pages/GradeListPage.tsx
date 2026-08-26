@@ -10,8 +10,8 @@ import { ParentPageFrame } from "@/components/layout/ParentPageFrame";
 import { LoadingScreen } from "@/components/layout/LoadingScreen";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge, type StatusBadgeTone } from "@/components/ui/StatusBadge";
-import { formatDateJa, todayLocal } from "@/lib/date";
-import { isOnOrAfterPointsCutover } from "@/lib/points";
+import { formatDateJaFullWidth, todayLocal } from "@/lib/date";
+import { pointsUnitLabel } from "@/lib/points";
 import {
   formatWeekLabel,
   getMondayWithOffset,
@@ -38,24 +38,6 @@ function statusTone(status: GradeListStatus): StatusBadgeTone {
   if (status === "graded") return "success";
   if (status === "exempt") return "info";
   return "muted";
-}
-
-/**
- * 日次ポイントの単位ラベルを返す（ADR-005: 切替日前は「分（旧）」、以降は「pt」）
- * @param {string} date - 採点対象日（YYYY-MM-DD）
- * @returns {string} 単位ラベル
- */
-function pointsUnitLabel(date: string): string {
-  return isOnOrAfterPointsCutover(date) ? "pt" : "分（旧）";
-}
-
-/**
- * 行の日付ラベル（Figma 採点日一覧: 全角括弧）
- * @param {string} date - YYYY-MM-DD
- * @returns {string} 例: 2026年8月26日（水）
- */
-function rowDateLabel(date: string): string {
-  return formatDateJa(date).replace("(", "（").replace(")", "）");
 }
 
 /**
@@ -201,7 +183,7 @@ export function GradeListPage() {
                 >
                   <span className="flex items-center gap-2">
                     <span className="font-medium text-ink">
-                      {rowDateLabel(date)}
+                      {formatDateJaFullWidth(date)}
                     </span>
                     {date === today && (
                       <span

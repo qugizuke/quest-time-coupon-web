@@ -356,6 +356,34 @@ describe("ResultsPage week UI (#17)", () => {
     expect(within(day).getByText(/免除/)).toBeTruthy();
   });
 
+  it("確認済みの拒否・未登録は週カードで拒否/未登録と表示する", () => {
+    renderResults([
+      buildResult({
+        date: "2026-07-21",
+        reasonCode: "grade_rejected",
+        totalPoints: -100,
+        acknowledged: true,
+        requiresAck: true,
+        blocksTimer: false,
+      }),
+      buildResult({
+        date: "2026-07-22",
+        reasonCode: "unregistered",
+        totalPoints: -100,
+        acknowledged: true,
+        requiresAck: true,
+        blocksTimer: false,
+      }),
+    ]);
+    fireEvent.click(screen.getByTestId("results-prev-week"));
+    const rejected = screen.getByTestId("results-day-2026-07-21");
+    const unregistered = screen.getByTestId("results-day-2026-07-22");
+    expect(within(rejected).getByText("拒否")).toBeTruthy();
+    expect(within(rejected).queryByText("✅ 採点済み")).toBeNull();
+    expect(within(unregistered).getByText("未登録")).toBeTruthy();
+    expect(within(unregistered).queryByText("✅ 採点済み")).toBeNull();
+  });
+
   it("home再取得に失敗しても結果確認後の残高をタイマーへ引き継ぐ", async () => {
     const pending = buildResult({
       date: "2026-07-30",

@@ -391,8 +391,8 @@ export function ResultsPage() {
                       </>
                     ) : item ? (
                       <>
-                        <StatusBadge tone={card.tone === "muted" ? "muted" : "success"}>
-                          {item.reasonCode === "exempt" ? "免除" : "✅ 採点済み"}
+                        <StatusBadge tone={card.tone}>
+                          {card.statusText ?? "✅ 採点済み"}
                         </StatusBadge>
                         <span className="text-[15px] leading-[22px] text-ink">
                           {card.pointsText}

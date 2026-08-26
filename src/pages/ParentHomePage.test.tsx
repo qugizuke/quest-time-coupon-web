@@ -7,6 +7,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { queryKeys } from "@/api/queries";
+import { currentMonth } from "@/lib/month";
 import { ParentHomePage } from "@/pages/ParentHomePage";
 import { buildParentHomeData } from "@/test/fixtures";
 import type { ParentHomeData } from "@/types/api";
@@ -21,6 +22,14 @@ function renderParentHome(data: ParentHomeData): void {
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
   queryClient.setQueryData(queryKeys.parentHome, data);
+  queryClient.setQueryData(
+    queryKeys.pointExchangeRequests(currentMonth(), "pending"),
+    { month: currentMonth(), items: [] },
+  );
+  queryClient.setQueryData(
+    queryKeys.rewardVoucherRefundRequests(currentMonth(), "pending"),
+    { month: currentMonth(), items: [] },
+  );
   render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={["/parent"]}>
@@ -83,5 +92,23 @@ describe("ParentHomePage penalty ticket", () => {
     expect(
       screen.getByTestId("consume-open-confirm").hasAttribute("disabled"),
     ).toBe(false);
+  });
+
+  it("Figma v6 の要対応・設定・管理セクションと主要カードを表示する", () => {
+    renderParentHome(buildParentHomeData());
+
+    expect(screen.getByRole("heading", { name: "📋 要対応" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "⚙️ いまの設定" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "🔧 管理・設定" })).toBeTruthy();
+
+    expect(screen.getByText("未採点のクエスト")).toBeTruthy();
+    expect(screen.getByText("登録受付の再開")).toBeTruthy();
+    expect(screen.getByText("交換承認待ち")).toBeTruthy();
+    expect(screen.getByText("戻し承認待ち")).toBeTruthy();
+    expect(screen.getByText("長期休みモード")).toBeTruthy();
+    expect(screen.getByText("免除期間")).toBeTruthy();
+    expect(screen.getByText("本日の目標就寝時刻")).toBeTruthy();
+    expect(screen.getByTestId("point-refill-card")).toBeTruthy();
+    expect(screen.getByTestId("settings-management-card")).toBeTruthy();
   });
 });

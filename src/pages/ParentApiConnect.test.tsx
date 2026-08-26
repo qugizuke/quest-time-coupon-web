@@ -243,6 +243,37 @@ describe("ParentSettingsPage API 接続", () => {
     expect(period.textContent).toContain("終了日を変更");
   });
 
+  it("免除終了日編集中は削除ボタンを無効化する", () => {
+    renderParentPages({
+      path: "/parent/settings",
+      parentHome: buildParentHome(),
+      exemptions: {
+        periods: [
+          {
+            startDate: "2026-07-25",
+            endDate: "2026-07-26",
+            createdAt: "2026-07-24T10:00:00+09:00",
+          },
+        ],
+        updatedAt: "2026-07-24T10:00:00+09:00",
+      },
+    });
+    const period = screen.getByTestId("exempt-period-2026-07-25|2026-07-26");
+    const editButton = Array.from(period.querySelectorAll("button")).find(
+      (button) => button.textContent === "終了日を変更",
+    );
+    expect(editButton).toBeTruthy();
+    fireEvent.click(editButton!);
+    const deleteButton = Array.from(period.querySelectorAll("button")).find(
+      (button) => button.textContent === "削除",
+    );
+    expect(deleteButton).toBeTruthy();
+    expect((deleteButton as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      screen.getByTestId("exempt-end-input-2026-07-25|2026-07-26"),
+    ).toBeTruthy();
+  });
+
   it("canEditBedtimeAsParent=true なら就寝保存 UI を出す", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 7, 8, 10, 0, 0));

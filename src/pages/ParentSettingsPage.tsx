@@ -556,7 +556,10 @@ export function ParentSettingsPage() {
                         <Button
                           variant="danger"
                           className="sm:w-[180px]"
-                          disabled={removeExemptMutation.isPending}
+                          disabled={
+                            removeExemptMutation.isPending ||
+                            editingExemptKey === exemptionKey(period)
+                          }
                           onClick={() =>
                             removeExemptMutation.mutate({
                               startDate: period.startDate,

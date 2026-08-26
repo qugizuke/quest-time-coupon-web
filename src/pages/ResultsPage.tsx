@@ -126,15 +126,28 @@ function resultBreakdownRows(item: ResultItem): Array<{
       points: item.registrationTimingAdjustment,
     });
   }
-  if (item.bedtimePrepPenalty) {
+
+  const bedtimePrepPenalty =
+    item.bedtimePrepPenalty ?? item.breakdown?.bedtimePrepPenalty ?? 0;
+  if (bedtimePrepPenalty !== 0) {
     rows.push({
       label: item.bedtimePrepPenaltyReason ?? "寝る準備の虚偽ペナルティ",
-      points: item.bedtimePrepPenalty,
+      points: bedtimePrepPenalty,
     });
   }
-  for (const adjustment of item.adjustments ?? []) {
-    rows.push({ label: adjustment.label, points: adjustment.points });
+
+  const adjustments = item.adjustments ?? [];
+  if (adjustments.length > 0) {
+    for (const adjustment of adjustments) {
+      rows.push({ label: adjustment.label, points: adjustment.points });
+    }
+  } else {
+    const adjustmentsSum = item.breakdown?.adjustmentsSum ?? 0;
+    if (adjustmentsSum !== 0) {
+      rows.push({ label: "加減点調整", points: adjustmentsSum });
+    }
   }
+
   return rows;
 }
 

@@ -220,6 +220,37 @@ describe("ResultsPage reasonCode", () => {
     expect(within(breakdown).getAllByRole("listitem")).toHaveLength(3);
     expect(screen.getByTestId("results-back-to-week")).toBeTruthy();
   });
+
+  it("breakdown 集計値をフォールバック表示し合計と整合する", () => {
+    renderResults([
+      buildResult({
+        date: "2026-07-30",
+        reasonCode: "normal",
+        totalPoints: 60,
+        acknowledged: true,
+        breakdown: {
+          questPoints: 15,
+          onTimeBonus: 5,
+          perfectBonus: 50,
+          adjustmentsSum: 5,
+          bedtimePrepPenalty: -15,
+        },
+      }),
+    ]);
+    fireEvent.click(screen.getByTestId("results-day-2026-07-30"));
+
+    const breakdown = screen.getByTestId("results-breakdown");
+    const items = within(breakdown).getAllByRole("listitem");
+    expect(items).toHaveLength(5);
+    expect(within(breakdown).getByText("寝る準備の虚偽ペナルティ")).toBeTruthy();
+    expect(within(breakdown).getByText("加減点調整")).toBeTruthy();
+
+    const rowSum = items.reduce((sum, li) => {
+      const match = li.textContent?.match(/([+-]?\d+)\s*(?:pt|分（旧）)/);
+      return sum + (match ? Number(match[1]) : 0);
+    }, 0);
+    expect(rowSum).toBe(60);
+  });
 });
 
 describe("ResultsPage week UI (#17)", () => {

@@ -225,13 +225,15 @@ export function HomePage() {
             audience="child"
             compact
           />
-          <button
-            type="button"
-            className="text-sm text-ink underline-offset-4 hover:underline"
-            onClick={() => navigate("/rewards")}
-          >
-            🎟️ チケットをみる →
-          </button>
+          {variant !== "kid-home-exempt-vacation" && (
+            <button
+              type="button"
+              className="text-sm text-ink underline-offset-4 hover:underline"
+              onClick={() => navigate("/rewards")}
+            >
+              🎟️ チケットをみる →
+            </button>
+          )}
         </div>
 
         {data.balancePoints < 0 && (

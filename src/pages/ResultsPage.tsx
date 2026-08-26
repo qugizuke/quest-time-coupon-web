@@ -406,7 +406,7 @@ export function ResultsPage() {
             </Button>
           </div>
 
-          <ul className="grid grid-cols-7 gap-3 overflow-x-auto pt-3">
+          <ul className="grid grid-cols-1 gap-3 pt-3 sm:grid-cols-7">
             {weekDates.map((date) => {
               const item = byDate.get(date);
               const clickable = !!item;
@@ -415,7 +415,7 @@ export function ResultsPage() {
               const highlighted = isToday || unacked;
               const card = weekCardLabel(item);
               return (
-                <li key={date} className="min-w-[112px]">
+                <li key={date} className="min-w-0 sm:min-w-[112px]">
                   <button
                     type="button"
                     disabled={!clickable}
@@ -428,7 +428,7 @@ export function ResultsPage() {
                     data-testid={`results-day-${date}`}
                     data-reason-code={item?.reasonCode ?? ""}
                     data-unacked={unacked ? "true" : "false"}
-                    className={`relative flex h-[180px] w-full flex-col items-center gap-2 rounded-default border-[3px] px-3 pb-3 pt-4 text-center ${
+                    className={`relative flex min-h-[120px] w-full flex-col items-center justify-center gap-2 rounded-default border-[3px] px-3 py-4 text-center sm:h-[180px] sm:justify-start sm:pb-3 sm:pt-4 ${
                       highlighted
                         ? "border-primary bg-warning/15"
                         : clickable

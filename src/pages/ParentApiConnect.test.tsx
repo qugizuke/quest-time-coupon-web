@@ -229,11 +229,18 @@ describe("ParentSettingsPage API 接続", () => {
         updatedAt: "2026-07-24T10:00:00+09:00",
       },
     });
+    const summary = screen.getByTestId("settings-summary-card");
+    expect(summary.textContent).toContain("現在の設定状況");
+    expect(summary.textContent).toContain("長期休みモード");
+    expect(summary.textContent).toContain("1件");
+    expect(summary.textContent).toContain("21:00");
     expect(screen.getByTestId("long-vacation-card")).toBeTruthy();
-    expect(screen.getByText("設定あり")).toBeTruthy();
-    expect(
-      screen.getByTestId("exempt-period-2026-07-25|2026-07-26"),
-    ).toBeTruthy();
+    expect(screen.getAllByText("設定あり")).toHaveLength(2);
+    const period = screen.getByTestId("exempt-period-2026-07-25|2026-07-26");
+    expect(period.textContent).toContain("2026/07/25（土）");
+    expect(period.textContent).toContain("2026/07/26（日）");
+    expect(period.textContent).toContain("2日間");
+    expect(period.textContent).toContain("終了日を変更");
   });
 
   it("canEditBedtimeAsParent=true なら就寝保存 UI を出す", () => {

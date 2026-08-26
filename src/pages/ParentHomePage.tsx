@@ -1,6 +1,6 @@
 /**
  * @file ParentHomePage
- * @description 保護者ホーム（要対応キュー・現在設定・管理機能）。
+ * @description 保護者ホーム（要対応キュー・現在設定・管理画面への導線）。
  *   画面状態の正は GET parentHome（契約 §3.5）。
  *   Figma v6 parent-home のセクション構成に寄せる（Issue #75）。
  */
@@ -14,8 +14,6 @@ import {
   queryKeys,
   rewardVoucherRefundRequestsQuery,
 } from "@/api/queries";
-import { PenaltyTicketConsumeSection } from "@/components/PenaltyTicketConsumeSection";
-import { PenaltyTicketIssueSection } from "@/components/PenaltyTicketIssueSection";
 import { ParentPageFrame } from "@/components/layout/ParentPageFrame";
 import { LoadingScreen } from "@/components/layout/LoadingScreen";
 import { Button } from "@/components/ui/Button";
@@ -418,7 +416,7 @@ export function ParentHomePage() {
             🔧 管理・設定
           </h2>
           <p className="mt-1 text-sm text-muted">
-            日常頻度が低い管理機能をまとめて配置しています。
+            管理操作と詳細設定の画面へ移動できます。
           </p>
         </div>
 
@@ -426,28 +424,17 @@ export function ParentHomePage() {
           className="grid gap-4 md:grid-cols-2"
           data-testid="parent-management-grid"
         >
-          <PenaltyTicketIssueSection
-            switchMinutes={parentHome.switchMinutes}
-            penaltyMinutes={parentHome.penaltyMinutes}
-            debtMinutes={parentHome.debtMinutes}
-            issuablePenaltyTicketCount={parentHome.issuablePenaltyTicketCount}
-          />
-          <PenaltyTicketConsumeSection
-            penaltyTicketCount={parentHome.penaltyTicketCount}
-          />
-
-          <Card
-            className="flex flex-col gap-3 p-4"
-            data-testid="point-refill-card"
+          <button
+            type="button"
+            className="self-start rounded-card border-[3px] border-border bg-surface p-4 text-left shadow-[var(--shadow-card)] hover:bg-surface-soft"
+            onClick={() => navigate("/parent/management")}
+            data-testid="management-navigation-card"
           >
-            <h3 className="text-ink">ポイント補填</h3>
-            <p className="text-sm text-muted">
-              お子様のポイントを保護者で補填します。
-            </p>
-            <Button fullWidth onClick={() => navigate("/parent/rewards")}>
-              補填する
-            </Button>
-          </Card>
+            <span className="block text-ink">ポイント・チケット管理</span>
+            <span className="mt-3 block text-sm text-muted">
+              ペナルティチケットの発行・消費を行います。
+            </span>
+          </button>
 
           <button
             type="button"
@@ -455,9 +442,9 @@ export function ParentHomePage() {
             onClick={() => navigate("/parent/settings")}
             data-testid="settings-management-card"
           >
-            <span className="block text-ink">設定へ</span>
+            <span className="block text-ink">詳細設定</span>
             <span className="mt-3 block text-sm text-muted">
-              詳細設定や各種管理を行います。
+              長期休み・免除期間・就寝時刻を変更します。
             </span>
           </button>
         </div>

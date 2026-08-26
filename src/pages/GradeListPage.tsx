@@ -18,13 +18,14 @@ import {
 } from "@/lib/week";
 
 /** 一覧ステータス */
-type GradeListStatus = "ungraded" | "graded" | "unanswered" | "exempt";
+type GradeListStatus = "ungraded" | "graded" | "unanswered" | "exempt" | "rejected";
 
 const STATUS_LABEL: Record<GradeListStatus, string> = {
   ungraded: "未採点",
   graded: "採点済",
   unanswered: "未回答",
   exempt: "免除",
+  rejected: "採点拒否",
 };
 
 /**
@@ -36,6 +37,7 @@ function statusTone(status: GradeListStatus): StatusBadgeTone {
   if (status === "ungraded") return "warning";
   if (status === "graded") return "success";
   if (status === "exempt") return "info";
+  if (status === "rejected") return "danger";
   return "muted";
 }
 
@@ -68,7 +70,11 @@ export function GradeListPage() {
     for (const item of data?.dates ?? []) {
       // gradeDates API を正とする（localStorage の免除は参照しない）
       const status: GradeListStatus =
-        item.isExempt || item.status === "exempt" ? "exempt" : item.status;
+        item.isExempt || item.status === "exempt"
+          ? "exempt"
+          : item.reasonCode === "grade_rejected"
+            ? "rejected"
+            : item.status;
       map.set(item.date, {
         status,
         ungradedCount: item.ungradedCount,
@@ -157,10 +163,15 @@ export function GradeListPage() {
           {visibleDates.map((date) => {
             const api = byDate.get(date);
             const status: GradeListStatus = api?.status ?? "unanswered";
-            const clickable = status === "ungraded" || status === "graded";
+            const clickable =
+              status === "ungraded" ||
+              status === "graded" ||
+              status === "rejected";
             const points = api?.totalPoints;
             const rightLabel =
-              status === "graded" && points != null
+              status === "rejected"
+                ? STATUS_LABEL.rejected
+                : status === "graded" && points != null
                 ? `${points >= 0 ? "+" : ""}${points}分`
                 : status === "ungraded" && (api?.ungradedCount ?? 0) > 0
                   ? `${STATUS_LABEL.ungraded}`
@@ -174,6 +185,8 @@ export function GradeListPage() {
                   onClick={() => {
                     if (clickable) navigate(`/parent/grades/${date}`);
                   }}
+                  data-testid={`grade-row-${date}`}
+                  data-grade-status={status}
                   className={`flex w-full items-center justify-between rounded-default border-[3px] border-border px-4 py-3 text-left shadow-[var(--shadow-card)] ${
                     clickable
                       ? "bg-surface hover:bg-surface-soft"

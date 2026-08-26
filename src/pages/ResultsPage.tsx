@@ -68,7 +68,7 @@ function resultBadge(reasonCode: ReasonCode): {
 } {
   if (reasonCode === "grade_rejected") {
     return {
-      label: "採点キャンセル",
+      label: "採点拒否",
       className: "border-danger bg-danger/5 text-danger",
     };
   }
@@ -168,11 +168,11 @@ function weekCardLabel(item: ResultItem | undefined): {
     return { pointsText: "±0", statusText: "免除", tone: "info" };
   }
   const pointsText = `${item.totalPoints >= 0 ? "+" : ""}${item.totalPoints}${pointsUnitLabel(item.date)}`;
+  if (item.reasonCode === "grade_rejected") {
+    return { pointsText, statusText: "採点拒否", tone: "danger" };
+  }
   if (item.requiresAck && !item.acknowledged) {
     return { pointsText, statusText: "未確認", tone: "danger" };
-  }
-  if (item.reasonCode === "grade_rejected") {
-    return { pointsText, statusText: "拒否", tone: "danger" };
   }
   if (item.reasonCode === "unregistered") {
     return { pointsText, statusText: "未登録", tone: "danger" };
@@ -457,7 +457,11 @@ export function ResultsPage() {
                     </span>
                     {unacked ? (
                       <>
-                        <StatusBadge tone="warning">🔔 未確認</StatusBadge>
+                        <StatusBadge tone="warning">
+                          {item?.reasonCode === "grade_rejected"
+                            ? "採点拒否"
+                            : "🔔 未確認"}
+                        </StatusBadge>
                         <span className="text-[13px] leading-[22px] text-primary">
                           確認する →
                         </span>

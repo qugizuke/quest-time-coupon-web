@@ -1,7 +1,7 @@
 /**
  * @file GradeListPage テスト
  * @description gradeDates API を正とし、stale localStorage 免除を優先しないことを検証する。
- *   Figma 寄せ（Issue #76）: サブ見出し・未採点のみフィルタ・今日タグ・pt 単位も検証する。
+ *   Figma 寄せ（Issue #76）: サブ見出し・未採点のみフィルタ・今日タグ・分単位も検証する。
  * @vitest-environment jsdom
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -142,7 +142,7 @@ describe("GradeListPage gradeDates 正", () => {
 
     const row = getDateRow(TODAY);
     expect(row.hasAttribute("disabled")).toBe(false);
-    expect(within(row).getByText("+15pt")).toBeTruthy();
+    expect(within(row).getByText("+15分")).toBeTruthy();
     expect(within(row).queryByText("免除")).toBeNull();
   });
 
@@ -199,7 +199,7 @@ describe("GradeListPage Figma 寄せ (#76)", () => {
     expect(within(other).queryByText("今日")).toBeNull();
   });
 
-  it("単位は切替日以降 pt・切替日前は 分（旧）", () => {
+  it("Figma の採点日一覧どおり採点済みの単位を分で表示する", () => {
     renderGradeList({
       dates: [
         buildGradeDateItem({
@@ -223,9 +223,9 @@ describe("GradeListPage Figma 寄せ (#76)", () => {
       ],
     });
 
-    expect(within(getDateRow("2026-08-24")).getByText("+15分（旧）")).toBeTruthy();
-    expect(within(getDateRow("2026-08-25")).getByText("+20pt")).toBeTruthy();
-    expect(within(getDateRow(TODAY)).getByText("+45pt")).toBeTruthy();
+    expect(within(getDateRow("2026-08-24")).getByText("+15分")).toBeTruthy();
+    expect(within(getDateRow("2026-08-25")).getByText("+20分")).toBeTruthy();
+    expect(within(getDateRow(TODAY)).getByText("+45分")).toBeTruthy();
   });
 
   it("「未採点のみ」チップで未採点行だけに絞り込む", () => {

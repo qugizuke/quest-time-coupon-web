@@ -373,7 +373,7 @@ export function ResultsPage() {
   return (
     <ChildPageFrame>
       {!selected && (
-        <div className="flex flex-col gap-6" data-testid="results-week-list">
+        <div className="flex flex-col gap-6 pt-2" data-testid="results-week-list">
           <div
             className="w-full rounded-default border-[3px] border-border bg-surface px-6 py-3 text-[22px] leading-none text-ink"
             data-testid="results-today-banner"
@@ -510,12 +510,15 @@ export function ResultsPage() {
       )}
 
       {selected && (
-        <div className="flex flex-col gap-6" data-testid="results-day-detail">
+        <div
+          className="flex flex-col gap-6 pt-4 sm:px-2"
+          data-testid="results-day-detail"
+        >
           <h1 className="text-[22px] font-bold leading-tight text-ink">
             {formatDateJaFullWidth(selected.date)}
           </h1>
 
-          <Card className="flex min-h-[460px] flex-col gap-6 p-7 sm:p-8">
+          <Card className="flex min-h-[460px] flex-col gap-6 rounded-default p-7 sm:p-8">
             <div>
               <span
                 className={`inline-flex rounded-full border px-3 py-1 text-sm ${resultBadge(selected.reasonCode).className}`}

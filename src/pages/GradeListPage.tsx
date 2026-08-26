@@ -11,7 +11,6 @@ import { LoadingScreen } from "@/components/layout/LoadingScreen";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge, type StatusBadgeTone } from "@/components/ui/StatusBadge";
 import { formatDateJaFullWidth, todayLocal } from "@/lib/date";
-import { pointsUnitLabel } from "@/lib/points";
 import {
   formatWeekLabel,
   getMondayWithOffset,
@@ -162,7 +161,7 @@ export function GradeListPage() {
             const points = api?.totalPoints;
             const rightLabel =
               status === "graded" && points != null
-                ? `${points >= 0 ? "+" : ""}${points}${pointsUnitLabel(date)}`
+                ? `${points >= 0 ? "+" : ""}${points}分`
                 : status === "ungraded" && (api?.ungradedCount ?? 0) > 0
                   ? `${STATUS_LABEL.ungraded}`
                   : STATUS_LABEL[status];

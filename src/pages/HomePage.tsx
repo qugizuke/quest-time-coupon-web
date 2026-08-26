@@ -231,7 +231,7 @@ export function HomePage() {
               className="text-sm text-ink underline-offset-4 hover:underline"
               onClick={() => navigate("/rewards")}
             >
-              🎟️ チケットをみる →
+              🎫 チケットをみる →
             </button>
           )}
         </div>

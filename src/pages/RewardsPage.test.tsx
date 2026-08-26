@@ -465,6 +465,14 @@ describe("RewardsPage", () => {
     expect(screen.getByRole("tab", { name: "🎫 使う" })).toBeTruthy();
   });
 
+  it("交換カタログの Figma 文言を表示する", () => {
+    renderRewards({ balancePoints: 1000 });
+
+    expect(screen.getByText("100円をもらえるよ！")).toBeTruthy();
+    expect(screen.getByText("みんなで外ごはん！")).toBeTruthy();
+    expect(screen.getByText("ペナルティチケット消費")).toBeTruthy();
+  });
+
   it("フッタに合計ポイントと交換後の残りを並記する", () => {
     renderRewards({ balancePoints: 1000 });
     expect(screen.getByTestId("rewards-total-points").textContent).toBe("0pt");

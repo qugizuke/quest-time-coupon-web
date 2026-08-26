@@ -115,7 +115,7 @@ describe("HomePage", () => {
     expect(screen.getByTestId("nav-timer")).toBeTruthy();
     expect(screen.getByRole("button", { name: "クエストのルール" })).toBeTruthy();
     // 免除日（vacation でない）はヒーローにチケットリンクあり
-    expect(screen.getByText("🎟️ チケットをみる →")).toBeTruthy();
+    expect(screen.getByText("🎫 チケットをみる →")).toBeTruthy();
 
     const page = screen.getByTestId("home-page");
     const children = Array.from(page.children);
@@ -155,7 +155,7 @@ describe("HomePage", () => {
     expect(screen.getByTestId("bedtime-locked").textContent).toContain("21時");
     expect(screen.getByText("🏖️ 長期休みモード")).toBeTruthy();
     // 簡略ヒーロー: チケットリンクなし・ポイント表示あり（D2・Issue #66）
-    expect(screen.queryByText("🎟️ チケットをみる →")).toBeNull();
+    expect(screen.queryByText("🎫 チケットをみる →")).toBeNull();
     expect(screen.getByTestId("balance-display")).toBeTruthy();
     expect(screen.getByTestId("balance-points")).toBeTruthy();
   });

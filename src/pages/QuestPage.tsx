@@ -10,7 +10,9 @@ import type { ChildAnswer, QuestDefinition } from "@/types/api";
 import { homeQuery } from "@/api/queries";
 import { ChildPageFrame } from "@/components/layout/ChildPageFrame";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import questCheckIcon from "@/assets/quest-check.svg";
+import questCrossIcon from "@/assets/quest-cross.svg";
+import questHelpIcon from "@/assets/quest-help.svg";
 import { useDailyQuests } from "@/hooks/useDailyQuests";
 import { useQuestDraft } from "@/hooks/useQuestDraft";
 import { todayLocal } from "@/lib/date";
@@ -25,54 +27,21 @@ import { ensureQuestSessionStarted, getBedtimeHourDraft } from "@/lib/sessionSto
 /** ✓アイコン（できた） */
 function CheckIcon() {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={3}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="size-7 sm:size-9"
-      aria-hidden
-    >
-      <path d="M5 13l4 4L19 7" />
-    </svg>
+    <img src={questCheckIcon} alt="" className="size-7 shrink-0" />
   );
 }
 
 /** ✗アイコン（できなかった） */
 function CrossIcon() {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={3}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="size-7 sm:size-9"
-      aria-hidden
-    >
-      <path d="M6 6l12 12M18 6L6 18" />
-    </svg>
+    <img src={questCrossIcon} alt="" className="size-7 shrink-0" />
   );
 }
 
 /** ?アイコン（わからない） */
 function QuestionIcon() {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={3}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="size-7 sm:size-9"
-      aria-hidden
-    >
-      <path d="M12 16v.01M8 8a4 4 0 118 0c0 2-2 3-4 3" />
-    </svg>
+    <img src={questHelpIcon} alt="" className="size-7 shrink-0" />
   );
 }
 
@@ -99,21 +68,21 @@ const CHOICES: ChoiceMeta[] = [
     value: 1,
     label: "できた",
     icon: <CheckIcon />,
-    idleClass: "border-success bg-success-soft",
+    idleClass: "border-success bg-surface",
     selectedClass: "border-success bg-success text-white shadow-[var(--shadow-secondary)]",
   },
   {
     value: 0,
     label: "できなかった",
     icon: <CrossIcon />,
-    idleClass: "border-danger bg-danger-soft",
+    idleClass: "border-danger bg-surface",
     selectedClass: "border-danger bg-danger text-white shadow-[var(--shadow-danger)]",
   },
   {
     value: -1,
     label: "わからない",
     icon: <QuestionIcon />,
-    idleClass: "border-primary bg-surface-warm",
+    idleClass: "border-primary bg-surface",
     selectedClass: "border-primary bg-primary text-white shadow-[var(--shadow-primary)]",
   },
 ];
@@ -130,21 +99,21 @@ const HOMEWORK_CHOICES: ChoiceMeta[] = [
     value: 1,
     label: "テキパキできた",
     icon: <CheckIcon />,
-    idleClass: "border-success bg-success-soft",
+    idleClass: "border-success bg-surface",
     selectedClass: "border-success bg-success text-white shadow-[var(--shadow-secondary)]",
   },
   {
     value: 0,
     label: "テキパキできなかった",
     icon: <CrossIcon />,
-    idleClass: "border-danger bg-danger-soft",
+    idleClass: "border-danger bg-surface",
     selectedClass: "border-danger bg-danger text-white shadow-[var(--shadow-danger)]",
   },
   {
     value: -1,
     label: "今日は宿題がなかった",
     icon: <QuestionIcon />,
-    idleClass: "border-primary bg-surface-warm",
+    idleClass: "border-primary bg-surface",
     selectedClass: "border-primary bg-primary text-white shadow-[var(--shadow-primary)]",
   },
 ];
@@ -155,21 +124,21 @@ const PHONE_CHOICES: ChoiceMeta[] = [
     value: 1,
     label: "できた",
     icon: <CheckIcon />,
-    idleClass: "border-success bg-success-soft",
+    idleClass: "border-success bg-surface",
     selectedClass: "border-success bg-success text-white shadow-[var(--shadow-secondary)]",
   },
   {
     value: 0,
     label: "できなかった",
     icon: <CrossIcon />,
-    idleClass: "border-danger bg-danger-soft",
+    idleClass: "border-danger bg-surface",
     selectedClass: "border-danger bg-danger text-white shadow-[var(--shadow-danger)]",
   },
   {
     value: -1,
     label: "今日はキッズケータイを使う必要がなかった",
     icon: <QuestionIcon />,
-    idleClass: "border-primary bg-surface-warm",
+    idleClass: "border-primary bg-surface",
     selectedClass: "border-primary bg-primary text-white shadow-[var(--shadow-primary)]",
   },
 ];
@@ -180,14 +149,14 @@ const YES_NO_CHOICES: ChoiceMeta[] = [
     value: 1,
     label: "はい",
     icon: <CheckIcon />,
-    idleClass: "border-success bg-success-soft",
+    idleClass: "border-success bg-surface",
     selectedClass: "border-success bg-success text-white",
   },
   {
     value: 0,
     label: "いいえ",
     icon: <CrossIcon />,
-    idleClass: "border-danger bg-danger-soft",
+    idleClass: "border-danger bg-surface",
     selectedClass: "border-danger bg-danger text-white",
   },
 ];
@@ -272,7 +241,7 @@ export function QuestPage() {
 
   return (
     <ChildPageFrame vacationMode={homeData?.isVacationMode}>
-      <div className="flex flex-1 flex-col gap-6 transition-opacity duration-300">
+      <div className="flex flex-1 flex-col gap-4 transition-opacity duration-300">
         {/* タイトル＋ステップ円 */}
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between text-sm">
@@ -303,13 +272,13 @@ export function QuestPage() {
                     className={[
                       "flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-bold transition-colors sm:size-10 sm:text-base",
                       isDone
-                        ? "bg-info text-white"
+                        ? "border-2 border-success bg-success text-white"
                         : isCurrent
-                          ? "border-[3px] border-primary bg-primary text-white"
-                          : "border-2 border-border bg-surface text-muted",
+                          ? "border-[3px] border-info bg-surface text-info"
+                          : "border-2 border-border bg-surface",
                     ].join(" ")}
                   >
-                    {isDone ? "✓" : step}
+                    {isDone ? "✓" : isCurrent ? step : null}
                   </div>
                 );
               })}
@@ -317,38 +286,39 @@ export function QuestPage() {
           )}
         </div>
 
-        <Card className="flex flex-1 flex-col items-center gap-8 border-4 border-border p-8 text-center shadow-[var(--shadow-quest-board)] sm:p-12">
-          <h1 className="text-2xl font-bold leading-relaxed text-ink sm:text-[32px]">
+        <section className="flex min-h-[128px] flex-col items-center justify-center rounded-card border-[3px] border-border bg-surface-warm px-8 py-8 text-center shadow-[var(--shadow-quest-board)] sm:px-12">
+          <h1 className="text-2xl font-normal leading-relaxed text-ink sm:text-[32px]">
             {currentQuest.title}
           </h1>
           {currentQuest.hint && (
             <p className="text-muted">{currentQuest.hint}</p>
           )}
 
-          <div className="flex w-full gap-3 flex-col sm:flex-row">
-            {choices.map((c) => {
-              const selected = currentAnswer === c.value;
-              return (
-                <button
-                  key={c.value}
-                  type="button"
-                  onClick={() => setAnswer(c.value)}
-                  className={[
-                    "flex min-h-[72px] flex-1 flex-col items-center justify-center gap-2 rounded-[20px] border-4 px-4 py-6 text-lg font-medium text-ink transition-transform active:scale-[0.98] sm:min-h-[120px] sm:text-[22px]",
-                    selected ? c.selectedClass : c.idleClass,
-                  ].join(" ")}
-                >
-                  {c.icon && <span className="shrink-0">{c.icon}</span>}
-                  {c.label}
-                </button>
-              );
-            })}
-          </div>
-        </Card>
+        </section>
 
-        <div className="flex gap-3">
+        <div className="flex w-full flex-col gap-3 sm:flex-row sm:gap-4">
+          {choices.map((c) => {
+            const selected = currentAnswer === c.value;
+            return (
+              <button
+                key={c.value}
+                type="button"
+                onClick={() => setAnswer(c.value)}
+                className={[
+                  "flex min-h-[72px] flex-1 items-center justify-center gap-3 rounded-card border-[3px] px-4 py-3 text-lg font-medium text-ink transition-transform active:scale-[0.98] sm:text-[22px]",
+                  selected ? c.selectedClass : c.idleClass,
+                ].join(" ")}
+              >
+                {c.icon}
+                <span>{c.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mt-4 flex justify-between gap-3">
           <Button
-            className="flex-1"
+            className="w-[calc(50%_-_0.375rem)] sm:w-[180px]"
             variant="secondary"
             disabled={draft.index === 0 && !isFollowUpMode}
             onClick={goPrev}
@@ -357,7 +327,7 @@ export function QuestPage() {
           </Button>
           {isLastQuest && !isFollowUpMode ? (
             <Button
-              className="flex-1"
+              className="w-[calc(50%_-_0.375rem)] sm:w-[180px]"
               disabled={!canConfirm}
               onClick={() => navigate("/quest/confirm")}
             >
@@ -365,7 +335,7 @@ export function QuestPage() {
             </Button>
           ) : (
             <Button
-              className="flex-1"
+              className="w-[calc(50%_-_0.375rem)] sm:w-[180px]"
               disabled={!canGoNext}
               onClick={goNext}
             >

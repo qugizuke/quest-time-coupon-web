@@ -48,7 +48,7 @@ export function ChildPageFrame({
 
   return (
     <AppLayout surface={vacationMode ? "kid-vacation" : "kid"}>
-      <div className="-mx-4 mb-4 sm:-mx-8">
+      <div className="relative left-1/2 -mt-6 mb-6 w-screen -translate-x-1/2">
         <AppHeader
           mode="kid"
           showHome={showHome}

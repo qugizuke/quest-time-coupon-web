@@ -100,7 +100,7 @@ export function TimerPage() {
   return (
     <ChildPageFrame vacationMode={home?.isVacationMode}>
       <div
-        className="flex w-full flex-col items-stretch gap-6"
+        className="flex w-full flex-col items-stretch gap-6 pt-2"
         data-testid="timer-layout"
       >
         {isBlocked && (

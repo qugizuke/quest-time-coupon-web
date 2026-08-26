@@ -1,6 +1,6 @@
 /**
  * @file GradeListPage
- * @description 保護者採点日一覧（月曜始まり週ナビ）。status / isExempt は gradeDates API を正とする。
+ * @description 保護者採点日一覧（月曜始まり週ナビ・未採点のみフィルタ）。status / isExempt は gradeDates API を正とする。
  */
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -11,6 +11,7 @@ import { LoadingScreen } from "@/components/layout/LoadingScreen";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge, type StatusBadgeTone } from "@/components/ui/StatusBadge";
 import { formatDateJa, todayLocal } from "@/lib/date";
+import { isOnOrAfterPointsCutover } from "@/lib/points";
 import {
   formatWeekLabel,
   getMondayWithOffset,
@@ -40,6 +41,24 @@ function statusTone(status: GradeListStatus): StatusBadgeTone {
 }
 
 /**
+ * 日次ポイントの単位ラベルを返す（ADR-005: 切替日前は「分（旧）」、以降は「pt」）
+ * @param {string} date - 採点対象日（YYYY-MM-DD）
+ * @returns {string} 単位ラベル
+ */
+function pointsUnitLabel(date: string): string {
+  return isOnOrAfterPointsCutover(date) ? "pt" : "分（旧）";
+}
+
+/**
+ * 行の日付ラベル（Figma 採点日一覧: 全角括弧）
+ * @param {string} date - YYYY-MM-DD
+ * @returns {string} 例: 2026年8月26日（水）
+ */
+function rowDateLabel(date: string): string {
+  return formatDateJa(date).replace("(", "（").replace(")", "）");
+}
+
+/**
  * 採点日一覧
  * @returns {JSX.Element} ページ
  */
@@ -47,6 +66,7 @@ export function GradeListPage() {
   const navigate = useNavigate();
   const today = todayLocal();
   const [weekOffset, setWeekOffset] = useState(0);
+  const [ungradedOnly, setUngradedOnly] = useState(false);
   const { data, isLoading, error } = useQuery(gradeDatesQuery);
 
   const monday = useMemo(
@@ -77,6 +97,15 @@ export function GradeListPage() {
     return map;
   }, [data]);
 
+  /** Figma フィルタチップ「未採点のみ」: 未採点ステータスの日だけを表示する */
+  const visibleDates = useMemo(
+    () =>
+      ungradedOnly
+        ? weekDates.filter((date) => byDate.get(date)?.status === "ungraded")
+        : weekDates,
+    [weekDates, byDate, ungradedOnly],
+  );
+
   if (isLoading) {
     return <LoadingScreen />;
   }
@@ -93,9 +122,12 @@ export function GradeListPage() {
 
   return (
     <ParentPageFrame>
-      <h1 className="mb-4 text-app-lg font-bold text-ink">採点日一覧</h1>
+      <div className="mb-4">
+        <h1 className="text-app-lg font-bold text-ink">採点日一覧</h1>
+        <p className="mt-1 text-sm text-muted">未採点の日をタップして採点</p>
+      </div>
 
-      <div className="mb-4 flex items-center justify-between gap-2">
+      <div className="mb-3 flex items-center justify-between gap-2">
         <Button
           variant="secondary"
           className="px-3 text-base"
@@ -115,40 +147,78 @@ export function GradeListPage() {
         </Button>
       </div>
 
-      <ul className="flex flex-col gap-2">
-        {weekDates.map((date) => {
-          const api = byDate.get(date);
-          const status: GradeListStatus = api?.status ?? "unanswered";
-          const clickable = status === "ungraded" || status === "graded";
-          const points = api?.totalPoints;
-          const rightLabel =
-            status === "graded" && points != null
-              ? `${points >= 0 ? "+" : ""}${points}分`
-              : status === "ungraded" && (api?.ungradedCount ?? 0) > 0
-                ? `${STATUS_LABEL.ungraded}`
-                : STATUS_LABEL[status];
+      <div className="mb-3 flex justify-start">
+        <button
+          type="button"
+          aria-pressed={ungradedOnly}
+          onClick={() => setUngradedOnly((v) => !v)}
+          data-testid="ungraded-only-chip"
+          className={`inline-flex min-h-touch items-center gap-1.5 rounded-pill border-[3px] px-4 text-sm font-medium transition-colors ${
+            ungradedOnly
+              ? "border-primary bg-primary text-white"
+              : "border-border bg-surface text-ink hover:bg-surface-soft"
+          }`}
+        >
+          {ungradedOnly && <span aria-hidden="true">✓</span>}
+          未採点のみ
+        </button>
+      </div>
 
-          return (
-            <li key={date}>
-              <button
-                type="button"
-                disabled={!clickable}
-                onClick={() => {
-                  if (clickable) navigate(`/parent/grades/${date}`);
-                }}
-                className={`flex w-full items-center justify-between rounded-default border-[3px] border-border px-4 py-3 text-left shadow-[var(--shadow-card)] ${
-                  clickable
-                    ? "bg-surface hover:bg-surface-soft"
-                    : "cursor-default bg-muted-soft text-muted"
-                }`}
-              >
-                <span className="font-medium text-ink">{formatDateJa(date)}</span>
-                <StatusBadge tone={statusTone(status)}>{rightLabel}</StatusBadge>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+      {visibleDates.length === 0 ? (
+        <p
+          className="rounded-default border-[3px] border-border bg-surface px-4 py-8 text-center text-sm text-muted"
+          data-testid="ungraded-empty"
+        >
+          未採点の日はありません
+        </p>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {visibleDates.map((date) => {
+            const api = byDate.get(date);
+            const status: GradeListStatus = api?.status ?? "unanswered";
+            const clickable = status === "ungraded" || status === "graded";
+            const points = api?.totalPoints;
+            const rightLabel =
+              status === "graded" && points != null
+                ? `${points >= 0 ? "+" : ""}${points}${pointsUnitLabel(date)}`
+                : status === "ungraded" && (api?.ungradedCount ?? 0) > 0
+                  ? `${STATUS_LABEL.ungraded}`
+                  : STATUS_LABEL[status];
+
+            return (
+              <li key={date}>
+                <button
+                  type="button"
+                  disabled={!clickable}
+                  onClick={() => {
+                    if (clickable) navigate(`/parent/grades/${date}`);
+                  }}
+                  className={`flex w-full items-center justify-between rounded-default border-[3px] border-border px-4 py-3 text-left shadow-[var(--shadow-card)] ${
+                    clickable
+                      ? "bg-surface hover:bg-surface-soft"
+                      : "cursor-default bg-muted-soft text-muted"
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="font-medium text-ink">
+                      {rowDateLabel(date)}
+                    </span>
+                    {date === today && (
+                      <span
+                        className="rounded-pill bg-primary px-2 py-[3px] text-[11px] leading-none text-white"
+                        data-testid={`today-tag-${date}`}
+                      >
+                        今日
+                      </span>
+                    )}
+                  </span>
+                  <StatusBadge tone={statusTone(status)}>{rightLabel}</StatusBadge>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
 
       <Button
         className="mt-6"

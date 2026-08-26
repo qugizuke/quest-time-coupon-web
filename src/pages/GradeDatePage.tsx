@@ -12,6 +12,7 @@ import { gradeQuery, queryKeys } from "@/api/queries";
 import { ParentPageFrame } from "@/components/layout/ParentPageFrame";
 import { LoadingScreen } from "@/components/layout/LoadingScreen";
 import { Button } from "@/components/ui/Button";
+import { StatusBadge, type StatusBadgeTone } from "@/components/ui/StatusBadge";
 import { useGradeAdjustmentDefinitions } from "@/hooks/useGradeAdjustmentDefinitions";
 import { useDailyQuests } from "@/hooks/useDailyQuests";
 import { formatDateJa, formatJstClockJa } from "@/lib/date";
@@ -131,6 +132,20 @@ function isConditionalQuest(
 }
 
 /**
+ * 採点状態の表示を返す
+ * @param {GradeData} gradeData - 採点データ
+ * @returns {{ label: string; tone: StatusBadgeTone }} 表示内容
+ */
+function gradeStatus(gradeData: {
+  isGraded: boolean;
+  isRejected: boolean;
+}): { label: string; tone: StatusBadgeTone } {
+  if (gradeData.isRejected) return { label: "採点拒否済み", tone: "danger" };
+  if (gradeData.isGraded) return { label: "採点済み", tone: "success" };
+  return { label: "採点待ち", tone: "danger" };
+}
+
+/**
  * 採点画面
  * @returns {JSX.Element} ページ
  */
@@ -183,6 +198,13 @@ export function GradeDatePage() {
   const isComplete =
     gradableItems.length === 0 ||
     gradableItems.every((item) => grades[item.questId] !== undefined);
+
+  const gradedCount = gradableItems.filter(
+    (item) => grades[item.questId] !== undefined,
+  ).length;
+  const totalItemCount = gradableItems.length;
+  const progressPercent =
+    totalItemCount === 0 ? 0 : Math.round((gradedCount / totalItemCount) * 100);
 
   const mutation = useMutation({
     mutationFn: () => {
@@ -314,11 +336,15 @@ export function GradeDatePage() {
   }
 
   const clock = formatJstClockJa(gradeData.submittedAt);
+  const status = gradeStatus(gradeData);
 
   return (
     <ParentPageFrame>
-      <h1 className="mb-2 text-app-lg font-bold">採点 {formatDateJa(date)}</h1>
-      <p className="mb-2 text-sm text-ink">
+      <header className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-app-lg font-bold">📝 採点 {formatDateJa(date)}</h1>
+        <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
+      </header>
+      <p className="mb-4 text-sm text-ink">
         今日は {clock} に登録されました。
       </p>
       {gradeData.isRejected && (
@@ -327,16 +353,37 @@ export function GradeDatePage() {
         </p>
       )}
 
-      {!readOnly && (
-        <div className="mb-4">
-          <Button variant="danger" fullWidth onClick={() => setRejectOpen(true)}>
-            採点拒否
-          </Button>
+      <section
+        className="mb-6 rounded-default border-[3px] border-border bg-surface p-4 shadow-[var(--shadow-card)]"
+        aria-labelledby="grading-progress-title"
+      >
+        <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+          <h2 id="grading-progress-title" className="font-semibold text-ink">
+            採点進捗
+          </h2>
+          <span className="text-muted">
+            {gradedCount}/{totalItemCount} 採点済み
+          </span>
         </div>
-      )}
+        <div
+          className="h-3 overflow-hidden rounded-pill border border-border bg-surface-soft"
+          role="progressbar"
+          aria-label="採点進捗"
+          aria-valuemin={0}
+          aria-valuemax={totalItemCount}
+          aria-valuenow={gradedCount}
+        >
+          <div
+            className="h-full rounded-pill bg-primary transition-[width]"
+            style={{ width: `${progressPercent}%` }}
+          />
+        </div>
+      </section>
+
+      <h2 className="mb-3 font-semibold text-ink">📋 クエスト回答状況</h2>
 
       <ul className="flex flex-col gap-4">
-        {gradeData.items.map((item) => {
+        {gradeData.items.map((item, index) => {
           const title = resolveQuestTitle(daily, item.questId, {
             preferFollowUpTitle: true,
           });
@@ -357,7 +404,12 @@ export function GradeDatePage() {
               key={item.questId}
               className="rounded-default border-[3px] border-border bg-surface p-4 shadow-[var(--shadow-card)]"
             >
-              <p className="font-medium">{title}</p>
+              <p className="font-medium text-ink">
+                <span className="mr-2 text-xs font-semibold text-muted">
+                  Q{index + 1}
+                </span>
+                {title}
+              </p>
               {isRegistrationGate && (
                 <>
                   <p className="mt-2 text-sm text-ink">
@@ -376,41 +428,65 @@ export function GradeDatePage() {
                   子どもは『{followUpTitle}』と答えました。実際はテキパキできていましたか？
                 </p>
               )}
-              <p className="mb-3 mt-2 text-sm text-muted">
-                子どもの回答: {childAnswerLabel(item.childAnswer, "default", item.questId, item.gradingMode)}
+              <p
+                className={`mb-3 mt-3 text-sm font-semibold ${
+                  isUnknown
+                    ? "text-warning"
+                    : isNegative
+                      ? "text-danger"
+                      : "text-success"
+                }`}
+              >
+                {isUnknown ? "🤔" : isNegative ? "👎" : "👍"}{" "}
+                {childAnswerLabel(
+                  item.childAnswer,
+                  "default",
+                  item.questId,
+                  item.gradingMode,
+                )}
               </p>
               {isUnknown || isNegative ? (
-                <p className="text-sm text-warning">
-                  {isUnknown
-                    ? isSkipAnswerQuest(item.questId, item.gradingMode)
-                      ? "採点不要（表示のみ・点0・ストリーク非接触）"
-                      : "採点不要（表示のみ・自動で減点扱い）"
-                    : "表示のみ（否定回答・自動未達）"}
-                </p>
+                <div className="rounded-default border border-border-soft bg-surface-warm px-3 py-4 text-sm text-muted">
+                  ℹ️ 否定・わからない回答のため採点対象外
+                  {isUnknown && isSkipAnswerQuest(item.questId, item.gradingMode) && (
+                    <span className="sr-only">（点0・ストリーク非接触）</span>
+                  )}
+                </div>
               ) : (
-                <div className="flex gap-2">
-                  <Button
-                    className="flex-1"
-                    variant={selected === true ? "primary" : "secondary"}
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-muted">保護者の判定</span>
+                  <button
+                    type="button"
+                    className={`rounded-default border-2 px-3 py-1 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                      selected === true
+                        ? "border-success bg-success-soft text-success"
+                        : "border-success bg-surface text-success"
+                    }`}
                     disabled={readOnly}
                     aria-label="できた（⭕️）"
+                    aria-pressed={selected === true}
                     onClick={() =>
                       setGrades((g) => ({ ...g, [item.questId]: true }))
                     }
                   >
-                    ⭕️
-                  </Button>
-                  <Button
-                    className="flex-1"
-                    variant={selected === false ? "primary" : "secondary"}
+                    ⭕ 正しい
+                  </button>
+                  <button
+                    type="button"
+                    className={`rounded-default border-2 px-3 py-1 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                      selected === false
+                        ? "border-danger bg-danger-soft text-danger"
+                        : "border-border bg-surface text-danger"
+                    }`}
                     disabled={readOnly}
                     aria-label="できていない（❌）"
+                    aria-pressed={selected === false}
                     onClick={() =>
                       setGrades((g) => ({ ...g, [item.questId]: false }))
                     }
                   >
-                    ❌
-                  </Button>
+                    ❌ 虚偽
+                  </button>
                 </div>
               )}
               {appliesFalseClaimPenalty && (
@@ -424,10 +500,24 @@ export function GradeDatePage() {
       </ul>
 
       {!gradeData.isRejected && (
-        <section className="mt-6 rounded-default border-[3px] border-border bg-surface p-4 shadow-[var(--shadow-card)]">
-          <h2 className="mb-3 font-medium">
+        <details
+          className="mt-6 rounded-default border-[3px] border-border bg-surface p-4 shadow-[var(--shadow-card)]"
+          open={usesAdjustments || undefined}
+        >
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 font-medium">
+            <span>
+              ボーナス / ペナルティ
+              <span className="ml-2 text-xs text-muted">折り畳み</span>
+            </span>
+            <span className="text-xs font-normal text-muted">
+              {usesAdjustments
+                ? `${adjustmentRows.length}件の加減点あり`
+                : "加減点なし"}
+            </span>
+          </summary>
+          <p className="mb-3 mt-4 text-sm text-ink">
             ボーナスまたはペナルティタイムを追加しますか？
-          </h2>
+          </p>
           <div className="mb-4 flex gap-4">
             <label className="flex items-center gap-2">
               <input
@@ -537,7 +627,7 @@ export function GradeDatePage() {
               )}
             </div>
           )}
-        </section>
+        </details>
       )}
 
       {mutation.error && (
@@ -560,6 +650,15 @@ export function GradeDatePage() {
           一覧に戻る
         </Button>
       </div>
+
+      {!readOnly && (
+        <section className="mt-8 border-t border-border-soft pt-4">
+          <p className="mb-3 text-xs text-muted">採点拒否する場合</p>
+          <Button variant="danger" fullWidth onClick={() => setRejectOpen(true)}>
+            採点を拒否する
+          </Button>
+        </section>
+      )}
 
       {rejectOpen && (
         <div

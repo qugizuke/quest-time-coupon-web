@@ -381,8 +381,9 @@ export function resolveBedtimeUiMode(opts: {
     isTransitionPeriod = false,
   } = opts;
 
+  // 免除日でも Figma どおり就寝時刻は表示するが、編集は許可しない。
   if (isExemptDay) {
-    return "hidden";
+    return bedtimeHour === undefined ? "locked21" : "display";
   }
 
   if (!isVacationMode && !isWeekendEveDay) {

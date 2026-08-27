@@ -123,7 +123,7 @@ const RULE_SECTIONS: RuleSection[] = [
 ];
 
 const PENALTY_TICKET_MESSAGE =
-  "負債があるとき、ママがペナルティチケットを発行して精算してくれるよ。チケットは手伝いのご褒美だよ。";
+  "ポイントがマイナス100pt以下のとき、ママが100ptごとにペナルティチケットを発行して精算してくれるよ。チケットは手伝いのご褒美だよ。";
 
 const BADGE_TONE_CLASS: Record<BadgeTone, string> = {
   success: "bg-success",

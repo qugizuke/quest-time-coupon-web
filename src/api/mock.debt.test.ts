@@ -1,6 +1,6 @@
 /**
  * @file モック penaltyTicketIssue / penaltyTicketConsume / 負債境界テスト
- * @description debtMinutes 59/60/120 と発行精算・在庫消費を検証する（Issue #35）。
+ * @description ポイント負債99/100/250ptと発行精算・在庫消費を検証する。
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mockApi, resetMockStore, setMockBalanceDebt } from "@/api/mock";
@@ -66,44 +66,48 @@ describe("mockApi debt / penaltyTicketIssue", () => {
     ).rejects.toThrow(/actor/);
   });
 
-  it("負債59分は発行拒否", async () => {
-    setMockBalanceDebt({ switchMinutes: -59, penaltyMinutes: 0 });
-    await expect(issueAsParent(1)).rejects.toThrow(/60分未満/);
+  it("ポイント負債99ptは発行拒否（時間負債があっても発行しない）", async () => {
+    setMockBalanceDebt({ balancePoints: -99, penaltyMinutes: 120 });
+    await expect(issueAsParent(1)).rejects.toThrow(/100pt未満/);
   });
 
-  it("負債60分は1枚発行でき負債0になる", async () => {
-    setMockBalanceDebt({ switchMinutes: -60, penaltyMinutes: 0 });
+  it("ポイント負債100ptは1枚発行でき残高0になる", async () => {
+    setMockBalanceDebt({ balancePoints: -100, switchMinutes: 60, penaltyMinutes: 30 });
     const result = await issueAsParent(1);
     expect(result.count).toBe(1);
-    expect(result.settledMinutes).toBe(60);
-    expect(result.debtBefore).toBe(60);
-    expect(result.debtAfter).toBe(0);
-    expect(result.switchMinutes).toBe(0);
+    expect(result.settledPoints).toBe(100);
+    expect(result.pointDebtBefore).toBe(100);
+    expect(result.pointDebtAfter).toBe(0);
+    expect(result.balancePoints).toBe(0);
+    expect(result.switchMinutes).toBe(60);
+    expect(result.penaltyMinutes).toBe(30);
     expect(result.issuablePenaltyTicketCount).toBe(0);
     expect(result.ticketId).toBeTruthy();
     expect(result.penaltyTicketCount).toBe(1);
   });
 
-  it("負債120分は最大2枚、1枚で負債60分残る", async () => {
-    setMockBalanceDebt({ switchMinutes: 0, penaltyMinutes: 120 });
+  it("ポイント負債250ptは最大2枚、1枚で150pt残る", async () => {
+    setMockBalanceDebt({ balancePoints: -250, penaltyMinutes: 120 });
     const result = await issueAsParent(1);
-    expect(result.debtAfter).toBe(60);
-    expect(result.penaltyMinutes).toBe(60);
+    expect(result.pointDebtAfter).toBe(150);
+    expect(result.balancePoints).toBe(-150);
+    expect(result.penaltyMinutes).toBe(120);
     expect(result.issuablePenaltyTicketCount).toBe(1);
     expect(result.penaltyTicketCount).toBe(1);
   });
 
-  it("負債150分を2枚発行すると残り30分・在庫2枚になる", async () => {
-    setMockBalanceDebt({ switchMinutes: -90, penaltyMinutes: 60 });
+  it("ポイント負債250ptを2枚発行すると残り50pt・在庫2枚になる", async () => {
+    setMockBalanceDebt({ balancePoints: -250, switchMinutes: 90, penaltyMinutes: 60 });
     const result = await issueAsParent(2);
-    expect(result.debtAfter).toBe(30);
-    expect(result.switchMinutes).toBe(-30);
-    expect(result.penaltyMinutes).toBe(0);
+    expect(result.pointDebtAfter).toBe(50);
+    expect(result.balancePoints).toBe(-50);
+    expect(result.switchMinutes).toBe(90);
+    expect(result.penaltyMinutes).toBe(60);
     expect(result.penaltyTicketCount).toBe(2);
   });
 
   it("発行を重ねると在庫が積み上がる", async () => {
-    setMockBalanceDebt({ switchMinutes: -120, penaltyMinutes: 0 });
+    setMockBalanceDebt({ balancePoints: -200 });
     const first = await issueAsParent(1);
     expect(first.penaltyTicketCount).toBe(1);
     const second = await issueAsParent(1);
@@ -111,17 +115,17 @@ describe("mockApi debt / penaltyTicketIssue", () => {
   });
 
   it("発行可能枚数超過は拒否", async () => {
-    setMockBalanceDebt({ switchMinutes: -60, penaltyMinutes: 0 });
+    setMockBalanceDebt({ balancePoints: -100 });
     await expect(issueAsParent(2)).rejects.toThrow(/発行可能数を超えて/);
   });
 
-  it("parentHome にも負債フィールドが載る", async () => {
-    setMockBalanceDebt({ switchMinutes: -10, penaltyMinutes: 50 });
+  it("parentHome は時間負債とポイント基準の発行可能枚数を別々に返す", async () => {
+    setMockBalanceDebt({ balancePoints: -250, switchMinutes: -10, penaltyMinutes: 50 });
     const parent = await mockApi<ParentHomeData>("parentHome", {
       method: "GET",
     });
     expect(parent.debtMinutes).toBe(60);
-    expect(parent.issuablePenaltyTicketCount).toBe(1);
+    expect(parent.issuablePenaltyTicketCount).toBe(2);
     expect(parent.penaltyTicketCount).toBe(0);
   });
 

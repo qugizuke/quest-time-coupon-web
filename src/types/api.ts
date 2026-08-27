@@ -97,7 +97,7 @@ export interface HomeData {
    * サーバ未返却時は UI 側で算出する。
    */
   debtMinutes: number;
-  /** 発行可能枚数 = floor(debtMinutes / 60) */
+  /** 発行可能枚数 = floor(max(0, -balancePoints) / 100) */
   issuablePenaltyTicketCount: number;
   /** 未消費のペナルティチケット枚数（≥ 0）。欠落時は 0 として読む（契約 §3.3 / §3.4） */
   penaltyTicketCount: number;
@@ -185,7 +185,7 @@ export interface ParentHomeData {
   penaltyMinutes: number;
   /** 合算負債（分） */
   debtMinutes: number;
-  /** 発行可能枚数 = floor(debtMinutes / 60) */
+  /** 発行可能枚数 = floor(max(0, -balancePoints) / 100) */
   issuablePenaltyTicketCount: number;
   /** 未消費のペナルティチケット枚数（≥ 0） */
   penaltyTicketCount: number;
@@ -200,9 +200,10 @@ export interface ParentHomeData {
 export interface PenaltyTicketIssueResult {
   ticketId: string;
   count: number;
-  settledMinutes: number;
-  debtBefore: number;
-  debtAfter: number;
+  settledPoints: number;
+  pointDebtBefore: number;
+  pointDebtAfter: number;
+  balancePoints: number;
   displayBalance: number;
   switchMinutes: number;
   penaltyMinutes: number;

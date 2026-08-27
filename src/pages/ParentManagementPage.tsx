@@ -43,9 +43,7 @@ export function ParentManagementPage() {
 
       <div className="grid gap-4 md:grid-cols-2" data-testid="management-grid">
         <PenaltyTicketIssueSection
-          switchMinutes={parentHome.switchMinutes}
-          penaltyMinutes={parentHome.penaltyMinutes}
-          debtMinutes={parentHome.debtMinutes}
+          balancePoints={parentHome.balancePoints}
           issuablePenaltyTicketCount={parentHome.issuablePenaltyTicketCount}
         />
         <PenaltyTicketConsumeSection

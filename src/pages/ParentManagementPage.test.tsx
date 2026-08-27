@@ -43,13 +43,10 @@ describe("ParentManagementPage", () => {
     expect(screen.queryByTestId("point-refill-card")).toBeNull();
   });
 
-  it("負債120分はペナルティチケットを2枚発行できる", () => {
+  it("ポイント負債250ptはペナルティチケットを2枚発行できる", () => {
     renderManagement(
       buildParentHomeData({
-        switchMinutes: 0,
-        displayBalance: 0,
-        penaltyMinutes: 120,
-        debtMinutes: 120,
+        balancePoints: -250,
         issuablePenaltyTicketCount: 2,
       }),
     );

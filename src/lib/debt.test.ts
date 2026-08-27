@@ -1,13 +1,14 @@
 /**
  * @file 負債・ペナルティチケット計算のユニットテスト
- * @description debtMinutes 境界（59/60/120）と発行プレビューを検証する。
+ * @description 時間負債とポイント発行境界を検証する。
  */
 import { describe, expect, it } from "vitest";
 import {
   calcDebtMinutes,
   calcIssuableTicketCount,
+  calcPointDebt,
   canIssuePenaltyTicket,
-  previewDebtAfterIssue,
+  previewBalancePointsAfterIssue,
   resolveTimerStartBlockReason,
 } from "@/lib/debt";
 import { normalizeBalanceDebtFields } from "@/lib/balanceDebt";
@@ -25,36 +26,37 @@ describe("calcDebtMinutes", () => {
 });
 
 describe("calcIssuableTicketCount / canIssuePenaltyTicket", () => {
-  it("負債59分は発行不可（0枚）", () => {
-    expect(calcIssuableTicketCount(59)).toBe(0);
-    expect(canIssuePenaltyTicket(59)).toBe(false);
+  it("ポイント負債99ptは発行不可（0枚）", () => {
+    expect(calcPointDebt(-99)).toBe(99);
+    expect(calcIssuableTicketCount(-99)).toBe(0);
+    expect(canIssuePenaltyTicket(-99)).toBe(false);
   });
 
-  it("負債60分は1枚発行可", () => {
-    expect(calcIssuableTicketCount(60)).toBe(1);
-    expect(canIssuePenaltyTicket(60)).toBe(true);
+  it("ポイント負債100ptは1枚発行可", () => {
+    expect(calcIssuableTicketCount(-100)).toBe(1);
+    expect(canIssuePenaltyTicket(-100)).toBe(true);
   });
 
-  it("負債120分は2枚発行可", () => {
-    expect(calcIssuableTicketCount(120)).toBe(2);
-    expect(canIssuePenaltyTicket(120)).toBe(true);
+  it("ポイント負債250ptは2枚発行可", () => {
+    expect(calcIssuableTicketCount(-250)).toBe(2);
+    expect(canIssuePenaltyTicket(-250)).toBe(true);
   });
 
-  it("負債150分は2枚（端数精算なし）", () => {
-    expect(calcIssuableTicketCount(150)).toBe(2);
-    expect(previewDebtAfterIssue(150, 2)).toBe(30);
+  it("2枚発行後はポイント残高が200pt回復する", () => {
+    expect(previewBalancePointsAfterIssue(-250, 2)).toBe(-50);
   });
 });
 
 describe("normalizeBalanceDebtFields", () => {
   it("欠落フィールドを補完する", () => {
     const fields = normalizeBalanceDebtFields({
+      balancePoints: -250,
       switchMinutes: -30,
       penaltyMinutes: 40,
     });
     expect(fields.displayBalance).toBe(-30);
     expect(fields.debtMinutes).toBe(70);
-    expect(fields.issuablePenaltyTicketCount).toBe(1);
+    expect(fields.issuablePenaltyTicketCount).toBe(2);
   });
 });
 
@@ -62,7 +64,7 @@ describe("resolveTimerStartBlockReason", () => {
   it("負債中はスタート不可理由を返す", () => {
     expect(
       resolveTimerStartBlockReason({ switchMinutes: 10, debtMinutes: 5 }),
-    ).toMatch(/負債/);
+    ).toMatch(/時間負債/);
   });
 
   it("残高0は従来メッセージ", () => {

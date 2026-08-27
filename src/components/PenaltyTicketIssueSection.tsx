@@ -1,7 +1,7 @@
 /**
  * @file PenaltyTicketIssueSection
  * @description 保護者向けペナルティチケット発行 UI。
- *   1枚 = 60分精算 + 在庫加算（penaltyTicketCount += count）。issuablePenaltyTicketCount === 0 のとき disabled。
+ *   1枚 = 100pt精算 + 在庫加算（penaltyTicketCount += count）。issuablePenaltyTicketCount === 0 のとき disabled。
  *   発行した在庫の消費は PenaltyTicketConsumeSection の担当。子ども画面には置かない。actor は常に parent。
  */
 import { useMemo, useState } from "react";
@@ -11,26 +11,21 @@ import { queryKeys } from "@/api/queries";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import {
-  PENALTY_TICKET_MINUTES,
+  PENALTY_TICKET_POINTS,
+  calcPointDebt,
   calcIssuableTicketCount,
   canIssuePenaltyTicket,
-  previewDebtAfterIssue,
+  previewBalancePointsAfterIssue,
 } from "@/lib/debt";
 
 /**
  * @typedef {object} PenaltyTicketIssueSectionProps
- * @property {number} switchMinutes - ご褒美残高
- * @property {number} penaltyMinutes - タイマー超過分
- * @property {number} debtMinutes - 合算負債
+ * @property {number} balancePoints - ポイント残高
  * @property {number} [issuablePenaltyTicketCount] - 発行可能枚数（未指定時は算出）
  */
 export interface PenaltyTicketIssueSectionProps {
-  /** @type {number} ご褒美残高 */
-  switchMinutes: number;
-  /** @type {number} タイマー超過分 */
-  penaltyMinutes: number;
-  /** @type {number} 合算負債 */
-  debtMinutes: number;
+  /** @type {number} ポイント残高 */
+  balancePoints: number;
   /** @type {number} 発行可能枚数 */
   issuablePenaltyTicketCount?: number;
 }
@@ -41,23 +36,22 @@ export interface PenaltyTicketIssueSectionProps {
  * @returns {JSX.Element} 発行 UI
  */
 export function PenaltyTicketIssueSection({
-  switchMinutes,
-  penaltyMinutes,
-  debtMinutes,
+  balancePoints,
   issuablePenaltyTicketCount: issuableProp,
 }: PenaltyTicketIssueSectionProps) {
   const queryClient = useQueryClient();
   const issuable =
-    issuableProp ?? calcIssuableTicketCount(debtMinutes);
-  const canIssue = canIssuePenaltyTicket(debtMinutes) && issuable >= 1;
+    issuableProp ?? calcIssuableTicketCount(balancePoints);
+  const canIssue = canIssuePenaltyTicket(balancePoints) && issuable >= 1;
+  const pointDebt = calcPointDebt(balancePoints);
 
   const [count, setCount] = useState(1);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const safeCount = Math.min(Math.max(1, count), Math.max(1, issuable));
-  const previewRemaining = useMemo(
-    () => previewDebtAfterIssue(debtMinutes, safeCount),
-    [debtMinutes, safeCount],
+  const previewBalance = useMemo(
+    () => previewBalancePointsAfterIssue(balancePoints, safeCount),
+    [balancePoints, safeCount],
   );
 
   const issueMutation = useMutation({
@@ -79,26 +73,24 @@ export function PenaltyTicketIssueSection({
   return (
     <Card data-testid="penalty-ticket-issue-section">
       <h2 className="mb-2 font-bold text-ink">
-        ペナルティチケット発行（1枚={PENALTY_TICKET_MINUTES}分）
+        ペナルティチケット発行（1枚={PENALTY_TICKET_POINTS}pt）
       </h2>
       <p className="mb-3 text-xs text-muted">発行は保護者のみ</p>
 
       <dl className="mb-4 grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
-        <dt className="text-muted">ご褒美残高</dt>
+        <dt className="text-muted">ポイント残高</dt>
         <dd
-          className={switchMinutes < 0 ? "font-semibold text-danger" : "text-ink"}
-          data-testid="issue-balance-minutes"
+          className={balancePoints < 0 ? "font-semibold text-danger" : "text-ink"}
+          data-testid="issue-balance-points"
         >
-          {switchMinutes}分
+          {balancePoints}pt
         </dd>
-        <dt className="text-muted">タイマー超過</dt>
-        <dd data-testid="issue-penalty-minutes">{penaltyMinutes}分</dd>
-        <dt className="text-muted">負債合計</dt>
+        <dt className="text-muted">ポイント負債</dt>
         <dd
           className="font-semibold text-danger"
-          data-testid="issue-debt-minutes"
+          data-testid="issue-point-debt"
         >
-          {debtMinutes}分
+          {pointDebt}pt
         </dd>
         <dt className="text-muted">発行可能</dt>
         <dd data-testid="issue-issuable-count">{issuable}枚</dd>
@@ -106,7 +98,7 @@ export function PenaltyTicketIssueSection({
 
       {!canIssue ? (
         <p className="mb-3 text-sm text-danger" data-testid="issue-disabled-reason">
-          負債が60分未満のため発行できません
+          ポイント負債が100pt未満のため発行できません
         </p>
       ) : null}
 
@@ -123,7 +115,7 @@ export function PenaltyTicketIssueSection({
             >
               {countOptions.map((n) => (
                 <option key={n} value={n}>
-                  {n}枚（{n * PENALTY_TICKET_MINUTES}分精算）
+                  {n}枚（{n * PENALTY_TICKET_POINTS}pt精算）
                 </option>
               ))}
             </select>
@@ -140,8 +132,8 @@ export function PenaltyTicketIssueSection({
       ) : (
         <div className="flex flex-col gap-3" data-testid="issue-confirm-panel">
           <p className="text-sm text-ink">
-            負債 {debtMinutes}分 → {safeCount}枚発行 → 残り負債{" "}
-            <span className="font-bold">{previewRemaining}分</span>
+            ポイント {balancePoints}pt → {safeCount}枚発行 → 発行後{" "}
+            <span className="font-bold">{previewBalance}pt</span>
           </p>
           {issueMutation.error && (
             <p className="text-sm text-danger">

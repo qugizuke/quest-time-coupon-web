@@ -7,6 +7,7 @@
 import {
   calcDebtMinutes,
   calcIssuableTicketCount,
+  calcPointDebt,
 } from "@/lib/debt";
 import { REWARD_VOUCHER_LABELS } from "@/lib/rewardVouchers";
 import type { RewardVouchers } from "@/types/api";
@@ -62,7 +63,8 @@ export function BalanceDisplay({
   const debtMinutes =
     debtMinutesProp ?? calcDebtMinutes(switchMinutes, penaltyMinutes);
   const hasDebt = debtMinutes > 0;
-  const issuable = calcIssuableTicketCount(debtMinutes);
+  const pointDebt = calcPointDebt(balancePoints ?? 0);
+  const issuable = calcIssuableTicketCount(balancePoints ?? 0);
 
   if (compact && typeof balancePoints === "number") {
     return (
@@ -102,6 +104,12 @@ export function BalanceDisplay({
           <p className="text-xs text-muted">
             ポイントを時間に交換してからタイマーを使えます
           </p>
+          {pointDebt > 0 && (
+            <p className="text-xs font-semibold text-danger">
+              ポイント負債: {pointDebt}pt
+              {issuable > 0 ? `（ペナルティチケット発行可能: ${issuable}枚）` : ""}
+            </p>
+          )}
         </div>
       )}
 
@@ -182,12 +190,8 @@ export function BalanceDisplay({
           </p>
           {audience === "child" && (
             <p className="text-muted" data-testid="balance-child-hint">
-              保護者にペナルティチケットで精算してもらう
-              {issuable > 0 ? `（発行可能: ${issuable}枚）` : ""}
+              タイマー超過分が残っています
             </p>
-          )}
-          {audience === "parent" && issuable > 0 && (
-            <p className="text-muted">発行可能: {issuable}枚</p>
           )}
         </div>
       )}

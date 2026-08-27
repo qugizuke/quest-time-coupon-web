@@ -25,7 +25,8 @@ import { todayLocal } from "@/lib/date";
 import { toMonth } from "@/lib/month";
 import { calcExchangeTotals } from "@/lib/pointExchangeCatalog";
 import {
-  PENALTY_TICKET_MINUTES,
+  PENALTY_TICKET_POINTS,
+  calcPointDebt,
   calcDebtMinutes,
   calcIssuableTicketCount,
 } from "@/lib/debt";
@@ -173,7 +174,7 @@ function buildBalanceSnapshot() {
     displayBalance: store.switchMinutes,
     penaltyMinutes: store.penaltyMinutes,
     debtMinutes,
-    issuablePenaltyTicketCount: calcIssuableTicketCount(debtMinutes),
+    issuablePenaltyTicketCount: calcIssuableTicketCount(store.balancePoints),
     penaltyTicketCount: store.penaltyTicketCount,
   });
 }
@@ -1768,14 +1769,11 @@ export async function mockApi<T>(
           `BAD_REQUEST: penaltyTicketIssue.count は1以上の整数が必要です count=${String(count)}`,
         );
       }
-      const debtBefore = calcDebtMinutes(
-        store.switchMinutes,
-        store.penaltyMinutes,
-      );
-      const issuable = calcIssuableTicketCount(debtBefore);
-      if (debtBefore < PENALTY_TICKET_MINUTES || issuable < 1) {
+      const pointDebtBefore = calcPointDebt(store.balancePoints);
+      const issuable = calcIssuableTicketCount(store.balancePoints);
+      if (pointDebtBefore < PENALTY_TICKET_POINTS || issuable < 1) {
         throw new Error(
-          `FORBIDDEN_STATE: 負債が60分未満のため発行できません debtMinutes=${debtBefore}`,
+          `FORBIDDEN_STATE: ポイント負債が100pt未満のため発行できません balancePoints=${store.balancePoints}`,
         );
       }
       if (count > issuable) {
@@ -1784,21 +1782,18 @@ export async function mockApi<T>(
         );
       }
 
-      const settledMinutes = count * PENALTY_TICKET_MINUTES;
-      let settle = settledMinutes;
-      const fromPenalty = Math.min(store.penaltyMinutes, settle);
-      store.penaltyMinutes -= fromPenalty;
-      settle -= fromPenalty;
-      store.switchMinutes += settle;
+      const settledPoints = count * PENALTY_TICKET_POINTS;
+      store.balancePoints += settledPoints;
       store.penaltyTicketCount += count;
 
       const after = buildBalanceSnapshot();
       return {
         ticketId: `mock-penalty-ticket-${Date.now()}-${count}`,
         count,
-        settledMinutes,
-        debtBefore,
-        debtAfter: after.debtMinutes,
+        settledPoints,
+        pointDebtBefore,
+        pointDebtAfter: calcPointDebt(after.balancePoints),
+        balancePoints: after.balancePoints,
         displayBalance: after.displayBalance,
         switchMinutes: after.switchMinutes,
         penaltyMinutes: after.penaltyMinutes,

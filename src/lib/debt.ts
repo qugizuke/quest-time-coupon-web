@@ -1,12 +1,11 @@
 /**
  * @file ご褒美時間の負債・ペナルティチケット計算
- * @description debtMinutes = max(0, -switchMinutes) + penaltyMinutes（超過）。
- *   1枚 = 60分精算のみ。適用日 2026-08-24〜の API 正本は Functions 側。
- *   UI は表示・発行可否判定に本ヘルパーを使う（過去残高の再計算はしない）。
+ * @description 時間負債とポイント負債を別々に扱う。
+ *   ペナルティチケットは負ポイントを1枚100ptで精算する。
  */
 
-/** ペナルティチケット1枚あたりの精算分 */
-export const PENALTY_TICKET_MINUTES = 60;
+/** ペナルティチケット1枚あたりの精算ポイント */
+export const PENALTY_TICKET_POINTS = 100;
 
 /**
  * 合算負債（分）を算出する
@@ -25,20 +24,25 @@ export function calcDebtMinutes(
 
 /**
  * 発行可能なペナルティチケット枚数を算出する
- * @param {number} debtMinutes - 合算負債（分）
- * @returns {number} floor(debtMinutes / 60)
+ * @param {number} balancePoints - ポイント残高（負を許容）
+ * @returns {number} floor(max(0, -balancePoints) / 100)
  */
-export function calcIssuableTicketCount(debtMinutes: number): number {
-  return Math.floor(Math.max(0, debtMinutes) / PENALTY_TICKET_MINUTES);
+export function calcIssuableTicketCount(balancePoints: number): number {
+  return Math.floor(calcPointDebt(balancePoints) / PENALTY_TICKET_POINTS);
+}
+
+/** 負ポイントの絶対値を返す。残高が0以上なら0 */
+export function calcPointDebt(balancePoints: number): number {
+  return Math.max(0, -balancePoints);
 }
 
 /**
- * 負債がチケット発行可能な最低分（60分）以上か
- * @param {number} debtMinutes - 合算負債（分）
- * @returns {boolean} 60分未満なら false
+ * ポイント負債がチケット発行可能な100pt以上か
+ * @param {number} balancePoints - ポイント残高
+ * @returns {boolean} ポイント負債100pt未満なら false
  */
-export function canIssuePenaltyTicket(debtMinutes: number): boolean {
-  return calcIssuableTicketCount(debtMinutes) >= 1;
+export function canIssuePenaltyTicket(balancePoints: number): boolean {
+  return calcIssuableTicketCount(balancePoints) >= 1;
 }
 
 /**
@@ -51,17 +55,17 @@ export function canConsumePenaltyTicket(penaltyTicketCount: number): boolean {
 }
 
 /**
- * 発行後の残り負債（分）をプレビューする
- * @param {number} debtMinutes - 現在の合算負債
+ * 発行後のポイント残高をプレビューする
+ * @param {number} balancePoints - 現在のポイント残高
  * @param {number} count - 発行枚数
- * @returns {number} 残り負債（負にしない）
+ * @returns {number} 発行後ポイント残高
  */
-export function previewDebtAfterIssue(
-  debtMinutes: number,
+export function previewBalancePointsAfterIssue(
+  balancePoints: number,
   count: number,
 ): number {
   const safeCount = Math.max(0, Math.floor(count));
-  return Math.max(0, debtMinutes - safeCount * PENALTY_TICKET_MINUTES);
+  return balancePoints + safeCount * PENALTY_TICKET_POINTS;
 }
 
 /**
@@ -78,7 +82,7 @@ export function resolveTimerStartBlockReason(opts: {
     return null;
   }
   if (opts.debtMinutes > 0) {
-    return "負債があるのでスタートできません（保護者にペナルティチケットで精算してもらってね）";
+    return "時間負債が残っているのでスタートできません";
   }
   if (opts.switchMinutes <= 0) {
     return "残高がないので スタートできません";

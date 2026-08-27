@@ -14,11 +14,12 @@ vi.mock("@/api/client", async (importOriginal) => {
     postPenaltyTicketIssue: vi.fn(async ({ count }: { count: number }) => ({
       ticketId: "mock-ticket-1",
       count,
-      settledMinutes: count * 60,
-      debtBefore: 120,
-      debtAfter: 120 - count * 60,
-      switchMinutes: -30,
-      displayBalance: -30,
+      settledPoints: count * 100,
+      pointDebtBefore: 250,
+      pointDebtAfter: 250 - count * 100,
+      balancePoints: -250 + count * 100,
+      switchMinutes: 30,
+      displayBalance: 30,
       penaltyMinutes: 0,
       issuablePenaltyTicketCount: 0,
       penaltyTicketCount: count,
@@ -32,9 +33,7 @@ vi.mock("@/api/client", async (importOriginal) => {
  * @returns {void}
  */
 function renderSection(props: {
-  switchMinutes: number;
-  penaltyMinutes: number;
-  debtMinutes: number;
+  balancePoints: number;
   issuablePenaltyTicketCount?: number;
 }) {
   const queryClient = new QueryClient({
@@ -43,9 +42,7 @@ function renderSection(props: {
   render(
     <QueryClientProvider client={queryClient}>
       <PenaltyTicketIssueSection
-        switchMinutes={props.switchMinutes}
-        penaltyMinutes={props.penaltyMinutes}
-        debtMinutes={props.debtMinutes}
+        balancePoints={props.balancePoints}
         issuablePenaltyTicketCount={props.issuablePenaltyTicketCount}
       />
     </QueryClientProvider>,
@@ -61,39 +58,33 @@ describe("PenaltyTicketIssueSection", () => {
     cleanup();
   });
 
-  it("負債59分は発行ボタン disabled と理由表示", () => {
+  it("ポイント負債99ptは発行ボタン disabled と理由表示", () => {
     renderSection({
-      switchMinutes: -59,
-      penaltyMinutes: 0,
-      debtMinutes: 59,
+      balancePoints: -99,
       issuablePenaltyTicketCount: 0,
     });
     expect(screen.getByTestId("issue-disabled-reason").textContent).toContain(
-      "60分未満",
+      "100pt未満",
     );
     expect(
       screen.getByTestId("issue-open-confirm").hasAttribute("disabled"),
     ).toBe(true);
   });
 
-  it("負債60分は1枚発行の確認プレビューへ進める", () => {
+  it("ポイント負債100ptは1枚発行の確認プレビューへ進める", () => {
     renderSection({
-      switchMinutes: -60,
-      penaltyMinutes: 0,
-      debtMinutes: 60,
+      balancePoints: -100,
       issuablePenaltyTicketCount: 1,
     });
     fireEvent.click(screen.getByTestId("issue-open-confirm"));
     expect(screen.getByTestId("issue-confirm-panel").textContent).toContain(
-      "残り負債 0分",
+      "発行後 0pt",
     );
   });
 
-  it("負債150分で2枚発行のプレビューは残り30分", () => {
+  it("ポイント負債250ptで2枚発行のプレビューは残高-50pt", () => {
     renderSection({
-      switchMinutes: -90,
-      penaltyMinutes: 60,
-      debtMinutes: 150,
+      balancePoints: -250,
       issuablePenaltyTicketCount: 2,
     });
     fireEvent.change(screen.getByTestId("issue-count-select"), {
@@ -101,16 +92,14 @@ describe("PenaltyTicketIssueSection", () => {
     });
     fireEvent.click(screen.getByTestId("issue-open-confirm"));
     expect(screen.getByTestId("issue-confirm-panel").textContent).toContain(
-      "残り負債 30分",
+      "発行後 -50pt",
     );
   });
 
   it("確認して発行すると API を呼ぶ", async () => {
     const { postPenaltyTicketIssue } = await import("@/api/client");
     renderSection({
-      switchMinutes: -120,
-      penaltyMinutes: 0,
-      debtMinutes: 120,
+      balancePoints: -200,
       issuablePenaltyTicketCount: 2,
     });
     fireEvent.click(screen.getByTestId("issue-open-confirm"));

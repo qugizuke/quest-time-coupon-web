@@ -37,7 +37,7 @@ export function normalizeBalanceDebtFields(
   const debtMinutes =
     raw.debtMinutes ?? calcDebtMinutes(switchMinutes, penaltyMinutes);
   const issuablePenaltyTicketCount =
-    raw.issuablePenaltyTicketCount ?? calcIssuableTicketCount(debtMinutes);
+    raw.issuablePenaltyTicketCount ?? calcIssuableTicketCount(balancePoints);
   const penaltyTicketCount = Math.max(0, raw.penaltyTicketCount ?? 0);
 
   return {

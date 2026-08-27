@@ -434,7 +434,7 @@ export function postTimerStop(payload: {
 }
 
 /**
- * POST penaltyTicketIssue（保護者のみ・1枚=60分即精算）
+ * POST penaltyTicketIssue（保護者のみ・1枚=100pt即精算）
  * @param {{ count: number }} payload - 発行枚数（1以上・issuable 以下）。actor は常に parent
  * @returns {Promise<PenaltyTicketIssueResult>} 精算結果
  */

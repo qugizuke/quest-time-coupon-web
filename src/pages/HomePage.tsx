@@ -7,6 +7,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { QuestDeadlineCountdown } from "@/components/QuestDeadlineCountdown";
+import { QuestRegistrationCutoffCountdown } from "@/components/QuestRegistrationCutoffCountdown";
 import { QuestRulesDialog } from "@/components/QuestRulesDialog";
 import { BedtimeModal } from "@/components/BedtimeModal";
 import { BalanceDisplay } from "@/components/BalanceDisplay";
@@ -319,6 +321,20 @@ export function HomePage() {
             <span className="flex-1">今日の寝る時間: 21時</span>
             <span aria-hidden>✓</span>
           </div>
+        )}
+
+        {!isExemptDay && deadline.showBonusCountdown && (
+          <QuestDeadlineCountdown
+            countdownFormatted={deadline.bonusCountdownFormatted}
+            bonusDeadlineLabel={deadline.bonusDeadlineLabel}
+          />
+        )}
+
+        {!isExemptDay && deadline.showRegistrationCountdown && (
+          <QuestRegistrationCutoffCountdown
+            countdownFormatted={deadline.registrationCountdownFormatted}
+            registrationCutoffLabel={deadline.registrationCutoffLabel}
+          />
         )}
 
         <div className="flex flex-col gap-3">

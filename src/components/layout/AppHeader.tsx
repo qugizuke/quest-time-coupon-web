@@ -101,15 +101,16 @@ export function AppHeader({
         <button
           type="button"
           onClick={onExitParentMode}
-          className="rounded-sm border border-border-parent-chip bg-parent-chip px-3 py-1.5 text-xs text-parent-chip-ink"
+          className="shrink-0 rounded-sm border border-border-parent-chip bg-parent-chip px-3 py-1.5 text-xs text-parent-chip-ink"
         >
-          🔓 保護者モードを終了
+          <span className="sm:hidden">🔓 終了</span>
+          <span className="hidden sm:inline">🔓 保護者モードを終了</span>
         </button>
       ) : (
         <button
           type="button"
           onClick={onParentMode}
-          className="rounded-sm border border-border-chip bg-chip px-3.5 py-2 text-xs text-chip-ink"
+          className="shrink-0 rounded-sm border border-border-chip bg-chip px-3.5 py-2 text-xs text-chip-ink"
         >
           🔒 保護者モード
         </button>

@@ -410,4 +410,67 @@ describe("HomePage", () => {
     // nav section before rules
     expect(indexOfSection(timer)).toBeLessThan(indexOfSection(rules));
   });
+
+  it("就寝1時間前〜ボーナス締切までは定時ボーナスカウントダウンを表示する", () => {
+    vi.setSystemTime(new Date(2026, 6, 30, 20, 15, 0));
+    renderHome(
+      buildHome({
+        today: "2026-07-30",
+        bedtimeHour: 21,
+        todayStatus: "unanswered",
+        questAction: "start",
+      }),
+    );
+
+    expect(screen.getByText("定時ボーナス（+5pt）まで")).toBeTruthy();
+    expect(screen.getByRole("timer")).toBeTruthy();
+    expect(screen.queryByText("登録を忘れると -100pt！")).toBeNull();
+  });
+
+  it("ボーナス締切後〜就寝までは登録締切カウントダウンを表示する", () => {
+    vi.setSystemTime(new Date(2026, 6, 30, 20, 45, 0));
+    renderHome(
+      buildHome({
+        today: "2026-07-30",
+        bedtimeHour: 21,
+        todayStatus: "unanswered",
+        questAction: "start",
+      }),
+    );
+
+    expect(screen.getByText("登録を忘れると -100pt！")).toBeTruthy();
+    expect(screen.getByRole("timer")).toBeTruthy();
+    expect(screen.queryByText("定時ボーナス（+5pt）まで")).toBeNull();
+  });
+
+  it("受付開始前はカウントダウンを出さない", () => {
+    vi.setSystemTime(new Date(2026, 6, 30, 19, 0, 0));
+    renderHome(
+      buildHome({
+        today: "2026-07-30",
+        bedtimeHour: 21,
+        todayStatus: "unanswered",
+        questAction: "start",
+      }),
+    );
+
+    expect(screen.queryByRole("timer")).toBeNull();
+    expect(screen.queryByText("定時ボーナス（+5pt）まで")).toBeNull();
+    expect(screen.queryByText("登録を忘れると -100pt！")).toBeNull();
+  });
+
+  it("免除日はカウントダウンを出さない", () => {
+    vi.setSystemTime(new Date(2026, 6, 30, 20, 15, 0));
+    renderHome(
+      buildHome({
+        today: "2026-07-30",
+        bedtimeHour: 21,
+        isExemptDay: true,
+        todayStatus: "exempt",
+        questAction: "none",
+      }),
+    );
+
+    expect(screen.queryByRole("timer")).toBeNull();
+  });
 });

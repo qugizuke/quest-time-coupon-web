@@ -36,7 +36,7 @@ export function ParentPageFrame({ children }: ParentPageFrameProps) {
 
   return (
     <AppLayout surface="parent">
-      <div className="relative left-1/2 -mt-6 mb-6 w-screen -translate-x-1/2">
+      <div className="relative -mx-4 -mt-6 mb-6 w-auto sm:-mx-8">
         <AppHeader
           mode="parent"
           showHome

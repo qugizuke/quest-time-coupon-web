@@ -256,7 +256,7 @@ export function QuestPage() {
           </div>
           {!isFollowUpMode && (
             <div
-              className="flex items-center gap-2"
+              className="flex w-full min-w-0 items-center gap-1 sm:gap-2"
               role="progressbar"
               aria-valuenow={progressIndex}
               aria-valuemin={1}
@@ -270,7 +270,7 @@ export function QuestPage() {
                   <div
                     key={step}
                     className={[
-                      "flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-bold transition-colors sm:size-10 sm:text-base",
+                      "flex aspect-square min-w-0 max-w-10 flex-1 items-center justify-center rounded-full text-xs font-bold transition-colors sm:text-base",
                       isDone
                         ? "border-2 border-success bg-success text-white"
                         : isCurrent

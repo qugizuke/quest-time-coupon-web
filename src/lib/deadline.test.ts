@@ -12,6 +12,8 @@ import {
   isBeforeQuestRegistrationStart,
   isPastQuestBonusDeadline,
   isPastQuestRegistrationCutoff,
+  isQuestBonusCountdownVisible,
+  isQuestRegistrationCutoffCountdownVisible,
   isQuestRegistrationOpen,
   resolveQuestDeadlineBedtimeHour,
 } from "@/lib/deadline";
@@ -151,5 +153,55 @@ describe("format labels", () => {
     expect(formatQuestRegistrationStartLabel("2026-07-03")).toBe("20:00");
     expect(formatQuestRegistrationCutoffLabel("2026-07-03")).toBe("21:00");
     expect(formatQuestBonusDeadlineLabel("2026-07-03")).toBe("20:30");
+  });
+});
+
+describe("isQuestBonusCountdownVisible", () => {
+  const date = "2026-06-07";
+
+  it("就寝21時の 20:00〜20:29 は true", () => {
+    expect(
+      isQuestBonusCountdownVisible(date, new Date(2026, 5, 7, 20, 0, 0), 21),
+    ).toBe(true);
+    expect(
+      isQuestBonusCountdownVisible(date, new Date(2026, 5, 7, 20, 29, 59), 21),
+    ).toBe(true);
+  });
+
+  it("ボーナス締切以降は false", () => {
+    expect(
+      isQuestBonusCountdownVisible(date, new Date(2026, 5, 7, 20, 30, 0), 21),
+    ).toBe(false);
+  });
+});
+
+describe("isQuestRegistrationCutoffCountdownVisible", () => {
+  const date = "2026-06-07";
+
+  it("就寝21時の 20:30〜20:59 は true", () => {
+    expect(
+      isQuestRegistrationCutoffCountdownVisible(
+        date,
+        new Date(2026, 5, 7, 20, 30, 0),
+        21,
+      ),
+    ).toBe(true);
+    expect(
+      isQuestRegistrationCutoffCountdownVisible(
+        date,
+        new Date(2026, 5, 7, 20, 59, 59),
+        21,
+      ),
+    ).toBe(true);
+  });
+
+  it("就寝時刻以降は false", () => {
+    expect(
+      isQuestRegistrationCutoffCountdownVisible(
+        date,
+        new Date(2026, 5, 7, 21, 0, 0),
+        21,
+      ),
+    ).toBe(false);
   });
 });

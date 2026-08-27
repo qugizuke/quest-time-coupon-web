@@ -178,6 +178,27 @@ describe("GradeListPage Figma 寄せ (#76)", () => {
     expect(screen.getByText("未採点の日をタップして採点")).toBeTruthy();
   });
 
+  it("週ナビ中央ラベルと日付行は狭い幅でも truncate できるクラスを持つ", () => {
+    renderGradeList({
+      dates: [
+        buildGradeDateItem({
+          date: TODAY,
+          status: "ungraded",
+          isExempt: false,
+          ungradedCount: 1,
+        }),
+      ],
+    });
+
+    const weekLabel = screen.getByText(/月.*日の週/);
+    expect(weekLabel.className).toContain("min-w-0");
+    expect(weekLabel.className).toContain("truncate");
+
+    const row = getDateRow(TODAY);
+    const dateSpan = within(row).getByText(/2026年8月26日/);
+    expect(dateSpan.className).toContain("truncate");
+  });
+
   it("行日付は全角括弧で、今日の行にのみ今日タグを表示する", () => {
     renderGradeList({
       dates: [

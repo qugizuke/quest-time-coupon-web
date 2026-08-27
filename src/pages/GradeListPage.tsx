@@ -117,17 +117,17 @@ export function GradeListPage() {
       <div className="mb-3 flex items-center justify-between gap-2">
         <Button
           variant="secondary"
-          className="px-3 text-base"
+          className="shrink-0 px-3 text-base"
           onClick={() => setWeekOffset((v) => v - 1)}
         >
           ← 前週
         </Button>
-        <p className="text-center text-sm font-medium text-ink">
+        <p className="min-w-0 flex-1 truncate text-center text-sm font-medium text-ink">
           {formatWeekLabel(monday)}
         </p>
         <Button
           variant="secondary"
-          className="px-3 text-base"
+          className="shrink-0 px-3 text-base"
           onClick={() => setWeekOffset((v) => v + 1)}
         >
           翌週 →
@@ -187,26 +187,28 @@ export function GradeListPage() {
                   }}
                   data-testid={`grade-row-${date}`}
                   data-grade-status={status}
-                  className={`flex w-full items-center justify-between rounded-default border-[3px] border-border px-4 py-3 text-left shadow-[var(--shadow-card)] ${
+                  className={`flex w-full items-center justify-between gap-2 rounded-default border-[3px] border-border px-4 py-3 text-left shadow-[var(--shadow-card)] ${
                     clickable
                       ? "bg-surface hover:bg-surface-soft"
                       : "cursor-default bg-muted-soft text-muted"
                   }`}
                 >
-                  <span className="flex items-center gap-2">
-                    <span className="font-medium text-ink">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate font-medium text-ink">
                       {formatDateJaFullWidth(date)}
                     </span>
                     {date === today && (
                       <span
-                        className="rounded-pill bg-primary px-2 py-[3px] text-[11px] leading-none text-white"
+                        className="shrink-0 rounded-pill bg-primary px-2 py-[3px] text-[11px] leading-none text-white"
                         data-testid={`today-tag-${date}`}
                       >
                         今日
                       </span>
                     )}
                   </span>
-                  <StatusBadge tone={statusTone(status)}>{rightLabel}</StatusBadge>
+                  <span className="shrink-0">
+                    <StatusBadge tone={statusTone(status)}>{rightLabel}</StatusBadge>
+                  </span>
                 </button>
               </li>
             );

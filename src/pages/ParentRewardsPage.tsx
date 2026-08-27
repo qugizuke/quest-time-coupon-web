@@ -461,9 +461,9 @@ function PendingRequestCard({
       <div className="flex flex-col gap-1">{details}</div>
       {shortageAlert}
       {!approveOpen ? (
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
           <Button
-            className="min-w-[144px]"
+            className="w-full flex-1 sm:w-auto"
             disabled={approveDisabled}
             onClick={onApproveOpen}
             data-testid={approveOpenTestId}
@@ -472,7 +472,7 @@ function PendingRequestCard({
           </Button>
           <button
             type="button"
-            className="inline-flex min-h-touch min-w-[144px] items-center justify-center rounded-default border-[3px] border-border-parent-soft bg-surface px-6 py-3 text-lg font-semibold text-danger transition-colors hover:bg-surface-soft disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex min-h-touch w-full flex-1 items-center justify-center rounded-default border-[3px] border-border-parent-soft bg-surface px-6 py-3 text-lg font-semibold text-danger transition-colors hover:bg-surface-soft disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
             onClick={onRejectOpen}
             data-testid={rejectOpenTestId}
           >
@@ -490,9 +490,9 @@ function PendingRequestCard({
               {approveErrorMessage}
             </p>
           )}
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
             <Button
-              className="min-w-[144px]"
+              className="w-full flex-1 sm:w-auto"
               disabled={approveSubmitDisabled}
               onClick={onApproveConfirm}
               data-testid={approveSubmitTestId}
@@ -500,7 +500,7 @@ function PendingRequestCard({
               確認して承認
             </Button>
             <Button
-              className="min-w-[144px]"
+              className="w-full flex-1 sm:w-auto"
               variant="secondary"
               disabled={isProcessing}
               onClick={onApproveCancel}

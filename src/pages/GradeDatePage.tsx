@@ -504,7 +504,7 @@ export function GradeDatePage() {
           className="mt-6 rounded-default border-[3px] border-border bg-surface p-4 shadow-[var(--shadow-card)]"
           open={usesAdjustments || undefined}
         >
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 font-medium">
+          <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 font-medium">
             <span>
               ボーナス / ペナルティ
               <span className="ml-2 text-xs text-muted">折り畳み</span>
@@ -564,7 +564,7 @@ export function GradeDatePage() {
                     className="flex flex-col gap-2 rounded-default border border-border-soft p-3"
                   >
                     <select
-                      className="rounded-default border border-border-soft px-3 py-2"
+                      className="w-full min-w-0 rounded-default border border-border-soft px-3 py-2"
                       value={row.code}
                       disabled={readOnly}
                       onChange={(e) => {
@@ -688,7 +688,7 @@ export function GradeDatePage() {
                   : "拒否に失敗しました"}
               </p>
             )}
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <Button
                 className="flex-1"
                 variant="secondary"

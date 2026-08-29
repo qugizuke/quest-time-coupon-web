@@ -294,6 +294,11 @@ export interface GradeData {
     autoOutcome: string | null;
   }>;
   adjustments: GradeAdjustment[];
+  /**
+   * 確定済みの合計ポイント。未採点・免除は null。
+   * ADR-005 切替後の表示単位はクライアント側で日付から決める。
+   */
+  totalPoints: number | null;
   /** UI 互換（alreadyGraded） */
   isGraded: boolean;
   /** UI 互換（reasonCode === grade_rejected） */

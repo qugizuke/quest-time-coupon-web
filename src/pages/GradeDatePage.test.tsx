@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { queryKeys } from "@/api/queries";
 import { GradeDatePage } from "@/pages/GradeDatePage";
-import type { DailyQuests, GradeData } from "@/types/api";
+import type { DailyQuests, GradeData, GradeDateItem } from "@/types/api";
 
 const apiMocks = vi.hoisted(() => ({
   postGrade: vi.fn(),
@@ -16,6 +16,7 @@ const apiMocks = vi.hoisted(() => ({
   postGradeCorrection: vi.fn(),
   fetchGrade: vi.fn(),
   fetchDailyQuests: vi.fn(),
+  fetchGradeDates: vi.fn(),
 }));
 
 vi.mock("@/api/client", async (importOriginal) => ({
@@ -39,6 +40,11 @@ const daily: DailyQuests = {
   ],
 };
 
+/**
+ * テスト用の採点データを組み立てる
+ * @param {Partial<GradeData>} overrides - 上書き
+ * @returns {GradeData} 採点データ
+ */
 function buildGrade(overrides: Partial<GradeData> = {}): GradeData {
   return {
     date: DATE,
@@ -63,6 +69,7 @@ function buildGrade(overrides: Partial<GradeData> = {}): GradeData {
       },
     ],
     adjustments: [],
+    totalPoints: 45,
     isGraded: true,
     isRejected: false,
     withinBonusDeadline: true,
@@ -70,9 +77,19 @@ function buildGrade(overrides: Partial<GradeData> = {}): GradeData {
   };
 }
 
-function renderPage(grade: GradeData) {
+/**
+ * 採点詳細を描画する
+ * @param {GradeData} grade - 採点データ
+ * @param {{ gradeDates?: GradeDateItem[] }} [opts] - gradeDates キャッシュ
+ * @returns {QueryClient} クエリクライアント
+ */
+function renderPage(
+  grade: GradeData,
+  opts?: { gradeDates?: GradeDateItem[] },
+) {
   apiMocks.fetchGrade.mockResolvedValue(grade);
   apiMocks.fetchDailyQuests.mockResolvedValue(daily);
+  apiMocks.fetchGradeDates.mockResolvedValue({ dates: opts?.gradeDates ?? [] });
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false, staleTime: Infinity },
@@ -81,6 +98,9 @@ function renderPage(grade: GradeData) {
   });
   queryClient.setQueryData(queryKeys.grade(DATE), grade);
   queryClient.setQueryData(queryKeys.dailyQuests(DATE), daily);
+  queryClient.setQueryData(queryKeys.gradeDates, {
+    dates: opts?.gradeDates ?? [],
+  });
   queryClient.setQueryData(["gradeAdjustmentDefinitions"], {
     version: 1,
     items: [
@@ -181,6 +201,7 @@ describe("GradeDatePage 採点修正", () => {
       buildGrade({
         reasonCode: "grade_rejected",
         isRejected: true,
+        totalPoints: -100,
         items: [
           {
             questId: "brush-teeth-gargle-am",
@@ -206,5 +227,79 @@ describe("GradeDatePage 採点修正", () => {
       resultType: "normal",
       grades: [{ questId: "brush-teeth-gargle-am", actualDone: true }],
     });
+  });
+});
+
+describe("GradeDatePage 合計ポイント表示", () => {
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it("通常採点済みなら合計を pt で表示する", () => {
+    renderPage(buildGrade({ totalPoints: 45 }));
+
+    expect(screen.getByTestId("grade-detail-total-points").textContent).toBe(
+      "合計 +45pt",
+    );
+  });
+
+  it("採点拒否なら合計 -100pt を表示する", () => {
+    renderPage(
+      buildGrade({
+        reasonCode: "grade_rejected",
+        isRejected: true,
+        totalPoints: -100,
+      }),
+    );
+
+    expect(screen.getByTestId("grade-detail-total-points").textContent).toBe(
+      "合計 -100pt",
+    );
+  });
+
+  it("未採点では合計を出さない", () => {
+    renderPage(
+      buildGrade({
+        alreadyGraded: false,
+        isGraded: false,
+        reasonCode: null,
+        totalPoints: null,
+        canCorrect: false,
+        cannotCorrectReason: "NOT_GRADED",
+        gradingRevision: 0,
+        originalGradedAt: "",
+        items: [
+          {
+            questId: "brush-teeth-gargle-am",
+            childAnswer: 1,
+            actualDone: null,
+            gradingMode: "parent_choice",
+            autoOutcome: null,
+          },
+        ],
+      }),
+    );
+
+    expect(screen.queryByTestId("grade-detail-total-points")).toBeNull();
+  });
+
+  it("GET grade に totalPoints が無くても gradeDates から表示する", () => {
+    renderPage(buildGrade({ totalPoints: null }), {
+      gradeDates: [
+        {
+          date: DATE,
+          status: "graded",
+          ungradedCount: 0,
+          totalPoints: 30,
+          reasonCode: "normal",
+          isExempt: false,
+        },
+      ],
+    });
+
+    expect(screen.getByTestId("grade-detail-total-points").textContent).toBe(
+      "合計 +30pt",
+    );
   });
 });

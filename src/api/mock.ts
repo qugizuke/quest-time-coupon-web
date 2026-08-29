@@ -1640,6 +1640,11 @@ export async function mockApi<T>(
               : null,
         items,
         adjustments: store.adjustmentsByDate.get(date) ?? [],
+        totalPoints: !alreadyGraded
+          ? null
+          : store.rejectedDates.has(date)
+            ? MISSED_REGISTRATION_PENALTY
+            : calcMockTotalPoints(date),
         isGraded: alreadyGraded,
         isRejected: store.rejectedDates.has(date),
         withinBonusDeadline: withinBonusWindow,

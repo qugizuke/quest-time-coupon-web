@@ -1,14 +1,14 @@
 /**
  * @file GradeDatePage
  * @description 保護者採点詳細（⭕️❌・採点拒否ダイアログ・任意加減点）。
- *   レイアウト: 日付→登録時刻→拒否上部→設問→加減点→確定下部。
+ *   レイアウト: 日付→登録時刻→合計→拒否上部→設問→加減点→確定下部。
  *   登録時刻は GET grade.submittedAt（ISO）を JST 表示する。欠落時は —。
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { postGrade, postGradeCorrection, postGradeReject } from "@/api/client";
-import { gradeQuery, queryKeys } from "@/api/queries";
+import { gradeDatesQuery, gradeQuery, queryKeys } from "@/api/queries";
 import { ParentPageFrame } from "@/components/layout/ParentPageFrame";
 import { LoadingScreen } from "@/components/layout/LoadingScreen";
 import { Button } from "@/components/ui/Button";
@@ -22,6 +22,7 @@ import {
   resolveActualDoneForSubmit,
 } from "@/lib/gradeUi";
 import { childAnswerLabel, isUnknownChildAnswer } from "@/lib/labels";
+import { pointsUnitLabel } from "@/lib/points";
 import { isSkipAnswerQuest, resolveQuestTitle } from "@/lib/questLabels";
 import type {
   AdjustmentDefinition,
@@ -162,6 +163,7 @@ export function GradeDatePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: gradeData, isLoading, refetch: refetchGrade } = useQuery(gradeQuery(date));
+  const { data: gradeDates } = useQuery(gradeDatesQuery);
   const { data: daily } = useDailyQuests(date);
   const {
     data: adjustmentDefinitions,
@@ -181,6 +183,15 @@ export function GradeDatePage() {
 
   const adjustmentItems = adjustmentDefinitions?.items ?? [];
   const readOnly = Boolean(gradeData?.isExempt || (gradeData?.isGraded && !isEditing));
+  const gradeDatesTotal = useMemo(
+    () => gradeDates?.dates.find((item) => item.date === date)?.totalPoints ?? null,
+    [gradeDates, date],
+  );
+  /** 確定済み合計。GET grade 欠落時は gradeDates をフォールバックする */
+  const confirmedTotalPoints =
+    gradeData?.isGraded === true
+      ? (gradeData.totalPoints ?? gradeDatesTotal)
+      : null;
 
   useEffect(() => {
     if (!gradeData || !adjustmentDefinitions || isEditing) return;
@@ -423,6 +434,19 @@ export function GradeDatePage() {
       <p className="mb-4 text-sm text-ink">
         今日は {clock} に登録されました。
       </p>
+      {confirmedTotalPoints != null && (
+        <p
+          className="mb-4 text-sm text-ink"
+          data-testid="grade-detail-total-points"
+        >
+          <span className="text-muted">合計</span>{" "}
+          <span className="font-semibold">
+            {confirmedTotalPoints >= 0 ? "+" : ""}
+            {confirmedTotalPoints}
+            {pointsUnitLabel(date)}
+          </span>
+        </p>
+      )}
       {gradeData.isRejected && (
         <p className="mb-4 rounded-default bg-danger-soft px-3 py-2 text-sm text-danger">
           この日は採点拒否（-100pt）済みです。

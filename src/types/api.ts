@@ -274,6 +274,18 @@ export interface GradeData {
   isExempt: boolean;
   alreadyGraded: boolean;
   reasonCode: ReasonCode | null;
+  gradingRevision: number;
+  originalGradedAt: string;
+  lastCorrectedAt: string;
+  acknowledged: boolean;
+  canCorrect: boolean;
+  cannotCorrectReason:
+    | "NOT_GRADED"
+    | "LEGACY_RESULT"
+    | "EXEMPT"
+    | "MIGRATION_UNRESOLVED"
+    | "UNSUPPORTED_RESULT"
+    | null;
   items: Array<{
     questId: string;
     childAnswer: ChildAnswer;
@@ -288,6 +300,27 @@ export interface GradeData {
   isRejected: boolean;
   /** UI 互換（withinBonusWindow） */
   withinBonusDeadline: boolean;
+}
+
+/** POST gradeCorrection */
+export interface GradeCorrectionPayload {
+  correctionId: string;
+  date: string;
+  expectedRevision: number;
+  resultType: "normal" | "grade_rejected";
+  grades?: { questId: string; actualDone: boolean }[];
+  adjustments?: GradeAdjustment[];
+}
+
+/** POST gradeCorrection 成功データ */
+export interface GradeCorrectionResult {
+  revision: number;
+  reasonCode: "normal" | "grade_rejected";
+  totalPoints: number;
+  correctedAt: string;
+  affectedDates: string[];
+  resetAcknowledgementDates: string[];
+  balancePoints: number;
 }
 
 /** GET results 1件 */

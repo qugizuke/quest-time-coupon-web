@@ -15,7 +15,13 @@ import {
   clearParentLocalSettings,
   MOCK_EXEMPT_FLAG_KEY,
 } from "@/lib/parentLocalSettings";
-import type { ChildAnswer, DailyQuests, HomeData } from "@/types/api";
+import type {
+  ChildAnswer,
+  DailyQuests,
+  GradeCorrectionResult,
+  GradeData,
+  HomeData,
+} from "@/types/api";
 
 /** to-be 10問（api-tobe-f-contract.md §4.1）に一致するサンプル回答（全問肯定） */
 const sampleAnswers: { questId: string; childAnswer: ChildAnswer }[] = [
@@ -30,6 +36,235 @@ const sampleAnswers: { questId: string; childAnswer: ChildAnswer }[] = [
   { questId: "no-repeated-warnings", childAnswer: 1 },
   { questId: "listen-to-mama-before-warning", childAnswer: 1 },
 ];
+
+const sampleGrades = sampleAnswers.map(({ questId }) => ({
+  questId,
+  actualDone: true,
+}));
+
+describe("mockApi gradeCorrection", () => {
+  beforeEach(async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 7, 25, 20, 0, 0));
+    resetMockStore();
+    await mockApi("answers", {
+      method: "POST",
+      body: JSON.stringify({ date: "2026-08-25", answers: sampleAnswers }),
+    });
+    await mockApi("grade", {
+      method: "POST",
+      body: JSON.stringify({ date: "2026-08-25", grades: sampleGrades }),
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    resetMockStore();
+  });
+
+  it("確認済みの通常採点を拒否へ修正し、残高・ack・revisionを整合させる", async () => {
+    await mockApi("resultsAck", {
+      method: "POST",
+      body: JSON.stringify({ date: "2026-08-25" }),
+    });
+    const payload = {
+      correctionId: "4ef59ef0-1e40-4c48-9fe3-e88a35d7be24",
+      date: "2026-08-25",
+      expectedRevision: 1,
+      resultType: "grade_rejected",
+    };
+
+    const result = await mockApi<GradeCorrectionResult>("gradeCorrection", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    const grade = await mockApi<GradeData>("grade", undefined, {
+      date: "2026-08-25",
+    });
+
+    expect(result.revision).toBe(2);
+    expect(result.reasonCode).toBe("grade_rejected");
+    expect(result.resetAcknowledgementDates).toEqual(["2026-08-25"]);
+    expect(result.balancePoints).toBe(0);
+    expect(grade).toMatchObject({
+      gradingRevision: 2,
+      acknowledged: false,
+      isRejected: true,
+      canCorrect: true,
+    });
+
+    await expect(
+      mockApi("gradeCorrection", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    ).resolves.toEqual(result);
+    await expect(
+      mockApi("gradeCorrection", {
+        method: "POST",
+        body: JSON.stringify({ ...payload, expectedRevision: 2 }),
+      }),
+    ).rejects.toThrow("IDEMPOTENCY_CONFLICT");
+  });
+
+  it("採点拒否を全問入力済みの通常採点へ戻せる", async () => {
+    await mockApi("gradeCorrection", {
+      method: "POST",
+      body: JSON.stringify({
+        correctionId: "4ef59ef0-1e40-4c48-9fe3-e88a35d7be24",
+        date: "2026-08-25",
+        expectedRevision: 1,
+        resultType: "grade_rejected",
+      }),
+    });
+
+    const result = await mockApi<GradeCorrectionResult>("gradeCorrection", {
+      method: "POST",
+      body: JSON.stringify({
+        correctionId: "699d51c9-90ce-4d07-98b1-818354ad6b12",
+        date: "2026-08-25",
+        expectedRevision: 2,
+        resultType: "normal",
+        grades: sampleGrades,
+        adjustments: [],
+      }),
+    });
+
+    expect(result).toMatchObject({ revision: 3, reasonCode: "normal" });
+    await expect(
+      mockApi<GradeData>("grade", undefined, { date: "2026-08-25" }),
+    ).resolves.toMatchObject({ isRejected: false, gradingRevision: 3 });
+  });
+
+  it("同じ修正の配列順だけが違う再送は同じ冪等結果を返す", async () => {
+    const firstPayload = {
+      correctionId: "4ef59ef0-1e40-4c48-9fe3-e88a35d7be24",
+      date: "2026-08-25",
+      expectedRevision: 1,
+      resultType: "normal",
+      grades: sampleGrades.map((grade, index) => ({
+        ...grade,
+        actualDone: index === 0 ? false : grade.actualDone,
+      })),
+      adjustments: [
+        { kind: "bonus" as const, code: "helped" as const, points: 10 },
+        { kind: "penalty" as const, code: "lied" as const, points: 10 },
+      ],
+    };
+    const first = await mockApi<GradeCorrectionResult>("gradeCorrection", {
+      method: "POST",
+      body: JSON.stringify(firstPayload),
+    });
+    const replay = await mockApi<GradeCorrectionResult>("gradeCorrection", {
+      method: "POST",
+      body: JSON.stringify({
+        ...firstPayload,
+        grades: [...firstPayload.grades].reverse(),
+        adjustments: [...firstPayload.adjustments].reverse(),
+      }),
+    });
+    expect(replay).toEqual(first);
+  });
+
+  it("修正後判定で全達成ボーナスを再計算し成功応答とresultsを一致させる", async () => {
+    const before = await mockApi<{ items: Array<{ date: string; totalPoints: number }> }>(
+      "results",
+    );
+    const result = await mockApi<GradeCorrectionResult>("gradeCorrection", {
+      method: "POST",
+      body: JSON.stringify({
+        correctionId: "4ef59ef0-1e40-4c48-9fe3-e88a35d7be24",
+        date: "2026-08-25",
+        expectedRevision: 1,
+        resultType: "normal",
+        grades: sampleGrades.map((grade, index) => ({
+          ...grade,
+          actualDone: index === 1 ? false : grade.actualDone,
+        })),
+        adjustments: [],
+      }),
+    });
+    const after = await mockApi<{
+      items: Array<{
+        date: string;
+        totalPoints: number;
+        breakdown: { questPoints: number };
+        details: Array<{ finalPoints: number; streakMultiplier: number }>;
+      }>;
+    }>("results");
+    const beforeTotal = before.items.find((item) => item.date === "2026-08-25")!.totalPoints;
+    const afterItem = after.items.find((item) => item.date === "2026-08-25")!;
+    const afterTotal = afterItem.totalPoints;
+
+    expect(result.totalPoints).toBe(afterTotal);
+    expect(afterTotal).toBeLessThan(beforeTotal);
+    expect(afterItem.breakdown.questPoints).toBe(
+      afterItem.details.reduce((sum, detail) => sum + detail.finalPoints, 0),
+    );
+    expect(afterItem.details.every((detail) => detail.streakMultiplier >= 1)).toBe(true);
+  });
+
+  it("過去日の変更を後続へ伝播し、確認済み両日のポイントを戻す", async () => {
+    const nextDate = "2026-08-26";
+    const propagatedDate = "2026-08-27";
+    vi.setSystemTime(new Date(2026, 7, 26, 20, 0, 0));
+    await mockApi("answers", {
+      method: "POST",
+      body: JSON.stringify({ date: nextDate, answers: sampleAnswers }),
+    });
+    await mockApi("grade", {
+      method: "POST",
+      body: JSON.stringify({ date: nextDate, grades: sampleGrades }),
+    });
+    vi.setSystemTime(new Date(2026, 7, 27, 20, 0, 0));
+    await mockApi("answers", {
+      method: "POST",
+      body: JSON.stringify({ date: propagatedDate, answers: sampleAnswers }),
+    });
+    await mockApi("grade", {
+      method: "POST",
+      body: JSON.stringify({ date: propagatedDate, grades: sampleGrades }),
+    });
+    await mockApi("resultsAck", {
+      method: "POST",
+      body: JSON.stringify({ date: "2026-08-25" }),
+    });
+    await mockApi("resultsAck", {
+      method: "POST",
+      body: JSON.stringify({ date: nextDate }),
+    });
+    await mockApi("resultsAck", {
+      method: "POST",
+      body: JSON.stringify({ date: propagatedDate }),
+    });
+
+    const result = await mockApi<GradeCorrectionResult>("gradeCorrection", {
+      method: "POST",
+      body: JSON.stringify({
+        correctionId: "4ef59ef0-1e40-4c48-9fe3-e88a35d7be24",
+        date: "2026-08-25",
+        expectedRevision: 1,
+        resultType: "normal",
+        grades: sampleGrades.map((grade, index) => ({
+          ...grade,
+          actualDone: index === 1 ? false : grade.actualDone,
+        })),
+        adjustments: [],
+      }),
+    });
+
+    expect(result.affectedDates).toEqual(["2026-08-25", nextDate, propagatedDate]);
+    expect(result.resetAcknowledgementDates).toEqual([
+      "2026-08-25",
+      nextDate,
+      propagatedDate,
+    ]);
+    expect(result.balancePoints).toBe(0);
+    await expect(
+      mockApi<GradeData>("grade", undefined, { date: propagatedDate }),
+    ).resolves.toMatchObject({ acknowledged: false, gradingRevision: 2 });
+  });
+});
 
 describe("mockApi dailyQuests クエストマスタ（Issue #33）", () => {
   it("date クエリで10問のクエスト定義を返す", async () => {

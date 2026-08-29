@@ -10,6 +10,8 @@ import type {
   ChildAnswer,
   DailyQuests,
   GradeAdjustment,
+  GradeCorrectionPayload,
+  GradeCorrectionResult,
   GradeData,
   GradeDateItem,
   HomeData,
@@ -337,6 +339,12 @@ export async function fetchGrade(date: string): Promise<GradeData> {
     withinBonusWindow:
       data.withinBonusWindow ?? data.withinBonusDeadline ?? false,
     alreadyGraded: data.alreadyGraded ?? data.isGraded ?? false,
+    gradingRevision: data.gradingRevision ?? (data.alreadyGraded || data.isGraded ? 1 : 0),
+    originalGradedAt: data.originalGradedAt ?? "",
+    lastCorrectedAt: data.lastCorrectedAt ?? "",
+    acknowledged: data.acknowledged ?? false,
+    canCorrect: data.canCorrect ?? false,
+    cannotCorrectReason: data.cannotCorrectReason ?? null,
   };
 }
 
@@ -363,6 +371,17 @@ export function postGradeReject(date: string): Promise<{
     method: "POST",
     headers: JSON_POST_HEADERS,
     body: JSON.stringify({ date }),
+  });
+}
+
+/** POST gradeCorrection */
+export function postGradeCorrection(
+  payload: GradeCorrectionPayload,
+): Promise<GradeCorrectionResult> {
+  return request("gradeCorrection", {
+    method: "POST",
+    headers: JSON_POST_HEADERS,
+    body: JSON.stringify(payload),
   });
 }
 

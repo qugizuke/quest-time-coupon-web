@@ -109,6 +109,41 @@ describe("client リクエスト組み立て", () => {
     });
   });
 
+  it("gradeCorrection は UUID・revision・修正内容を JSON で送る", async () => {
+    vi.stubEnv("VITE_API_URL", API_BASE);
+    vi.stubEnv("VITE_MOCK_API", "false");
+    const fetchMock = stubFetch(
+      jsonResponse({
+        ok: true,
+        data: {
+          revision: 2,
+          reasonCode: "normal",
+          totalPoints: 70,
+          correctedAt: "2026-08-27T20:30:00+09:00",
+          affectedDates: ["2026-08-25"],
+          resetAcknowledgementDates: [],
+          balancePoints: 0,
+        },
+      }),
+    );
+    const payload = {
+      correctionId: "4ef59ef0-1e40-4c48-9fe3-e88a35d7be24",
+      date: "2026-08-25",
+      expectedRevision: 1,
+      resultType: "normal" as const,
+      grades: [{ questId: "brush-teeth-gargle-am", actualDone: false }],
+      adjustments: [],
+    };
+
+    const { postGradeCorrection } = await importClient();
+    await postGradeCorrection(payload);
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(`${API_BASE}?action=gradeCorrection`);
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(String(init?.body))).toEqual(payload);
+  });
+
   it("rewardVoucherConsumptions の GET/POST 契約を組み立てる", async () => {
     vi.stubEnv("VITE_API_URL", API_BASE);
     vi.stubEnv("VITE_MOCK_API", "false");

@@ -345,6 +345,10 @@ export async function fetchGrade(date: string): Promise<GradeData> {
     acknowledged: data.acknowledged ?? false,
     canCorrect: data.canCorrect ?? false,
     cannotCorrectReason: data.cannotCorrectReason ?? null,
+    totalPoints:
+      typeof data.totalPoints === "number" && Number.isFinite(data.totalPoints)
+        ? data.totalPoints
+        : null,
   };
 }
 

@@ -6,6 +6,8 @@
 import type {
   ChildAnswer,
   GradeAdjustment,
+  GradeCorrectionPayload,
+  GradeCorrectionResult,
   HomeData,
   PointExchangeRequest,
   PointExchangeStatus,
@@ -81,6 +83,25 @@ const MOCK_EXEMPT_KEY = "qtc:mock:exempt";
 /** @type {number} 未登録・採点拒否ペナルティ（pt・ADR-005） */
 const MISSED_REGISTRATION_PENALTY = -100;
 
+const POINTS_CUTOVER_DATE = "2026-08-25";
+
+function normalizeMockGradeCorrectionPayload(
+  payload: GradeCorrectionPayload,
+): string {
+  return JSON.stringify({
+    correctionId: payload.correctionId.toLowerCase(),
+    date: payload.date,
+    expectedRevision: payload.expectedRevision,
+    resultType: payload.resultType,
+    grades: [...(payload.grades ?? [])].sort((left, right) =>
+      left.questId.localeCompare(right.questId),
+    ),
+    adjustments: [...(payload.adjustments ?? [])].sort((left, right) =>
+      left.code.localeCompare(right.code),
+    ),
+  });
+}
+
 /** 物理券の契約上の固定順 */
 const PHYSICAL_REWARD_VOUCHER_IDS: readonly PhysicalRewardVoucherCatalogItemId[] = [
   "snack-10",
@@ -88,8 +109,10 @@ const PHYSICAL_REWARD_VOUCHER_IDS: readonly PhysicalRewardVoucherCatalogItemId[]
   "dining-1000",
 ];
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const UUID_V4_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 interface MockStore {
   /** クエスト結果で増減するポイント残高（pt）。0未満にはならない */
@@ -110,6 +133,13 @@ interface MockStore {
   wakeUpByDate: Map<string, WakeUpTime>;
   submittedAtByDate: Map<string, string>;
   adjustmentsByDate: Map<string, GradeAdjustment[]>;
+  gradingRevisionByDate: Map<string, number>;
+  originalGradedAtByDate: Map<string, string>;
+  lastCorrectedAtByDate: Map<string, string>;
+  gradeCorrectionLogs: Map<
+    string,
+    { normalizedPayload: string; response: GradeCorrectionResult }
+  >;
   /** date → endsAt ISO（再開枠） */
   registrationReopenByDate: Map<string, { endsAt: string; setAt: string; used: boolean }>;
   longVacation: { startDate: string; endDate: string; updatedAt: string };
@@ -148,6 +178,10 @@ const store: MockStore = {
   wakeUpByDate: new Map(),
   submittedAtByDate: new Map(),
   adjustmentsByDate: new Map(),
+  gradingRevisionByDate: new Map(),
+  originalGradedAtByDate: new Map(),
+  lastCorrectedAtByDate: new Map(),
+  gradeCorrectionLogs: new Map(),
   registrationReopenByDate: new Map(),
   longVacation: { startDate: "", endDate: "", updatedAt: "" },
   exemptionPeriods: [],
@@ -515,6 +549,10 @@ export function resetMockStore(): void {
   store.wakeUpByDate.clear();
   store.submittedAtByDate.clear();
   store.adjustmentsByDate.clear();
+  store.gradingRevisionByDate.clear();
+  store.originalGradedAtByDate.clear();
+  store.lastCorrectedAtByDate.clear();
+  store.gradeCorrectionLogs.clear();
   store.registrationReopenByDate.clear();
   store.longVacation = { startDate: "", endDate: "", updatedAt: "" };
   store.exemptionPeriods = [];
@@ -611,7 +649,10 @@ function isValidOptionalBedtimeHour(bedtimeHour: number | undefined): boolean {
  * @param {string} date - 対象日
  * @returns {number} 定時登録ボーナスまたは未登録ペナルティ
  */
-function calcMockRegistrationTimingAdjustment(date: string): number {
+function calcMockRegistrationTimingAdjustment(
+  date: string,
+  grades = store.grades.get(date) ?? new Map<string, boolean>(),
+): number {
   if (store.missedRegistrationDates.has(date)) {
     return MISSED_REGISTRATION_PENALTY;
   }
@@ -620,7 +661,7 @@ function calcMockRegistrationTimingAdjustment(date: string): number {
   const submitted = new Date(submittedAt);
   const bedtimeHour = store.bedtimeByDate.get(date);
   if (isPastQuestBonusDeadline(date, submitted, bedtimeHour)) return 0;
-  return canApplyBedtimePrepRegistrationBonus(mockBedtimePrepEvaluation(date))
+  return canApplyBedtimePrepRegistrationBonus(mockBedtimePrepEvaluation(date, grades))
     ? REGISTRATION_ON_TIME_BONUS
     : 0;
 }
@@ -658,9 +699,10 @@ function describeMockRegistrationTimingReason(
  */
 function mockBedtimePrepEvaluation(
   date: string,
+  grades = store.grades.get(date) ?? new Map<string, boolean>(),
 ): { childAnswer: ChildAnswer; actualDone: boolean } | undefined {
   const childAnswer = store.answers.get(date)?.get(BEDTIME_PREP_QUEST_ID);
-  const actualDone = store.grades.get(date)?.get(BEDTIME_PREP_QUEST_ID);
+  const actualDone = grades.get(BEDTIME_PREP_QUEST_ID);
   if (childAnswer === undefined || actualDone === undefined) return undefined;
   return { childAnswer, actualDone };
 }
@@ -670,8 +712,11 @@ function mockBedtimePrepEvaluation(
  * @param {string} date - 対象日
  * @returns {number} ペナルティ分数
  */
-function calcMockBedtimePrepPenalty(date: string): number {
-  return calcBedtimePrepFalseClaimPenalty(mockBedtimePrepEvaluation(date));
+function calcMockBedtimePrepPenalty(
+  date: string,
+  grades = store.grades.get(date) ?? new Map<string, boolean>(),
+): number {
+  return calcBedtimePrepFalseClaimPenalty(mockBedtimePrepEvaluation(date, grades));
 }
 
 /**
@@ -679,8 +724,11 @@ function calcMockBedtimePrepPenalty(date: string): number {
  * @param {string} date - 対象日
  * @returns {number} bonus は正、penalty は負の合計
  */
-function sumMockAdjustments(date: string): number {
-  return (store.adjustmentsByDate.get(date) ?? []).reduce((sum, adj) => {
+function sumMockAdjustments(
+  date: string,
+  adjustments = store.adjustmentsByDate.get(date) ?? [],
+): number {
+  return adjustments.reduce((sum, adj) => {
     return sum + (adj.kind === "bonus" ? adj.points : -adj.points);
   }, 0);
 }
@@ -692,10 +740,12 @@ function sumMockAdjustments(date: string): number {
  * @param {string} date - 対象日
  * @returns {number} 全達成なら FULL_ACHIEVEMENT_BONUS、それ以外は 0
  */
-function calcMockFullAchievementBonus(date: string): number {
+function calcMockFullAchievementBonus(
+  date: string,
+  dayGrades = store.grades.get(date) ?? new Map<string, boolean>(),
+): number {
   const dayAnswers = store.answers.get(date);
   if (!dayAnswers) return 0;
-  const dayGrades = store.grades.get(date) ?? new Map<string, boolean>();
   let hasScoredQuest = false;
   for (const [questId, childAnswer] of dayAnswers) {
     if (questId === BEDTIME_PREP_QUEST_ID) continue;
@@ -713,13 +763,146 @@ function calcMockFullAchievementBonus(date: string): number {
  * @param {string} date - 対象日
  * @returns {number} totalPoints
  */
-function calcMockTotalPoints(date: string): number {
+function calcMockNonQuestPoints(
+  date: string,
+  adjustments = store.adjustmentsByDate.get(date) ?? [],
+  grades = store.grades.get(date) ?? new Map<string, boolean>(),
+): number {
   return (
-    calcMockRegistrationTimingAdjustment(date) +
-    calcMockBedtimePrepPenalty(date) +
-    calcMockFullAchievementBonus(date) +
-    sumMockAdjustments(date)
+    calcMockRegistrationTimingAdjustment(date, grades) +
+    calcMockBedtimePrepPenalty(date, grades) +
+    calcMockFullAchievementBonus(date, grades) +
+    sumMockAdjustments(date, adjustments)
   );
+}
+
+interface MockQuestStreak {
+  success: number;
+  failure: number;
+}
+
+interface MockGradeOverride {
+  date: string;
+  resultType: "normal" | "grade_rejected";
+  grades: Map<string, boolean>;
+  adjustments: GradeAdjustment[];
+}
+
+const MOCK_SKIP_QUEST_IDS = new Set([
+  "homework-done-today",
+  "phone-non-emergency-unused",
+]);
+
+interface MockGradeDetail {
+  questId: string;
+  actualDone: boolean;
+  basePoints: number;
+  multiplier: number;
+  finalPoints: number;
+  streakAfter: MockQuestStreak;
+  category: "routine" | "reminder";
+}
+
+interface MockDayReplay {
+  totalPoints: number;
+  questPoints: number;
+  gradeDetails: MockGradeDetail[];
+  signature: string;
+}
+
+/** 採点確定順で全通常採点を再生し、ストリーク込みの日別結果を返す。 */
+function replayMockTotals(override?: MockGradeOverride): Map<string, MockDayReplay> {
+  const streaks = new Map<string, MockQuestStreak>();
+  const totals = new Map<string, MockDayReplay>();
+  const dates = new Set([...store.gradedDates, ...store.rejectedDates]);
+  if (override) dates.add(override.date);
+  const ordered = [...dates].sort((left, right) => {
+    const leftTime = store.originalGradedAtByDate.get(left) ?? "";
+    const rightTime = store.originalGradedAtByDate.get(right) ?? "";
+    return leftTime.localeCompare(rightTime) || left.localeCompare(right);
+  });
+
+  for (const date of ordered) {
+    const resultType = override?.date === date
+      ? override.resultType
+      : store.rejectedDates.has(date)
+        ? "grade_rejected"
+        : "normal";
+    if (resultType === "grade_rejected") {
+      totals.set(date, {
+        totalPoints: MISSED_REGISTRATION_PENALTY,
+        questPoints: 0,
+        gradeDetails: [],
+        signature: "grade_rejected",
+      });
+      continue;
+    }
+    const answers = store.answers.get(date) ?? new Map<string, ChildAnswer>();
+    const grades = override?.date === date
+      ? override.grades
+      : (store.grades.get(date) ?? new Map<string, boolean>());
+    let questPoints = 0;
+    const gradeDetails: MockGradeDetail[] = [];
+    for (const [questId, childAnswer] of answers) {
+      const definition = daily.quests.find((quest) => quest.id === questId);
+      if (definition?.scoringRole === "registrationGate") continue;
+      const category = definition?.category ?? "routine";
+      const actualDone = grades.get(questId) ?? false;
+      const isSkip = childAnswer === -1 && MOCK_SKIP_QUEST_IDS.has(questId);
+      let basePoints = 0;
+      if (!isSkip) {
+        if (childAnswer === 1) {
+          basePoints = actualDone ? 5 : category === "reminder" ? -20 : -10;
+        } else if (childAnswer === 0) {
+          basePoints = actualDone ? 5 : category === "reminder" ? -10 : -5;
+        } else {
+          basePoints = category === "reminder" ? -20 : -10;
+        }
+      }
+      const current = streaks.get(questId) ?? { success: 0, failure: 0 };
+      let multiplier = 1;
+      if (basePoints > 0) {
+        multiplier = Math.min(1 + current.success * 0.25, 2);
+        streaks.set(questId, { success: current.success + 1, failure: 0 });
+      } else if (basePoints < 0) {
+        const step = category === "reminder" ? 0.5 : 0.25;
+        const cap = category === "reminder" ? 3 : 2;
+        multiplier = Math.min(1 + current.failure * step, cap);
+        streaks.set(questId, { success: 0, failure: current.failure + 1 });
+      }
+      const finalPoints = Math.round((basePoints * multiplier) / 5) * 5;
+      questPoints += finalPoints;
+      gradeDetails.push({
+        questId,
+        actualDone,
+        basePoints,
+        multiplier,
+        finalPoints,
+        streakAfter: streaks.get(questId) ?? current,
+        category,
+      });
+    }
+    const adjustments = override?.date === date
+      ? override.adjustments
+      : (store.adjustmentsByDate.get(date) ?? []);
+    const nonQuestPoints = calcMockNonQuestPoints(date, adjustments, grades);
+    totals.set(date, {
+      totalPoints: questPoints + nonQuestPoints,
+      questPoints,
+      gradeDetails,
+      signature: JSON.stringify({
+        resultType,
+        gradeDetails,
+        nonQuestPoints,
+        adjustments,
+      }),
+    });
+  }
+  return totals;
+}
+
+function calcMockTotalPoints(date: string): number {
+  return replayMockTotals().get(date)?.totalPoints ?? calcMockNonQuestPoints(date);
 }
 
 /**
@@ -1395,8 +1578,12 @@ export async function mockApi<T>(
         if (adjustments?.length) {
           store.adjustmentsByDate.set(date, adjustments);
         }
+        const gradedAt = new Date().toISOString();
+        store.gradingRevisionByDate.set(date, 1);
+        store.originalGradedAtByDate.set(date, gradedAt);
+        store.lastCorrectedAtByDate.set(date, "");
         return {
-          gradedAt: new Date().toISOString(),
+          gradedAt,
           totalPoints: calcMockTotalPoints(date),
           reasonCode: "normal",
         } as T;
@@ -1432,6 +1619,25 @@ export async function mockApi<T>(
         isExempt: resolveMockExemptDay(date),
         alreadyGraded,
         reasonCode,
+        gradingRevision: alreadyGraded
+          ? (store.gradingRevisionByDate.get(date) ?? 1)
+          : 0,
+        originalGradedAt: alreadyGraded
+          ? (store.originalGradedAtByDate.get(date) ?? "")
+          : "",
+        lastCorrectedAt: store.lastCorrectedAtByDate.get(date) ?? "",
+        acknowledged: store.acknowledgedDates.has(date),
+        canCorrect:
+          alreadyGraded &&
+          !resolveMockExemptDay(date) &&
+          date >= POINTS_CUTOVER_DATE,
+        cannotCorrectReason: !alreadyGraded
+          ? ("NOT_GRADED" as const)
+          : resolveMockExemptDay(date)
+            ? ("EXEMPT" as const)
+            : date < POINTS_CUTOVER_DATE
+              ? ("LEGACY_RESULT" as const)
+              : null,
         items,
         adjustments: store.adjustmentsByDate.get(date) ?? [],
         isGraded: alreadyGraded,
@@ -1452,11 +1658,163 @@ export async function mockApi<T>(
         throw new Error("FORBIDDEN_STATE: 免除日は拒否できません");
       }
       store.rejectedDates.add(date);
+      const gradedAt = new Date().toISOString();
+      store.gradingRevisionByDate.set(date, 1);
+      store.originalGradedAtByDate.set(date, gradedAt);
+      store.lastCorrectedAtByDate.set(date, "");
       return {
         reasonCode: "grade_rejected",
         totalPoints: MISSED_REGISTRATION_PENALTY,
-        gradedAt: new Date().toISOString(),
+        gradedAt,
       } as T;
+    }
+
+    case "gradeCorrection": {
+      const payload = body as GradeCorrectionPayload;
+      const normalizedPayload = normalizeMockGradeCorrectionPayload(payload);
+      const prior = store.gradeCorrectionLogs.get(payload.correctionId);
+      if (prior) {
+        if (prior.normalizedPayload !== normalizedPayload) {
+          throw new Error("IDEMPOTENCY_CONFLICT: correctionId が別の修正に使用済みです");
+        }
+        return prior.response as T;
+      }
+      if (!UUID_PATTERN.test(payload.correctionId ?? "")) {
+        throw new Error("BAD_REQUEST: correctionId は UUID が必要です");
+      }
+      if (payload.date < POINTS_CUTOVER_DATE) {
+        throw new Error("LEGACY_RESULT_NOT_CORRECTABLE: 切替日前の結果は修正できません");
+      }
+      if (resolveMockExemptDay(payload.date)) {
+        throw new Error("FORBIDDEN_STATE: 免除日は修正できません");
+      }
+      if (!store.gradedDates.has(payload.date) && !store.rejectedDates.has(payload.date)) {
+        throw new Error("FORBIDDEN_STATE: 未採点の結果は修正できません");
+      }
+      const revision = store.gradingRevisionByDate.get(payload.date) ?? 1;
+      if (payload.expectedRevision !== revision) {
+        throw new Error("STALE_GRADE_REVISION: 採点結果が更新されています");
+      }
+      if (payload.resultType === "normal") {
+        validateMockGrades(payload.date, payload.grades);
+        validateMockAdjustments(payload.adjustments ?? []);
+      } else if (payload.resultType === "grade_rejected") {
+        if (payload.grades !== undefined || payload.adjustments !== undefined) {
+          throw new Error("BAD_REQUEST: 採点拒否では grades / adjustments を送信できません");
+        }
+      } else {
+        throw new Error("BAD_REQUEST: resultType が不正です");
+      }
+
+      const currentType = store.rejectedDates.has(payload.date)
+        ? "grade_rejected"
+        : "normal";
+      const currentGrades = [...(store.grades.get(payload.date) ?? new Map())].sort(
+        ([left], [right]) => left.localeCompare(right),
+      );
+      const nextGrades = (payload.grades ?? [])
+        .map((grade) => [grade.questId, grade.actualDone] as const)
+        .sort(([left], [right]) => left.localeCompare(right));
+      const currentKnownAdjustments = (store.adjustmentsByDate.get(payload.date) ?? []).filter(
+        (adjustment) =>
+          adjustmentDefinitions.items.some((definition) => definition.code === adjustment.code),
+      ).sort((left, right) => left.code.localeCompare(right.code));
+      const nextAdjustments = [...(payload.adjustments ?? [])].sort((left, right) =>
+        left.code.localeCompare(right.code),
+      );
+      if (
+        currentType === payload.resultType &&
+        JSON.stringify(currentGrades) === JSON.stringify(nextGrades) &&
+        JSON.stringify(currentKnownAdjustments) === JSON.stringify(nextAdjustments)
+      ) {
+        throw new Error("NO_CHANGES: 採点内容に変更がありません");
+      }
+
+      const unknownExisting = (store.adjustmentsByDate.get(payload.date) ?? []).filter(
+        (adjustment) =>
+          !adjustmentDefinitions.items.some(
+            (definition) => definition.code === adjustment.code,
+          ),
+      );
+      const nextStoredAdjustments = payload.resultType === "normal"
+        ? [...(payload.adjustments ?? []), ...unknownExisting]
+        : [];
+      const totalsBefore = replayMockTotals();
+      const totalsAfter = replayMockTotals({
+        date: payload.date,
+        resultType: payload.resultType,
+        grades: new Map(nextGrades),
+        adjustments: nextStoredAdjustments,
+      });
+      const targetOrder = store.originalGradedAtByDate.get(payload.date) ?? "";
+      const affectedDates = [...new Set([...totalsBefore.keys(), ...totalsAfter.keys()])]
+        .filter((date) => {
+          const order = store.originalGradedAtByDate.get(date) ?? "";
+          const isAfterTarget =
+            order > targetOrder || (order === targetOrder && date >= payload.date);
+          return isAfterTarget &&
+            (date === payload.date ||
+              totalsBefore.get(date)?.signature !== totalsAfter.get(date)?.signature);
+        })
+        .sort((left, right) => {
+          const leftTime = store.originalGradedAtByDate.get(left) ?? "";
+          const rightTime = store.originalGradedAtByDate.get(right) ?? "";
+          return leftTime.localeCompare(rightTime) || left.localeCompare(right);
+        });
+      if (affectedDates.length > 450) {
+        throw new Error("CORRECTION_TOO_LARGE: 影響日が450件を超えています");
+      }
+
+      const resetAcknowledgementDates: string[] = [];
+      for (const date of affectedDates) {
+        if (!store.acknowledgedDates.has(date)) continue;
+        store.balancePoints -= store.appliedDeltaByDate.get(date) ?? 0;
+        store.acknowledgedDates.delete(date);
+        store.appliedDeltaByDate.delete(date);
+        resetAcknowledgementDates.push(date);
+      }
+      if (payload.resultType === "grade_rejected") {
+        store.gradedDates.delete(payload.date);
+        store.rejectedDates.add(payload.date);
+        store.grades.delete(payload.date);
+        store.adjustmentsByDate.delete(payload.date);
+      } else {
+        store.rejectedDates.delete(payload.date);
+        store.gradedDates.add(payload.date);
+        store.grades.set(payload.date, new Map(nextGrades));
+        store.adjustmentsByDate.set(payload.date, nextStoredAdjustments);
+      }
+      const correctedAt = new Date().toISOString();
+      const nextRevision = revision + 1;
+      store.originalGradedAtByDate.set(
+        payload.date,
+        store.originalGradedAtByDate.get(payload.date) ?? correctedAt,
+      );
+      for (const date of affectedDates) {
+        store.gradingRevisionByDate.set(
+          date,
+          (store.gradingRevisionByDate.get(date) ?? 1) + 1,
+        );
+        store.lastCorrectedAtByDate.set(date, correctedAt);
+      }
+      const response: GradeCorrectionResult = {
+        revision: nextRevision,
+        reasonCode: payload.resultType,
+        totalPoints:
+          payload.resultType === "grade_rejected"
+            ? MISSED_REGISTRATION_PENALTY
+            : (totalsAfter.get(payload.date)?.totalPoints ??
+              calcMockTotalPoints(payload.date)),
+        correctedAt,
+        affectedDates,
+        resetAcknowledgementDates,
+        balancePoints: store.balancePoints,
+      };
+      store.gradeCorrectionLogs.set(payload.correctionId, {
+        normalizedPayload,
+        response,
+      });
+      return response as T;
     }
 
     case "longVacation": {
@@ -1584,10 +1942,10 @@ export async function mockApi<T>(
     }
 
     case "results": {
+      const replayed = replayMockTotals();
       const gradedItems = [...store.gradedDates].map((date) => {
         const dayAnswers =
           store.answers.get(date) ?? new Map<string, ChildAnswer>();
-        const dayGrades = store.grades.get(date) ?? new Map<string, boolean>();
         const adjustments = (store.adjustmentsByDate.get(date) ?? []).map(
           (a) => ({
             kind: a.kind,
@@ -1605,18 +1963,23 @@ export async function mockApi<T>(
         const bedtimePrepPenalty = calcMockBedtimePrepPenalty(date);
         const perfectBonus = calcMockFullAchievementBonus(date);
         const adjustmentsSum = sumMockAdjustments(date);
-        const totalPoints = calcMockTotalPoints(date);
-        const details = [...dayAnswers.entries()]
-          .filter(([questId]) => questId !== BEDTIME_PREP_QUEST_ID)
-          .map(([questId, childAnswer]) => {
-            const actualDone = dayGrades.get(questId) ?? false;
+        const scoring = replayed.get(date);
+        const totalPoints = scoring?.totalPoints ?? calcMockTotalPoints(date);
+        const details = (scoring?.gradeDetails ?? []).map((detail) => {
+            const childAnswer = dayAnswers.get(detail.questId) ?? -1;
             return {
-              questId,
+              questId: detail.questId,
               childAnswer,
-              actualDone,
-              finalPoints: 0,
-              mismatch: isMockMismatch(childAnswer, actualDone),
-              gradingMode: mockGradingModeForChildAnswer(questId, childAnswer),
+              actualDone: detail.actualDone,
+              finalPoints: detail.finalPoints,
+              mismatch: isMockMismatch(childAnswer, detail.actualDone),
+              streakMultiplier: detail.multiplier,
+              failureStreakAfter: detail.streakAfter.failure,
+              category: detail.category,
+              gradingMode: mockGradingModeForChildAnswer(
+                detail.questId,
+                childAnswer,
+              ),
             };
           });
         const acknowledged = store.acknowledgedDates.has(date);
@@ -1626,7 +1989,7 @@ export async function mockApi<T>(
           acknowledged,
           reasonCode: "normal" as const,
           breakdown: {
-            questPoints: 0,
+            questPoints: scoring?.questPoints ?? 0,
             onTimeBonus: Math.max(0, registrationTimingAdjustment),
             perfectBonus,
             adjustmentsSum,

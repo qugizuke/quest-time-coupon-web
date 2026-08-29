@@ -5,9 +5,9 @@
  *   登録時刻は GET grade.submittedAt（ISO）を JST 表示する。欠落時は —。
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { postGrade, postGradeReject } from "@/api/client";
+import { postGrade, postGradeCorrection, postGradeReject } from "@/api/client";
 import { gradeQuery, queryKeys } from "@/api/queries";
 import { ParentPageFrame } from "@/components/layout/ParentPageFrame";
 import { LoadingScreen } from "@/components/layout/LoadingScreen";
@@ -23,7 +23,12 @@ import {
 } from "@/lib/gradeUi";
 import { childAnswerLabel, isUnknownChildAnswer } from "@/lib/labels";
 import { isSkipAnswerQuest, resolveQuestTitle } from "@/lib/questLabels";
-import type { AdjustmentDefinition, DailyQuests, GradeAdjustment } from "@/types/api";
+import type {
+  AdjustmentDefinition,
+  DailyQuests,
+  GradeAdjustment,
+  GradeCorrectionPayload,
+} from "@/types/api";
 
 /** 任意加減点の選択肢（ADR-005: 10pt刻み・上限100pt） */
 const BONUS_POINT_OPTIONS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
@@ -31,7 +36,10 @@ const PENALTY_POINT_OPTIONS = [-10, -20, -30, -40, -50, -60, -70, -80, -90, -100
 
 /** 採点拒否ダイアログ本文（仕様正・一字一句） */
 const REJECT_DIALOG_BODY =
-  "今日のクエストは採点せず、-100ptにします。\nこの操作は取り消せません。";
+  "今日のクエストは採点せず、-100ptにします。\n後から採点詳細で修正できます。";
+
+const CORRECTION_DIALOG_BODY =
+  "この日以降の採点結果が再計算されます。\n確認済みの結果が未確認に戻る場合があります。";
 
 interface AdjustmentRow {
   id: string;
@@ -153,7 +161,7 @@ export function GradeDatePage() {
   const { date = "" } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { data: gradeData, isLoading } = useQuery(gradeQuery(date));
+  const { data: gradeData, isLoading, refetch: refetchGrade } = useQuery(gradeQuery(date));
   const { data: daily } = useDailyQuests(date);
   const {
     data: adjustmentDefinitions,
@@ -166,29 +174,35 @@ export function GradeDatePage() {
   const [adjustmentRows, setAdjustmentRows] = useState<AdjustmentRow[]>([]);
   const [unknownAdjustmentCodes, setUnknownAdjustmentCodes] = useState<string[]>([]);
   const [rejectOpen, setRejectOpen] = useState(false);
+  const [correctionConfirmOpen, setCorrectionConfirmOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const correctionAttempt = useRef<{ fingerprint: string; id: string } | null>(null);
+  const editingRevision = useRef<number | null>(null);
 
   const adjustmentItems = adjustmentDefinitions?.items ?? [];
-  const readOnly = Boolean(gradeData?.isGraded || gradeData?.isExempt);
+  const readOnly = Boolean(gradeData?.isExempt || (gradeData?.isGraded && !isEditing));
 
   useEffect(() => {
-    if (!gradeData || !adjustmentDefinitions) return;
-    setGrades((prev) => {
-      const next = { ...prev };
-      for (const item of gradeData.items) {
-        if (!isParentGradableAnswer(item.childAnswer)) continue;
-        if (item.actualDone !== null && next[item.questId] === undefined) {
-          next[item.questId] = item.actualDone;
-        }
-      }
-      return next;
-    });
+    if (!gradeData || !adjustmentDefinitions || isEditing) return;
+    const nextGrades: Record<string, boolean> = {};
+    for (const item of gradeData.items) {
+      if (!isParentGradableAnswer(item.childAnswer)) continue;
+      if (item.actualDone !== null) nextGrades[item.questId] = item.actualDone;
+    }
+    setGrades(nextGrades);
     const rows = buildAdjustmentRows(gradeData.adjustments ?? [], adjustmentDefinitions.items);
     setUnknownAdjustmentCodes(
       findUnknownAdjustmentCodes(gradeData.adjustments ?? [], adjustmentDefinitions.items),
     );
     setAdjustmentRows(rows);
-    setUsesAdjustments(rows.length > 0);
-  }, [gradeData, adjustmentDefinitions]);
+    setUsesAdjustments(
+      rows.length > 0 ||
+        findUnknownAdjustmentCodes(
+          gradeData.adjustments ?? [],
+          adjustmentDefinitions.items,
+        ).length > 0,
+    );
+  }, [gradeData, adjustmentDefinitions, isEditing]);
 
   const gradableItems = useMemo(
     () => gradeData?.items.filter((item) => isParentGradableAnswer(item.childAnswer)) ?? [],
@@ -206,61 +220,123 @@ export function GradeDatePage() {
   const progressPercent =
     totalItemCount === 0 ? 0 : Math.round((gradedCount / totalItemCount) * 100);
 
-  const mutation = useMutation({
+  function buildNormalSubmission() {
+    if (!gradeData) throw new Error("GradeDatePage: データがありません");
+    const gradePayload = gradeData.items.flatMap((item) => {
+      try {
+        const actualDone = resolveActualDoneForSubmit(
+          item.childAnswer,
+          grades[item.questId],
+        );
+        if (actualDone === undefined) return [];
+        return [{ questId: item.questId, actualDone }];
+      } catch (error) {
+        throw new Error(
+          `GradeDatePage: 未採点 questId=${item.questId} ` +
+            `(${error instanceof Error ? error.message : String(error)})`,
+        );
+      }
+    });
+    const definitionMap = new Map(adjustmentItems.map((def) => [def.code, def]));
+    const adjustmentPayload: GradeAdjustment[] = usesAdjustments
+      ? adjustmentRows.map((row) => {
+          const def = definitionMap.get(row.code);
+          if (!def) {
+            throw new Error(`GradeDatePage: 未知の調整項目 code=${row.code}`);
+          }
+          return {
+            kind: def.kind,
+            code: row.code,
+            points: Math.abs(row.points),
+          };
+        })
+      : [];
+    return { grades: gradePayload, adjustments: adjustmentPayload };
+  }
+
+  function buildCorrectionPayload(
+    resultType: GradeCorrectionPayload["resultType"],
+  ): GradeCorrectionPayload {
+    if (!gradeData) throw new Error("GradeDatePage: データがありません");
+    const correctionBody =
+      resultType === "normal" ? buildNormalSubmission() : undefined;
+    const basePayload = {
+      date,
+      expectedRevision: editingRevision.current ?? gradeData.gradingRevision,
+      resultType,
+      ...(correctionBody ?? {}),
+    };
+    const fingerprint = JSON.stringify(basePayload);
+    if (correctionAttempt.current?.fingerprint !== fingerprint) {
+      correctionAttempt.current = {
+        fingerprint,
+        id: crypto.randomUUID(),
+      };
+    }
+    return {
+      correctionId: correctionAttempt.current.id,
+      ...basePayload,
+    };
+  }
+
+  function invalidateGradeQueries() {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.grade(date) });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.gradeDates });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.home });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.parentHome });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.results });
+  }
+
+  const mutation = useMutation<unknown, Error, void>({
     mutationFn: () => {
-      if (!gradeData) throw new Error("GradeDatePage: データがありません");
-      const payload = gradeData.items.flatMap((item) => {
-        try {
-          const actualDone = resolveActualDoneForSubmit(
-            item.childAnswer,
-            grades[item.questId],
-          );
-          if (actualDone === undefined) return [];
-          return [{ questId: item.questId, actualDone }];
-        } catch (error) {
-          throw new Error(
-            `GradeDatePage: 未採点 questId=${item.questId} ` +
-              `(${error instanceof Error ? error.message : String(error)})`,
-          );
-        }
-      });
-      const definitionMap = new Map(adjustmentItems.map((def) => [def.code, def]));
-      const adjustmentPayload: GradeAdjustment[] = usesAdjustments
-        ? adjustmentRows.map((row) => {
-            const def = definitionMap.get(row.code);
-            if (!def) {
-              throw new Error(`GradeDatePage: 未知の調整項目 code=${row.code}`);
-            }
-            return {
-              kind: def.kind,
-              code: row.code,
-              points: Math.abs(row.points),
-            };
-          })
-        : [];
+      if (isEditing) {
+        return postGradeCorrection(buildCorrectionPayload("normal"));
+      }
+      const payload = buildNormalSubmission();
       return postGrade({
         date,
-        grades: payload,
-        adjustments: adjustmentPayload.length > 0 ? adjustmentPayload : undefined,
+        grades: payload.grades,
+        adjustments:
+          payload.adjustments.length > 0 ? payload.adjustments : undefined,
       });
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.gradeDates });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.home });
+      setCorrectionConfirmOpen(false);
+      correctionAttempt.current = null;
+      editingRevision.current = null;
+      invalidateGradeQueries();
       navigate("/parent/grades");
     },
   });
 
-  const rejectMutation = useMutation({
-    mutationFn: () => postGradeReject(date),
+  const rejectMutation = useMutation<unknown, Error, void>({
+    mutationFn: () =>
+      isEditing
+        ? postGradeCorrection(buildCorrectionPayload("grade_rejected"))
+        : postGradeReject(date),
     onSuccess: () => {
       setRejectOpen(false);
-      void queryClient.invalidateQueries({ queryKey: queryKeys.gradeDates });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.home });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.results });
+      correctionAttempt.current = null;
+      editingRevision.current = null;
+      invalidateGradeQueries();
       navigate("/parent/grades");
     },
   });
+
+  function startCorrection() {
+    correctionAttempt.current = null;
+    editingRevision.current = gradeData?.gradingRevision ?? null;
+    setIsEditing(true);
+  }
+
+  function cancelCorrection() {
+    correctionAttempt.current = null;
+    editingRevision.current = null;
+    setCorrectionConfirmOpen(false);
+    setRejectOpen(false);
+    setIsEditing(false);
+    void refetchGrade();
+  }
 
   function handleUsesAdjustmentsChange(next: boolean) {
     setUsesAdjustments(next);
@@ -499,7 +575,7 @@ export function GradeDatePage() {
         })}
       </ul>
 
-      {!gradeData.isRejected && (
+      {(!gradeData.isRejected || isEditing) && (
         <details
           className="mt-6 rounded-default border-[3px] border-border bg-surface p-4 shadow-[var(--shadow-card)]"
           open={usesAdjustments || undefined}
@@ -637,7 +713,7 @@ export function GradeDatePage() {
       )}
 
       <div className="mt-6 flex flex-col gap-3">
-        {!readOnly && (
+        {!gradeData.isGraded && (
           <Button
             fullWidth
             onClick={() => mutation.mutate()}
@@ -646,18 +722,95 @@ export function GradeDatePage() {
             採点を確定
           </Button>
         )}
+        {gradeData.isGraded && !isEditing && gradeData.canCorrect && (
+          <Button fullWidth onClick={startCorrection}>
+            採点を修正
+          </Button>
+        )}
+        {isEditing && (
+          <>
+            <Button
+              fullWidth
+              onClick={() => setCorrectionConfirmOpen(true)}
+              disabled={mutation.isPending || !isComplete}
+            >
+              採点を修正して確定
+            </Button>
+            <Button
+              variant="secondary"
+              fullWidth
+              onClick={cancelCorrection}
+              disabled={mutation.isPending || rejectMutation.isPending}
+            >
+              修正をキャンセル
+            </Button>
+          </>
+        )}
         <Button variant="secondary" fullWidth onClick={() => navigate("/parent/grades")}>
           一覧に戻る
         </Button>
       </div>
 
-      {!readOnly && (
+      {!readOnly && !gradeData.isRejected && (
         <section className="mt-8 border-t border-border-soft pt-4">
           <p className="mb-3 text-xs text-muted">採点拒否する場合</p>
           <Button variant="danger" fullWidth onClick={() => setRejectOpen(true)}>
             採点を拒否する
           </Button>
         </section>
+      )}
+
+      {correctionConfirmOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          role="presentation"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 bg-overlay backdrop-blur-sm"
+            aria-label="ダイアログを閉じる"
+            onClick={() => setCorrectionConfirmOpen(false)}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="grade-correction-title"
+            className="relative z-10 w-full max-w-lg rounded-card border-4 border-border-soft bg-surface p-4 shadow-[var(--shadow-card)]"
+          >
+            <h2
+              id="grade-correction-title"
+              className="mb-3 text-app-lg font-bold text-ink"
+            >
+              採点を修正
+            </h2>
+            <p className="mb-4 whitespace-pre-line text-ink">
+              {CORRECTION_DIALOG_BODY}
+            </p>
+            {mutation.error && (
+              <p className="mb-3 text-sm text-danger">
+                {mutation.error instanceof Error
+                  ? mutation.error.message
+                  : "修正に失敗しました"}
+              </p>
+            )}
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button
+                className="flex-1"
+                variant="secondary"
+                onClick={() => setCorrectionConfirmOpen(false)}
+              >
+                キャンセル
+              </Button>
+              <Button
+                className="flex-1"
+                disabled={mutation.isPending}
+                onClick={() => mutation.mutate()}
+              >
+                修正を確定
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
 
       {rejectOpen && (
@@ -678,9 +831,13 @@ export function GradeDatePage() {
             className="relative z-10 w-full max-w-lg rounded-card border-4 border-border-soft bg-surface p-4 shadow-[var(--shadow-card)]"
           >
             <h2 id="grade-reject-title" className="mb-3 text-app-lg font-bold text-ink">
-              採点拒否
+              {isEditing ? "採点拒否に修正" : "採点拒否"}
             </h2>
-            <p className="mb-4 whitespace-pre-line text-ink">{REJECT_DIALOG_BODY}</p>
+            <p className="mb-4 whitespace-pre-line text-ink">
+              {isEditing
+                ? `この日の採点を-100ptに修正します。\n${CORRECTION_DIALOG_BODY}`
+                : REJECT_DIALOG_BODY}
+            </p>
             {rejectMutation.error && (
               <p className="mb-3 text-sm text-danger">
                 {rejectMutation.error instanceof Error
@@ -702,7 +859,7 @@ export function GradeDatePage() {
                 disabled={rejectMutation.isPending}
                 onClick={() => rejectMutation.mutate()}
               >
-                -100ptにする
+                {isEditing ? "-100ptに修正" : "-100ptにする"}
               </Button>
             </div>
           </div>

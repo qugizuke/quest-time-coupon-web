@@ -13,14 +13,19 @@ import { ChildPageFrame } from "@/components/layout/ChildPageFrame";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { StatusBadge, type StatusBadgeTone } from "@/components/ui/StatusBadge";
+import { useDailyQuests } from "@/hooks/useDailyQuests";
 import {
   formatDateJaFullWidth,
   formatDayNumber,
   formatWeekdayJa,
   todayLocal,
 } from "@/lib/date";
-import { isUnknownChildAnswer } from "@/lib/labels";
-import { isSkipAnswerQuest } from "@/lib/questLabels";
+import {
+  actualDoneLabel,
+  childAnswerLabel,
+  isUnknownChildAnswer,
+} from "@/lib/labels";
+import { isSkipAnswerQuest, resolveQuestTitle } from "@/lib/questLabels";
 import { pointsUnitLabel } from "@/lib/points";
 import {
   formatWeekLabel,
@@ -253,6 +258,7 @@ export function ResultsPage() {
   }, [items]);
 
   const selected = selectedDate ? byDate.get(selectedDate) : undefined;
+  const { data: daily } = useDailyQuests(selected?.date);
 
   /**
    * 未確認分は残高へ未反映のため除外する。切替週は旧「分」と「pt」を混ぜず、
@@ -580,6 +586,84 @@ export function ResultsPage() {
                 ))}
               </ul>
             )}
+
+            {selected.reasonCode === "normal" &&
+              selected.details.length > 0 && (
+                <section
+                  aria-labelledby="results-quest-details-title"
+                  data-testid="results-quest-details"
+                >
+                  <h2
+                    id="results-quest-details-title"
+                    className="mb-2 text-lg font-bold text-ink"
+                  >
+                    クエストのくわしい結果
+                  </h2>
+                  <ol>
+                    {selected.details.map((detail, index) => (
+                      <li
+                        key={detail.questId}
+                        className={`border-b border-border/30 py-4 first:border-t ${
+                          detail.actualDone ? "" : "bg-danger/5 px-3"
+                        }`}
+                        data-testid={`results-quest-detail-${detail.questId}`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="font-medium text-ink">
+                            <span className="mr-2 text-xs font-semibold text-muted">
+                              Q{index + 1}
+                            </span>
+                            {resolveQuestTitle(daily, detail.questId)}
+                          </p>
+                          <span
+                            className={`shrink-0 text-sm font-semibold ${
+                              detail.finalPoints >= 0
+                                ? "text-success"
+                                : "text-danger"
+                            }`}
+                          >
+                            {detail.finalPoints >= 0 ? "+" : ""}
+                            {detail.finalPoints} {pointsUnitLabel(selected.date)}
+                          </span>
+                        </div>
+                        <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                          <div>
+                            <dt className="text-xs text-muted">じぶんの回答</dt>
+                            <dd className="mt-1 font-semibold text-ink">
+                              {childAnswerLabel(
+                                detail.childAnswer,
+                                "default",
+                                detail.questId,
+                                detail.gradingMode,
+                              )}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs text-muted">
+                              おうちの人の判定
+                            </dt>
+                            <dd
+                              className={`mt-1 font-semibold ${
+                                detail.actualDone
+                                  ? "text-success"
+                                  : "text-danger"
+                              }`}
+                            >
+                              {detail.actualDone ? "⭕ " : "❌ "}
+                              {actualDoneLabel(detail.actualDone)}
+                            </dd>
+                          </div>
+                        </dl>
+                        {detail.mismatch && (
+                          <p className="mt-3 text-sm font-semibold text-danger">
+                            じぶんの回答と、おうちの人の判定がちがいます
+                          </p>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                </section>
+              )}
 
             {selected.details.some(
               (detail) =>

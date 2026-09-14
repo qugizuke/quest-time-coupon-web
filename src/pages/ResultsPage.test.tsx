@@ -254,6 +254,84 @@ describe("ResultsPage reasonCode", () => {
     }, 0);
     expect(rowSum).toBe(60);
   });
+
+  it("設問ごとに自己採点と保護者判定を表示し、不一致を強調する", () => {
+    renderResults([
+      buildResult({
+        date: "2026-07-30",
+        reasonCode: "normal",
+        totalPoints: -10,
+        acknowledged: true,
+        details: [
+          {
+            questId: "sleep-on-time",
+            childAnswer: 1,
+            actualDone: false,
+            finalPoints: -15,
+            mismatch: true,
+            gradingMode: "parent_choice",
+          },
+          {
+            questId: "brush-teeth-am",
+            childAnswer: 0,
+            actualDone: false,
+            finalPoints: 5,
+            mismatch: false,
+            gradingMode: "auto_fail",
+          },
+        ],
+      }),
+    ]);
+    fireEvent.click(screen.getByTestId("results-day-2026-07-30"));
+
+    const details = screen.getByTestId("results-quest-details");
+    expect(
+      within(details).getByRole("heading", {
+        name: "クエストのくわしい結果",
+      }),
+    ).toBeTruthy();
+
+    const mismatchRow = screen.getByTestId(
+      "results-quest-detail-sleep-on-time",
+    );
+    expect(mismatchRow.textContent).toContain("決められた時間に寝る");
+    expect(mismatchRow.textContent).toContain("じぶんの回答できた");
+    expect(mismatchRow.textContent).toContain(
+      "おうちの人の判定❌ できなかった",
+    );
+    expect(mismatchRow.textContent).toContain("-15 分（旧）");
+    expect(mismatchRow.textContent).toContain(
+      "じぶんの回答と、おうちの人の判定がちがいます",
+    );
+    expect(mismatchRow.className).toContain("bg-danger/5");
+
+    const matchingRow = screen.getByTestId(
+      "results-quest-detail-brush-teeth-am",
+    );
+    expect(matchingRow.textContent).toContain("朝の歯みがきをした");
+    expect(matchingRow.textContent).not.toContain("判定がちがいます");
+  });
+
+  it("通常採点以外は details があっても設問詳細を表示しない", () => {
+    renderResults([
+      buildResult({
+        date: "2026-07-30",
+        reasonCode: "grade_rejected",
+        details: [
+          {
+            questId: "sleep-on-time",
+            childAnswer: 1,
+            actualDone: false,
+            finalPoints: -15,
+            mismatch: true,
+          },
+        ],
+      }),
+    ]);
+    fireEvent.click(screen.getByTestId("results-day-2026-07-30"));
+
+    expect(screen.queryByTestId("results-quest-details")).toBeNull();
+  });
 });
 
 describe("ResultsPage week UI (#17)", () => {

@@ -48,6 +48,11 @@ import { mockApi } from "@/api/mock";
 import { normalizeBalanceDebtFields } from "@/lib/balanceDebt";
 import { normalizeRewardVouchers } from "@/lib/rewardVouchers";
 import { todayLocal } from "@/lib/date";
+import {
+  clearParentAuthed,
+  getParentToken,
+  notifyParentUnauthorized,
+} from "@/lib/parentAuth";
 
 /**
  * API のベース URL を解決する
@@ -65,16 +70,76 @@ const API_BASE_URL = resolveApiBaseUrl();
 const API_KEY = import.meta.env.VITE_API_KEY ?? "";
 const USE_MOCK = import.meta.env.VITE_MOCK_API === "true";
 
+/**
+ * API のエラー（HTTP ステータスと契約コードを保持する）
+ * @description `message` は従来どおり `${code}: ${message}` 形式にして
+ *   既存の呼び出し側・ログ表示との互換を保つ。
+ */
+export class ApiError extends Error {
+  /** 契約のエラーコード（例: UNAUTHORIZED） */
+  readonly code: string;
+  /** HTTP ステータス（モック時は 0） */
+  readonly status: number;
+  /** 429 の Retry-After（秒）。無いときは null */
+  readonly retryAfterSeconds: number | null;
+
+  /**
+   * @param {string} code - 契約のエラーコード
+   * @param {string} message - 表示用メッセージ
+   * @param {number} status - HTTP ステータス
+   * @param {number | null} retryAfterSeconds - Retry-After（秒）
+   */
+  constructor(
+    code: string,
+    message: string,
+    status: number,
+    retryAfterSeconds: number | null = null,
+  ) {
+    super(`${code}: ${message}`);
+    this.name = "ApiError";
+    this.code = code;
+    this.status = status;
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
+/** 保護者ログインの応答（契約 v1） */
+export interface ParentLoginResult {
+  /** 署名付きトークン（`v1.<payload>.<sig>`） */
+  token: string;
+  /** 絶対期限（ISO8601） */
+  expiresAt: string;
+}
+
+
 const JSON_POST_HEADERS = {
   "Content-Type": "application/json",
 } as const;
 
 /**
  * 認証ヘッダーを構築する
- * @returns {Record<string, string>} キー未設定なら空オブジェクト
+ * @description API キーは全リクエスト共通。保護者トークンは呼び出し時点で
+ *   確定した値を渡す（送信後にセッションが入れ替わっても混線しない）。
+ * @param {string | null} parentToken - 送信に使う保護者トークン
+ * @returns {Record<string, string>} 付与するヘッダー
  */
-function buildAuthHeaders(): Record<string, string> {
-  return API_KEY ? { "X-Api-Key": API_KEY } : {};
+function buildAuthHeaders(parentToken: string | null): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (API_KEY) headers["X-Api-Key"] = API_KEY;
+  if (parentToken) headers.Authorization = `Bearer ${parentToken}`;
+  return headers;
+}
+
+/**
+ * Retry-After を秒へ解釈する
+ * @param {Response} response - fetch 応答
+ * @returns {number | null} 秒数。無効・欠落は null
+ */
+function parseRetryAfter(response: Response): number | null {
+  const raw = response.headers.get("Retry-After");
+  if (!raw) return null;
+  const seconds = Number(raw);
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds : null;
 }
 
 /**
@@ -141,12 +206,15 @@ function withParentHomeBalance(data: ParentHomeData): ParentHomeData {
  * @param {string} action - action 名
  * @param {RequestInit} [init] - fetch オプション
  * @param {Record<string, string>} [query] - 追加クエリ
+ * @param {object} [options] - 呼び出し種別
+ * @param {boolean} [options.parentAuth] - 保護者専用 action（401 でセッション破棄＋再ゲート）
  * @returns {Promise<T>} レスポンスの data 部分
  */
 async function request<T>(
   action: string,
   init?: RequestInit,
   query?: Record<string, string>,
+  options?: { parentAuth?: boolean },
 ): Promise<T> {
   if (USE_MOCK) {
     return mockApi<T>(action, init, query);
@@ -161,10 +229,12 @@ async function request<T>(
 
   const params = new URLSearchParams({ action, ...query });
   const url = `${API_BASE_URL}?${params.toString()}`;
+  // 送信時点のトークンを固定する（応答到着時に別セッションへ入れ替わっていても混線させない）
+  const sentParentToken = getParentToken();
   const response = await fetch(url, {
     redirect: "follow",
     ...init,
-    headers: { ...buildAuthHeaders(), ...init?.headers },
+    headers: { ...buildAuthHeaders(sentParentToken), ...init?.headers },
   });
 
   let json: ApiResponse<T>;
@@ -181,10 +251,43 @@ async function request<T>(
   if (!json.ok || json.data === undefined) {
     const code = json.error?.code ?? "UNKNOWN";
     const message = json.error?.message ?? "API エラーが発生しました";
-    throw new Error(`${code}: ${message}`);
+
+    if (response.status === 401 && options?.parentAuth) {
+      // 401 は「送信に使ったトークン」に対してのみ処理する。
+      // 再ログインで新しいトークンが保存済みなら、旧リクエストの遅延 401 で消さない。
+      if (
+        sentParentToken !== null &&
+        getParentToken() === sentParentToken
+      ) {
+        clearParentAuthed();
+        notifyParentUnauthorized();
+      }
+    }
+
+    throw new ApiError(
+      code,
+      message,
+      response.status,
+      parseRetryAfter(response),
+    );
   }
 
   return json.data;
+}
+
+/**
+ * POST parentLogin（保護者パスワードのサーバ照合）
+ * @param {{ pin: string }} payload - 画面で入力された4桁
+ * @returns {Promise<ParentLoginResult>} 署名付きトークンと期限
+ */
+export function postParentLogin(payload: {
+  pin: string;
+}): Promise<ParentLoginResult> {
+  return request("parentLogin", {
+    method: "POST",
+    headers: JSON_POST_HEADERS,
+    body: JSON.stringify(payload),
+  });
 }
 
 /**
@@ -227,6 +330,7 @@ export async function fetchParentHome(
     "parentHome",
     { method: "GET" },
     { date },
+    { parentAuth: true },
   );
   return withParentHomeBalance(data);
 }
@@ -265,11 +369,16 @@ export function postRegistrationSetting(payload: {
   actor: RegistrationActor;
   setAt: string;
 }> {
-  return request("registrationSetting", {
-    method: "POST",
-    headers: JSON_POST_HEADERS,
-    body: JSON.stringify(payload),
-  });
+  return request(
+    "registrationSetting",
+    {
+      method: "POST",
+      headers: JSON_POST_HEADERS,
+      body: JSON.stringify(payload),
+    },
+    undefined,
+    { parentAuth: payload.actor === "parent" },
+  );
 }
 
 /** POST registrationReopen（endsAt はオフセット付き ISO） */
@@ -282,11 +391,16 @@ export function postRegistrationReopen(payload: {
   setAt: string;
   used: boolean;
 }> {
-  return request("registrationReopen", {
-    method: "POST",
-    headers: JSON_POST_HEADERS,
-    body: JSON.stringify(payload),
-  });
+  return request(
+    "registrationReopen",
+    {
+      method: "POST",
+      headers: JSON_POST_HEADERS,
+      body: JSON.stringify(payload),
+    },
+    undefined,
+    { parentAuth: true },
+  );
 }
 
 /** GET results 一覧 */
@@ -324,12 +438,18 @@ export function fetchGradeDates(opts?: {
     "gradeDates",
     { method: "GET" },
     dateRangeQuery(opts?.from, opts?.to),
+    { parentAuth: true },
   );
 }
 
 /** GET grade */
 export async function fetchGrade(date: string): Promise<GradeData> {
-  const data = await request<GradeData>("grade", { method: "GET" }, { date });
+  const data = await request<GradeData>(
+    "grade",
+    { method: "GET" },
+    { date },
+    { parentAuth: true },
+  );
   return {
     ...data,
     isGraded: data.alreadyGraded ?? data.isGraded ?? false,
@@ -358,11 +478,16 @@ export function postGrade(payload: {
   grades: { questId: string; actualDone: boolean }[];
   adjustments?: GradeAdjustment[];
 }): Promise<{ gradedAt: string; totalPoints: number; reasonCode: "normal" }> {
-  return request("grade", {
-    method: "POST",
-    headers: JSON_POST_HEADERS,
-    body: JSON.stringify(payload),
-  });
+  return request(
+    "grade",
+    {
+      method: "POST",
+      headers: JSON_POST_HEADERS,
+      body: JSON.stringify(payload),
+    },
+    undefined,
+    { parentAuth: true },
+  );
 }
 
 /** POST gradeReject */
@@ -371,22 +496,32 @@ export function postGradeReject(date: string): Promise<{
   totalPoints: number;
   gradedAt: string;
 }> {
-  return request("gradeReject", {
-    method: "POST",
-    headers: JSON_POST_HEADERS,
-    body: JSON.stringify({ date }),
-  });
+  return request(
+    "gradeReject",
+    {
+      method: "POST",
+      headers: JSON_POST_HEADERS,
+      body: JSON.stringify({ date }),
+    },
+    undefined,
+    { parentAuth: true },
+  );
 }
 
 /** POST gradeCorrection */
 export function postGradeCorrection(
   payload: GradeCorrectionPayload,
 ): Promise<GradeCorrectionResult> {
-  return request("gradeCorrection", {
-    method: "POST",
-    headers: JSON_POST_HEADERS,
-    body: JSON.stringify(payload),
-  });
+  return request(
+    "gradeCorrection",
+    {
+      method: "POST",
+      headers: JSON_POST_HEADERS,
+      body: JSON.stringify(payload),
+    },
+    undefined,
+    { parentAuth: true },
+  );
 }
 
 /** GET longVacation */
@@ -399,11 +534,16 @@ export function postLongVacation(payload: {
   startDate: string;
   endDate: string;
 }): Promise<LongVacationData> {
-  return request("longVacation", {
-    method: "POST",
-    headers: JSON_POST_HEADERS,
-    body: JSON.stringify(payload),
-  });
+  return request(
+    "longVacation",
+    {
+      method: "POST",
+      headers: JSON_POST_HEADERS,
+      body: JSON.stringify(payload),
+    },
+    undefined,
+    { parentAuth: true },
+  );
 }
 
 /** GET questExemptions */
@@ -427,11 +567,16 @@ export function postQuestExemptions(
         periods: Array<{ startDate: string; endDate: string; createdAt?: string }>;
       },
 ): Promise<QuestExemptionsData> {
-  return request("questExemptions", {
-    method: "POST",
-    headers: JSON_POST_HEADERS,
-    body: JSON.stringify(payload),
-  });
+  return request(
+    "questExemptions",
+    {
+      method: "POST",
+      headers: JSON_POST_HEADERS,
+      body: JSON.stringify(payload),
+    },
+    undefined,
+    { parentAuth: true },
+  );
 }
 
 /** POST timerStop（ADR-005: Switch時間とタイマー負債だけを更新する） */
@@ -464,11 +609,16 @@ export function postTimerStop(payload: {
 export function postPenaltyTicketIssue(payload: {
   count: number;
 }): Promise<PenaltyTicketIssueResult> {
-  return request("penaltyTicketIssue", {
-    method: "POST",
-    headers: JSON_POST_HEADERS,
-    body: JSON.stringify({ actor: "parent", count: payload.count }),
-  });
+  return request(
+    "penaltyTicketIssue",
+    {
+      method: "POST",
+      headers: JSON_POST_HEADERS,
+      body: JSON.stringify({ actor: "parent", count: payload.count }),
+    },
+    undefined,
+    { parentAuth: true },
+  );
 }
 
 /**
@@ -476,11 +626,16 @@ export function postPenaltyTicketIssue(payload: {
  * @returns {Promise<PenaltyTicketConsumeResult>} 消費結果（消費後の在庫枚数）
  */
 export function postPenaltyTicketConsume(): Promise<PenaltyTicketConsumeResult> {
-  return request("penaltyTicketConsume", {
-    method: "POST",
-    headers: JSON_POST_HEADERS,
-    body: JSON.stringify({ actor: "parent" }),
-  });
+  return request(
+    "penaltyTicketConsume",
+    {
+      method: "POST",
+      headers: JSON_POST_HEADERS,
+      body: JSON.stringify({ actor: "parent" }),
+    },
+    undefined,
+    { parentAuth: true },
+  );
 }
 
 /**
@@ -524,11 +679,16 @@ export function postPointExchangeDecision(payload: {
   decision: PointExchangeDecision;
   rejectReason?: string;
 }): Promise<PointExchangeDecisionResult> {
-  return request("pointExchangeDecision", {
-    method: "POST",
-    headers: JSON_POST_HEADERS,
-    body: JSON.stringify(payload),
-  });
+  return request(
+    "pointExchangeDecision",
+    {
+      method: "POST",
+      headers: JSON_POST_HEADERS,
+      body: JSON.stringify(payload),
+    },
+    undefined,
+    { parentAuth: true },
+  );
 }
 
 /**
@@ -587,11 +747,16 @@ export function postRewardVoucherRefundDecision(payload: {
   decision: RewardVoucherRefundDecision;
   rejectReason?: string;
 }): Promise<RewardVoucherRefundDecisionResult> {
-  return request("rewardVoucherRefundDecision", {
-    method: "POST",
-    headers: JSON_POST_HEADERS,
-    body: JSON.stringify(payload),
-  });
+  return request(
+    "rewardVoucherRefundDecision",
+    {
+      method: "POST",
+      headers: JSON_POST_HEADERS,
+      body: JSON.stringify(payload),
+    },
+    undefined,
+    { parentAuth: true },
+  );
 }
 
 /**

@@ -1105,6 +1105,19 @@ export async function mockApi<T>(
   const body = init?.body ? JSON.parse(init.body as string) : {};
 
   switch (action) {
+    case "parentLogin": {
+      // モックはサーバ照合を再現しない（開発用）。4桁なら常に成功し、
+      // 実 PIN をコードに持たない。形式違いだけ INVALID_CREDENTIALS にする。
+      const pin = typeof body.pin === "string" ? body.pin : "";
+      if (!/^\d{4}$/.test(pin)) {
+        throw new Error("INVALID_CREDENTIALS: パスワードが違います");
+      }
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      return {
+        token: "mock-parent-token",
+        expiresAt,
+      } as T;
+    }
     case "home": {
       const date = query?.date ?? today;
       const dayAnswers = store.answers.get(date);

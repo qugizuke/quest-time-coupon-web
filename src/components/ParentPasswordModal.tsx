@@ -3,34 +3,41 @@
  * @description 保護者モード入口の PIN モーダル（screen-design §5.1 / §5.1.1、Figma modal-parent-password）。
  *   initial / entering / complete / error / processing の 5 状態を Figma フレームに合わせて描画する。
  *   ブラウザのパスワード保存ポップアップを避けるため type=password は使わない。
- * @limitation 照合はフロント定数のみ。processing はフロント照合のための擬似的な確認時間。
+ * @limitation 照合はサーバ（Cloud Functions `parentLogin`）のみ。フロントには
+ *   パスワードも照合ロジックも持たない。試行制限はサーバ側が正で、
+ *   画面は 401（不一致）と 429（上限）を区別して表示するだけ。
  */
 import { useEffect, useRef, useState } from "react";
+import { ApiError, postParentLogin } from "@/api/client";
 import { Button } from "@/components/ui/Button";
-import {
-  MAX_PARENT_PASSWORD_ATTEMPTS,
-  setParentAuthed,
-  verifyParentPassword,
-} from "@/lib/parentAuth";
+import { setParentSession } from "@/lib/parentAuth";
 
 /** @type {number} PIN 桁数（Figma: 4マス） */
 const PIN_LENGTH = 4;
 
-/** @type {number} processing 表示時間（ms）。Figma processing フレーム用の擬似確認時間 */
-const PROCESSING_MS = 450;
+/** ログイン失敗の種類 */
+type LoginErrorKind = "invalid" | "rateLimited" | "unavailable";
+
+/** ログイン失敗の表示内容 */
+interface LoginError {
+  /** 失敗の種類 */
+  kind: LoginErrorKind;
+  /** 429 の Retry-After（秒）。無いときは null */
+  retryAfterSeconds: number | null;
+}
 
 /**
  * @typedef {object} ParentPasswordModalProps
  * @property {boolean} open - 表示中か
  * @property {() => void} onSuccess - 認証成功時
- * @property {() => void} onDismiss - 閉じる／上限到達時（呼び出し側で遷移）
+ * @property {() => void} onDismiss - 閉じる／キャンセル時（呼び出し側で遷移）
  */
 interface ParentPasswordModalProps {
   /** @type {boolean} 表示中か */
   open: boolean;
   /** @type {() => void} 認証成功時 */
   onSuccess: () => void;
-  /** @type {() => void} 閉じる／上限到達時 */
+  /** @type {() => void} 閉じる／キャンセル時（呼び出し側で遷移） */
   onDismiss: () => void;
 }
 
@@ -70,6 +77,27 @@ function pinBoxClass({
 }
 
 /**
+ * ログイン失敗の説明文を組み立てる
+ * @param {LoginError} error - 失敗内容
+ * @returns {string} 画面表示用の文言
+ */
+function loginErrorMessage(error: LoginError): string {
+  if (error.kind === "rateLimited") {
+    const waitMinutes =
+      error.retryAfterSeconds !== null
+        ? Math.max(1, Math.ceil(error.retryAfterSeconds / 60))
+        : null;
+    return waitMinutes !== null
+      ? `試行回数が上限に達しました。約${waitMinutes}分後に再度お試しください`
+      : "試行回数が上限に達しました。しばらく待ってから再度お試しください";
+  }
+  if (error.kind === "invalid") {
+    return "コードが違います。もう一度入力してください";
+  }
+  return "ログインできませんでした。通信環境を確認してください";
+}
+
+/**
  * 保護者パスワードモーダル（PIN 4桁）
  * @param {ParentPasswordModalProps} props - props
  * @returns {JSX.Element | null} モーダル
@@ -81,11 +109,7 @@ export function ParentPasswordModal({
 }: ParentPasswordModalProps) {
   const [pin, setPin] = useState("");
   const [processing, setProcessing] = useState(false);
-  /** エラー表示中の残り試行回数。null は非エラー */
-  const [remainingAttempts, setRemainingAttempts] = useState<number | null>(
-    null,
-  );
-  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [error, setError] = useState<LoginError | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // 閉じたら次回表示に向けて全状態を捨てる
@@ -93,8 +117,7 @@ export function ParentPasswordModal({
     if (open) return;
     setPin("");
     setProcessing(false);
-    setRemainingAttempts(null);
-    setFailedAttempts(0);
+    setError(null);
   }, [open]);
 
   // 開いたら PIN 入力へフォーカス
@@ -104,42 +127,9 @@ export function ParentPasswordModal({
     }
   }, [open]);
 
-  // processing: 擬似確認時間の後にフロント照合して成否を確定する
-  useEffect(() => {
-    if (!processing) return;
-
-    const timerId = window.setTimeout(() => {
-      setProcessing(false);
-
-      if (verifyParentPassword(pin)) {
-        setParentAuthed();
-        setPin("");
-        setFailedAttempts(0);
-        setRemainingAttempts(null);
-        onSuccess();
-        return;
-      }
-
-      const nextAttempts = failedAttempts + 1;
-      setPin("");
-
-      if (nextAttempts >= MAX_PARENT_PASSWORD_ATTEMPTS) {
-        setFailedAttempts(0);
-        setRemainingAttempts(null);
-        onDismiss();
-        return;
-      }
-
-      setFailedAttempts(nextAttempts);
-      setRemainingAttempts(MAX_PARENT_PASSWORD_ATTEMPTS - nextAttempts);
-    }, PROCESSING_MS);
-
-    return () => window.clearTimeout(timerId);
-  }, [processing, pin, failedAttempts, onSuccess, onDismiss]);
-
   if (!open) return null;
 
-  const hasError = remainingAttempts !== null;
+  const hasError = error !== null;
   const complete = pin.length === PIN_LENGTH;
   // error 中は直前に入力した誤りコードを 4 マス分の ● で見せる（Figma error フレーム）
   const filledCount = hasError ? PIN_LENGTH : pin.length;
@@ -152,19 +142,47 @@ export function ParentPasswordModal({
   function handleChange(event: React.ChangeEvent<HTMLInputElement>) {
     const digits = event.target.value.replace(/\D/g, "").slice(0, PIN_LENGTH);
     setPin(digits);
-    setRemainingAttempts(null);
+    setError(null);
   }
 
   /**
-   * PIN 送信（processing 状態へ移行）
+   * PIN をサーバへ送って照合する
    * @param {React.FormEvent<HTMLFormElement>} event - submit イベント
-   * @returns {void}
+   * @returns {Promise<void>} 完了時に resolve
    */
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(
+    event: React.FormEvent<HTMLFormElement>,
+  ): Promise<void> {
     event.preventDefault();
     if (!complete || processing) return;
-    setRemainingAttempts(null);
+
+    setError(null);
     setProcessing(true);
+    try {
+      const result = await postParentLogin({ pin });
+      setParentSession({
+        token: result.token,
+        expiresAt: result.expiresAt,
+      });
+      setPin("");
+      setProcessing(false);
+      onSuccess();
+    } catch (cause) {
+      setPin("");
+      setProcessing(false);
+      if (cause instanceof ApiError && cause.code === "RATE_LIMITED") {
+        setError({
+          kind: "rateLimited",
+          retryAfterSeconds: cause.retryAfterSeconds,
+        });
+        return;
+      }
+      if (cause instanceof ApiError && cause.code === "INVALID_CREDENTIALS") {
+        setError({ kind: "invalid", retryAfterSeconds: null });
+        return;
+      }
+      setError({ kind: "unavailable", retryAfterSeconds: null });
+    }
   }
 
   return (
@@ -262,13 +280,10 @@ export function ParentPasswordModal({
               aria-label="保護者モードパスワード"
             />
           </div>
-          {hasError ? (
+          {error !== null ? (
             <div className="flex w-full flex-col gap-1 text-center">
               <p className="text-[13px] leading-none text-danger">
-                コードが違います。もう一度入力してください
-              </p>
-              <p className="text-xs leading-4 text-muted">
-                残り {remainingAttempts} 回
+                {loginErrorMessage(error)}
               </p>
             </div>
           ) : (

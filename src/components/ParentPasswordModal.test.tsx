@@ -1,15 +1,22 @@
 /**
  * @file ParentPasswordModal 描画・操作テスト
  * @description Figma modal-parent-password の 5 状態
- *   （initial / entering / complete / error / processing）と認証フローを検証する。
+ *   （initial / entering / complete / error / processing）と、
+ *   サーバ照合（parentLogin）の成功・失敗・試行制限を検証する。
  * @vitest-environment jsdom
  */
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ParentPasswordModal } from "@/components/ParentPasswordModal";
+import { ApiError, postParentLogin } from "@/api/client";
+import { PARENT_AUTH_KEY } from "@/lib/parentAuth";
 
-/** processing 表示時間（実装の PROCESSING_MS と同期） */
-const PROCESSING_MS = 450;
+vi.mock("@/api/client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/api/client")>();
+  return { ...actual, postParentLogin: vi.fn() };
+});
+
+const postParentLoginMock = vi.mocked(postParentLogin);
 
 /**
  * モーダルを描画する
@@ -36,27 +43,25 @@ function typePin(value: string) {
 }
 
 /**
- * 入室 → processing を経過させて照合結果まで進める
+ * 入室を押してサーバ応答を待つ
  * @param {string} pin - 入力する PIN
- * @returns {void}
+ * @returns {Promise<void>} 完了時に resolve
  */
-function submitPin(pin: string) {
+async function submitPin(pin: string) {
   typePin(pin);
-  fireEvent.click(screen.getByRole("button", { name: "入室" }));
-  act(() => {
-    vi.advanceTimersByTime(PROCESSING_MS);
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "入室" }));
   });
 }
 
 describe("ParentPasswordModal", () => {
   beforeEach(() => {
     sessionStorage.clear();
-    vi.useFakeTimers();
+    postParentLoginMock.mockReset();
   });
 
   afterEach(() => {
     cleanup();
-    vi.useRealTimers();
     sessionStorage.clear();
   });
 
@@ -75,6 +80,7 @@ describe("ParentPasswordModal", () => {
     ).toBe(true);
     expect(screen.getByRole("button", { name: "キャンセル" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "閉じる" })).toBeTruthy();
+    expect(postParentLoginMock).not.toHaveBeenCalled();
   });
 
   it("entering: 数字のみ4桁まで受け付け、入力分だけ●を表示する", () => {
@@ -94,18 +100,28 @@ describe("ParentPasswordModal", () => {
   it("complete: 4桁入力で入室が有効になる", () => {
     renderModal();
 
-    typePin("0119");
+    typePin("1234");
     expect(
       (screen.getByRole("button", { name: "入室" }) as HTMLButtonElement)
         .disabled,
     ).toBe(false);
   });
 
-  it("processing: 確認中は文言が変わり操作を受け付けない", () => {
-    const { onDismiss } = renderModal();
+  it("processing: 応答待ちは文言が変わり操作を受け付けない", async () => {
+    let resolveLogin: (value: { token: string; expiresAt: string }) => void =
+      () => {};
+    postParentLoginMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveLogin = resolve;
+        }),
+    );
+    const { onSuccess, onDismiss } = renderModal();
 
-    typePin("0119");
-    fireEvent.click(screen.getByRole("button", { name: "入室" }));
+    typePin("1234");
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: "入室" }));
+    });
 
     expect(screen.getByText("コードを確認しています…")).toBeTruthy();
     expect(screen.getByRole("button", { name: "確認中…" })).toBeTruthy();
@@ -116,50 +132,80 @@ describe("ParentPasswordModal", () => {
     expect(cancel.disabled).toBe(true);
     fireEvent.click(cancel);
     expect(onDismiss).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveLogin({
+        token: "v1.payload.sig",
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      });
+    });
+    expect(onSuccess).toHaveBeenCalledOnce();
   });
 
-  it("正しい PIN で認証を保存して onSuccess を呼ぶ", () => {
+  it("成功: サーバのトークンと期限を保存して onSuccess を呼ぶ", async () => {
+    postParentLoginMock.mockResolvedValue({
+      token: "v1.payload.sig",
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+    });
     const { onSuccess, onDismiss } = renderModal();
 
-    submitPin("0119");
+    await submitPin("1234");
 
+    expect(postParentLoginMock).toHaveBeenCalledWith({ pin: "1234" });
     expect(onSuccess).toHaveBeenCalledOnce();
     expect(onDismiss).not.toHaveBeenCalled();
-    expect(sessionStorage.getItem("qtc:parentAuth")).toBeTruthy();
+    const saved = sessionStorage.getItem(PARENT_AUTH_KEY);
+    expect(saved).toContain("v1.payload.sig");
+    expect(saved).not.toContain("1234");
   });
 
-  it("error: 誤り PIN でエラー文言と残り回数を表示し、再入力で消える", () => {
-    const { onSuccess, onDismiss } = renderModal();
+  it("error: 不一致はエラー文言を表示し、再入力で消える", async () => {
+    postParentLoginMock.mockRejectedValue(
+      new ApiError("INVALID_CREDENTIALS", "パスワードが違います", 401),
+    );
+    const { onSuccess } = renderModal();
 
-    submitPin("9999");
+    await submitPin("9999");
 
     expect(
       screen.getByText("コードが違います。もう一度入力してください"),
     ).toBeTruthy();
-    expect(screen.getByText("残り 2 回")).toBeTruthy();
     // 誤りコードは4マス分の●のまま見せる
     expect(screen.getAllByText("●")).toHaveLength(4);
     expect(onSuccess).not.toHaveBeenCalled();
-    expect(onDismiss).not.toHaveBeenCalled();
 
-    typePin("0");
+    typePin("1");
     expect(
       screen.queryByText("コードが違います。もう一度入力してください"),
     ).toBeNull();
     expect(screen.getAllByText("●")).toHaveLength(1);
   });
 
-  it("3回失敗すると onDismiss を呼ぶ", () => {
-    const { onDismiss } = renderModal();
+  it("error: 429 は待機時間を案内する", async () => {
+    postParentLoginMock.mockRejectedValue(
+      new ApiError("RATE_LIMITED", "試行回数が上限です", 429, 600),
+    );
+    const { onSuccess } = renderModal();
 
-    submitPin("0000");
-    expect(screen.getByText("残り 2 回")).toBeTruthy();
-    submitPin("1111");
-    expect(screen.getByText("残り 1 回")).toBeTruthy();
-    submitPin("2222");
+    await submitPin("9999");
 
-    expect(onDismiss).toHaveBeenCalledOnce();
-    expect(sessionStorage.getItem("qtc:parentAuth")).toBeNull();
+    expect(
+      screen.getByText(
+        "試行回数が上限に達しました。約10分後に再度お試しください",
+      ),
+    ).toBeTruthy();
+    expect(onSuccess).not.toHaveBeenCalled();
+  });
+
+  it("error: 通信・サーバ障害は汎用文言にする", async () => {
+    postParentLoginMock.mockRejectedValue(new Error("network down"));
+    renderModal();
+
+    await submitPin("9999");
+
+    expect(
+      screen.getByText("ログインできませんでした。通信環境を確認してください"),
+    ).toBeTruthy();
   });
 
   it("キャンセル・✕で onDismiss を呼ぶ", () => {

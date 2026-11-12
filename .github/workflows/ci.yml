@@ -1,0 +1,58 @@
+# web（React SPA）の PR 検証
+#
+# 概要:
+#   develop / main 向け PR と develop への push で、依存監査・型検査込みビルド・
+#   テストを実行する。デプロイは行わない（本番は Firebase App Hosting が main で実施）。
+#
+# 主な仕様:
+#   - Node 22（package.json の engines は 22 || 24）
+#   - npm ci → npm audit --audit-level=high → npm run build → npm test
+#
+# 制限事項:
+#   - audit は high 以上のみ失敗させる（moderate 以下はレポートのみ）
+#   - 新規 advisory の公開タイミングによっては、無関係な PR でも audit が落ちる
+
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - main
+  push:
+    branches:
+      - develop
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Audit (high and above)
+        run: npm audit --audit-level=high
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test

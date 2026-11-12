@@ -11,6 +11,7 @@ import {
   clearParentAuthed,
   getParentAuthRemainingMs,
   isParentAuthed,
+  PARENT_UNAUTHORIZED_EVENT,
 } from "@/lib/parentAuth";
 
 /**
@@ -50,6 +51,19 @@ export function ParentGuard() {
       window.clearTimeout(timerId);
     };
   }, [authed, authTick]);
+
+  /**
+   * 保護者 API が 401 を返したらセッションを捨てて再ゲートする
+   */
+  useEffect(() => {
+    function handleUnauthorized() {
+      setAuthTick((value) => value + 1);
+    }
+    window.addEventListener(PARENT_UNAUTHORIZED_EVENT, handleUnauthorized);
+    return () => {
+      window.removeEventListener(PARENT_UNAUTHORIZED_EVENT, handleUnauthorized);
+    };
+  }, []);
 
   if (!authed) {
     return (

@@ -118,15 +118,15 @@ const JSON_POST_HEADERS = {
 
 /**
  * 認証ヘッダーを構築する
- * @description API キーは全リクエスト共通。保護者トークンは保持しているときだけ付与し、
- *   子画面のリクエストでも送る（同一 API オリジン以外には送らない）。
+ * @description API キーは全リクエスト共通。保護者トークンは呼び出し時点で
+ *   確定した値を渡す（送信後にセッションが入れ替わっても混線しない）。
+ * @param {string | null} parentToken - 送信に使う保護者トークン
  * @returns {Record<string, string>} 付与するヘッダー
  */
-function buildAuthHeaders(): Record<string, string> {
+function buildAuthHeaders(parentToken: string | null): Record<string, string> {
   const headers: Record<string, string> = {};
   if (API_KEY) headers["X-Api-Key"] = API_KEY;
-  const token = getParentToken();
-  if (token) headers.Authorization = `Bearer ${token}`;
+  if (parentToken) headers.Authorization = `Bearer ${parentToken}`;
   return headers;
 }
 
@@ -229,10 +229,12 @@ async function request<T>(
 
   const params = new URLSearchParams({ action, ...query });
   const url = `${API_BASE_URL}?${params.toString()}`;
+  // 送信時点のトークンを固定する（応答到着時に別セッションへ入れ替わっていても混線させない）
+  const sentParentToken = getParentToken();
   const response = await fetch(url, {
     redirect: "follow",
     ...init,
-    headers: { ...buildAuthHeaders(), ...init?.headers },
+    headers: { ...buildAuthHeaders(sentParentToken), ...init?.headers },
   });
 
   let json: ApiResponse<T>;
@@ -251,8 +253,15 @@ async function request<T>(
     const message = json.error?.message ?? "API エラーが発生しました";
 
     if (response.status === 401 && options?.parentAuth) {
-      clearParentAuthed();
-      notifyParentUnauthorized();
+      // 401 は「送信に使ったトークン」に対してのみ処理する。
+      // 再ログインで新しいトークンが保存済みなら、旧リクエストの遅延 401 で消さない。
+      if (
+        sentParentToken !== null &&
+        getParentToken() === sentParentToken
+      ) {
+        clearParentAuthed();
+        notifyParentUnauthorized();
+      }
     }
 
     throw new ApiError(

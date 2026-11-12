@@ -203,6 +203,80 @@ describe("Authorization ヘッダ", () => {
     expect(isParentAuthed()).toBe(true);
   });
 
+  it("旧トークンで送信した 401 の遅延到着は再ログイン後の新トークンを消さない", async () => {
+    signIn();
+    let resolveResponse: (response: Response) => void = () => {};
+    const fetchMock = vi.fn(
+      (_url: string, _init?: RequestInit) =>
+        new Promise<Response>((resolve) => {
+          resolveResponse = resolve;
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const client = await importClient();
+    const onUnauthorized = vi.fn();
+    window.addEventListener(PARENT_UNAUTHORIZED_EVENT, onUnauthorized);
+
+    const pending = client.fetchParentHome("2026-07-28");
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init?.headers).toMatchObject({
+      Authorization: `Bearer ${TEST_TOKEN}`,
+    });
+
+    // 応答待ちの間に再ログインして新しいトークンへ差し替わる
+    const newToken = "v1.eyJzdWIiOiJwYXJlbnQiLCJpYXQiOjJ9.newsignature";
+    setParentSession({
+      token: newToken,
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+    });
+
+    resolveResponse(
+      jsonResponse({ ok: false, error: { code: "UNAUTHORIZED", message: "認証エラー" } }, 401),
+    );
+
+    await expect(pending).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    expect(getParentToken()).toBe(newToken);
+    expect(isParentAuthed()).toBe(true);
+    expect(onUnauthorized).not.toHaveBeenCalled();
+    window.removeEventListener(PARENT_UNAUTHORIZED_EVENT, onUnauthorized);
+  });
+
+  it("トークン無しで送信した 401 は、その間に始まった新セッションを消さない", async () => {
+    let resolveResponse: (response: Response) => void = () => {};
+    const fetchMock = vi.fn(
+      (_url: string, _init?: RequestInit) =>
+        new Promise<Response>((resolve) => {
+          resolveResponse = resolve;
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const client = await importClient();
+    const onUnauthorized = vi.fn();
+    window.addEventListener(PARENT_UNAUTHORIZED_EVENT, onUnauthorized);
+
+    const pending = client.fetchParentHome("2026-07-28");
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init?.headers).not.toHaveProperty("Authorization");
+
+    const newToken = "v1.eyJzdWIiOiJwYXJlbnQifQ.newsignature";
+    setParentSession({
+      token: newToken,
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+    });
+
+    resolveResponse(
+      jsonResponse({ ok: false, error: { code: "UNAUTHORIZED", message: "認証エラー" } }, 401),
+    );
+
+    await expect(pending).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    expect(getParentToken()).toBe(newToken);
+    expect(isParentAuthed()).toBe(true);
+    expect(onUnauthorized).not.toHaveBeenCalled();
+    window.removeEventListener(PARENT_UNAUTHORIZED_EVENT, onUnauthorized);
+  });
+
   it("registrationSetting は actor=parent のときだけ 401 で再ゲートする", async () => {
     signIn();
     const unauthorized = () =>
